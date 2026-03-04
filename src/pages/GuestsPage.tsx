@@ -245,6 +245,7 @@ export default function GuestsPage() {
   const [activeTab, setActiveTab] = useState<'waiting' | 'submitted' | 'awaiting' | 'processed'>('waiting');
   const [expandedGuestId, setExpandedGuestId] = useState<string | null>(null);
   const [expandedFamilyId, setExpandedFamilyId] = useState<string | null>(null);
+  const [deskInchargeFilter, setDeskInchargeFilter] = useState<string>('all');
   const [viewGuestId, setViewGuestId] = useState<string | null>(null);
   const [viewGuestEditMode, setViewGuestEditMode] = useState(false);
   const [deleteGuestId, setDeleteGuestId] = useState<string | null>(null);
@@ -263,26 +264,29 @@ export default function GuestsPage() {
     return coordinator?.name || 'Unknown';
   };
 
+  // Desk incharges for filter dropdown (super-admin only)
+  const deskIncharges = users.filter(u => u.userType === 'desk-in-charge' && u.assignedCountries?.length);
+
   // Filter guests based on role and tab
   const getFilteredGuests = () => {
+    let result: typeof guests;
     if (user.role === 'coordinator') {
-      if (activeTab === 'waiting') {
-        return getMyWaitingGuests();
-      } else {
-        return getMySubmittedGuests();
-      }
+      result = activeTab === 'waiting' ? getMyWaitingGuests() : getMySubmittedGuests();
     } else if (user.role === 'desk-in-charge') {
-      if (activeTab === 'awaiting') {
-        return guests.filter(g => g.status === 'pending-review');
-      } else {
-        return guests.filter(g => 
-          g.status === 'approved' || g.status === 'rejected' || g.status === 'needs-correction'
-        );
-      }
+      result = activeTab === 'awaiting'
+        ? guests.filter(g => g.status === 'pending-review')
+        : guests.filter(g => g.status === 'approved' || g.status === 'rejected' || g.status === 'needs-correction');
     } else {
-      // Super admin and others - show all
-      return guests;
+      result = guests;
     }
+    // Apply desk incharge country filter (super-admin only)
+    if (deskInchargeFilter !== 'all') {
+      const di = deskIncharges.find(u => u.id === deskInchargeFilter);
+      if (di?.assignedCountries?.length) {
+        result = result.filter(g => di.assignedCountries!.includes(g.country));
+      }
+    }
+    return result;
   };
 
   const filteredGuests = getFilteredGuests().filter(guest => 
@@ -482,6 +486,22 @@ export default function GuestsPage() {
                       className="pl-10 w-full md:w-64 border-[#D4CFC7]"
                     />
                   </div>
+
+                  {/* Desk Incharge Filter — super-admin only */}
+                  {user.role === 'super-admin' && (
+                    <select
+                      value={deskInchargeFilter}
+                      onChange={(e) => setDeskInchargeFilter(e.target.value)}
+                      className="h-10 px-3 pr-8 border border-[#D4CFC7] rounded-md text-sm bg-white text-[#1A1A1A] focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] min-w-[180px]"
+                    >
+                      <option value="all">All Guests</option>
+                      {deskIncharges.map((di) => (
+                        <option key={di.id} value={di.id}>
+                          {di.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
 
                   {/* Add Guest Button */}
                   {canAddGuest && (

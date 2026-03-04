@@ -33,6 +33,7 @@ import {
   Check,
 } from 'lucide-react';
 import { COUNTRIES, ROLE_LABELS } from '@/lib/constants';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { UserRole } from '@/types';
 
 const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> = {
@@ -377,12 +378,14 @@ export default function UsersPage() {
                       <tr>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Name</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Email</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Password</th>
+                        {activeTab !== 'desk-in-charge' && (
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Password</th>
+                        )}
                         {activeTab === 'coordinator' && (
                           <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Country</th>
                         )}
                         {activeTab === 'desk-in-charge' && (
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Assigned Countries</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Countries</th>
                         )}
                         <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Phone</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Status</th>
@@ -392,7 +395,7 @@ export default function UsersPage() {
                     <tbody className="divide-y divide-[#E8E3DB]">
                       {filteredUsers.length === 0 ? (
                         <tr>
-                          <td colSpan={activeTab === 'coordinator' || activeTab === 'desk-in-charge' ? 7 : 6} className="px-4 py-8 text-center text-[#4A4A4A]">
+                          <td colSpan={activeTab === 'coordinator' ? 7 : 6} className="px-4 py-8 text-center text-[#4A4A4A]">
                             No {USER_TYPE_LABELS[activeTab].toLowerCase()} found. Click "Add" to create one.
                           </td>
                         </tr>
@@ -408,40 +411,54 @@ export default function UsersPage() {
                               </div>
                             </td>
                             <td className="px-4 py-3 text-[#4A4A4A]">{u.email}</td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[#4A4A4A] font-mono">
-                                  {showPasswordMap[u.id] ? u.password : '••••••••'}
-                                </span>
-                                <button
-                                  onClick={() => togglePasswordVisibility(u.id)}
-                                  className="p-1 hover:bg-gray-100 rounded text-[#4A4A4A]"
-                                >
-                                  {showPasswordMap[u.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                </button>
-                              </div>
-                            </td>
+                            {activeTab !== 'desk-in-charge' && (
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[#4A4A4A] font-mono">
+                                    {showPasswordMap[u.id] ? u.password : '••••••••'}
+                                  </span>
+                                  <button
+                                    onClick={() => togglePasswordVisibility(u.id)}
+                                    className="p-1 hover:bg-gray-100 rounded text-[#4A4A4A]"
+                                  >
+                                    {showPasswordMap[u.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                  </button>
+                                </div>
+                              </td>
+                            )}
                             {activeTab === 'coordinator' && (
                               <td className="px-4 py-3 text-[#4A4A4A]">
                                 {u.country || '-'}
                               </td>
                             )}
                             {activeTab === 'desk-in-charge' && (
-                              <td className="px-4 py-3 text-[#4A4A4A]">
-                                <div className="flex flex-wrap gap-1">
-                                  {u.assignedCountries && u.assignedCountries.length > 0 ? (
-                                    u.assignedCountries.map((code) => {
-                                      const country = COUNTRIES.find(c => c.code === code);
-                                      return (
-                                        <Badge key={code} variant="outline" className="bg-[#E8F5EE] text-[#2D5A45] border-[#2D5A45]/30 text-xs">
-                                          {country?.name || code}
-                                        </Badge>
-                                      );
-                                    })
-                                  ) : (
-                                    <span className="text-[#4A4A4A]/50 text-sm">No countries assigned</span>
-                                  )}
-                                </div>
+                              <td className="px-4 py-3">
+                                {u.assignedCountries && u.assignedCountries.length > 0 ? (
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <button className="text-xs font-medium px-2.5 py-1 rounded-full bg-[#D6E4D9] text-[#2D5A45] hover:bg-[#C5D9C9] transition-colors cursor-pointer">
+                                        {u.assignedCountries.length} countries
+                                      </button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-72 p-3" align="start">
+                                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                                        Assigned Countries ({u.assignedCountries.length})
+                                      </p>
+                                      <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
+                                        {u.assignedCountries.map((entry, i) => {
+                                          const country = COUNTRIES.find(c => c.code === entry);
+                                          return (
+                                            <span key={i} className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
+                                              {country?.name || entry}
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                    </PopoverContent>
+                                  </Popover>
+                                ) : (
+                                  <span className="text-[#4A4A4A]/50 text-sm">No countries assigned</span>
+                                )}
                               </td>
                             )}
                             <td className="px-4 py-3 text-[#4A4A4A]">{u.phone || '-'}</td>
