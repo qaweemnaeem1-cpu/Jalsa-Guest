@@ -669,7 +669,7 @@ export default function GuestsPage() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-8 w-8"
+                                  className="h-8 w-8 text-gray-500 hover:text-gray-700"
                                   title="View guest details"
                                   onClick={() => { setViewGuestId(guest.id); setViewGuestEditMode(false); }}
                                 >
