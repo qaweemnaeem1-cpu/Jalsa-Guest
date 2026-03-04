@@ -321,7 +321,7 @@ export function GuestViewModal({
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
-        className="!max-w-[90vw] w-[90vw] sm:!max-w-[90vw] h-[75vh] p-0 flex flex-col overflow-hidden gap-0"
+        className="w-[90vw] max-w-[90vw] h-[75vh] p-0 flex flex-col overflow-hidden gap-0"
         showCloseButton={false}
       >
         {/* ── Header ── */}
