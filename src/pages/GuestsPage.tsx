@@ -7,6 +7,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import {
   LayoutDashboard,
@@ -17,6 +26,8 @@ import {
   LogOut,
   ArrowLeft,
   Eye,
+  Pencil,
+  Trash2,
   Briefcase,
   Send,
   MessageSquare,
@@ -26,6 +37,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { GUEST_STATUS_LABELS, ROLE_LABELS } from '@/lib/constants';
+import { GuestViewModal } from '@/components/GuestViewModal';
 import type { UserRole, Guest } from '@/types';
 
 const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> = {
@@ -93,6 +105,7 @@ const getStatusBadgeStyle = (status: string) => {
   }
 };
 
+
 // Inline Remarks Panel for Coordinator
 interface CoordinatorRemarksPanelProps {
   guest: Guest;
@@ -116,14 +129,17 @@ function CoordinatorRemarksPanel({ guest, onAddReply, onResubmit }: CoordinatorR
         <div className="bg-[#FEF9C3] border-l-4 border-amber-500 p-4 m-2 rounded-r-lg">
           <h4 className="font-medium text-amber-800 mb-3 flex items-center gap-2">
             <MessageSquare className="w-4 h-4" />
-            Remarks from Desk In-Charge
+            Remarks
           </h4>
-          
+
           <div className="space-y-3 mb-4">
             {remarks.map((remark) => (
               <div key={remark.id} className="bg-white rounded-lg p-3">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="font-medium text-sm text-[#1A1A1A]">{remark.authorName}</span>
+                  <span className="text-xs bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 text-amber-700 capitalize">
+                    {ROLE_LABELS[remark.authorRole]}
+                  </span>
                   <span className="text-xs text-[#4A4A4A]">· {formatTimeAgo(remark.createdAt)}</span>
                 </div>
                 <p className="text-sm text-[#4A4A4A]">{remark.message}</p>
@@ -221,12 +237,19 @@ function DeskInchargeRemarksPanel({ onConfirm }: DeskInchargeRemarksPanelProps) 
 export default function GuestsPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { guests, updateGuest, addRemark, getMyWaitingGuests, getMySubmittedGuests, getNeedsCorrectionCount } = useGuests();
+  const { guests, updateGuest, deleteGuest, addRemark, getMyWaitingGuests, getMySubmittedGuests, getNeedsCorrectionCount } = useGuests();
   const { users } = useUsers();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'waiting' | 'submitted' | 'awaiting' | 'processed'>('waiting');
   const [expandedGuestId, setExpandedGuestId] = useState<string | null>(null);
+  const [viewGuestId, setViewGuestId] = useState<string | null>(null);
+  const [viewGuestEditMode, setViewGuestEditMode] = useState(false);
+  const [deleteGuestId, setDeleteGuestId] = useState<string | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+
+  const viewGuest = viewGuestId ? guests.find(g => g.id === viewGuestId) ?? null : null;
+  const guestToDelete = deleteGuestId ? guests.find(g => g.id === deleteGuestId) ?? null : null;
 
   if (!user) return null;
 
@@ -319,6 +342,17 @@ export default function GuestsPage() {
   // Toggle inline panel
   const toggleInlinePanel = (guestId: string) => {
     setExpandedGuestId(expandedGuestId === guestId ? null : guestId);
+  };
+
+  // Super Admin: confirm delete
+  const handleConfirmDelete = () => {
+    if (!guestToDelete || !deleteGuestId) return;
+    if (user.role !== 'super-admin' && user.role !== 'desk-in-charge') return;
+    if (deleteConfirmText !== guestToDelete.referenceNumber) return;
+    deleteGuest(deleteGuestId);
+    setDeleteGuestId(null);
+    setDeleteConfirmText('');
+    toast.success('Guest deleted');
   };
 
   // Needs correction count for badge
@@ -631,10 +665,43 @@ export default function GuestsPage() {
                                   </>
                                 )}
 
-                                {/* View button for all */}
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                {/* View — all roles */}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  title="View guest details"
+                                  onClick={() => { setViewGuestId(guest.id); setViewGuestEditMode(false); }}
+                                >
                                   <Eye className="w-4 h-4" />
                                 </Button>
+
+                                {/* Edit + Delete — super-admin only */}
+                                {user.role === 'super-admin' && (
+                                  <>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-green-600 hover:text-green-800 hover:bg-green-50"
+                                      title="Edit guest"
+                                      onClick={() => { setViewGuestId(guest.id); setViewGuestEditMode(true); }}
+                                    >
+                                      <Pencil className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                      title="Delete guest"
+                                      onClick={() => {
+                                        setDeleteConfirmText('');
+                                        setDeleteGuestId(guest.id);
+                                      }}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -676,6 +743,74 @@ export default function GuestsPage() {
           </div>
         </main>
       </div>
+
+      {/* View / Edit Modal */}
+      <GuestViewModal
+        guest={viewGuest}
+        open={!!viewGuestId}
+        isEditMode={viewGuestEditMode}
+        onClose={() => { setViewGuestId(null); setViewGuestEditMode(false); }}
+        onEdit={() => setViewGuestEditMode(true)}
+        onDelete={() => {
+          const id = viewGuestId;
+          setDeleteConfirmText('');
+          setViewGuestId(null);
+          setViewGuestEditMode(false);
+          if (id) setDeleteGuestId(id);
+        }}
+      />
+
+      {/* Delete Confirmation */}
+      <AlertDialog
+        open={!!deleteGuestId}
+        onOpenChange={(o) => {
+          if (!o) {
+            setDeleteGuestId(null);
+            setDeleteConfirmText('');
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Guest?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove{' '}
+              <strong className="text-[#1A1A1A]">{guestToDelete?.fullName}</strong> and all their
+              records. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="py-1">
+            <label className="text-sm text-[#4A4A4A] block mb-1.5">
+              Type the reference number to confirm:{' '}
+              <span className="font-mono font-semibold text-[#1A1A1A]">
+                {guestToDelete?.referenceNumber}
+              </span>
+            </label>
+            <Input
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder={guestToDelete?.referenceNumber ?? ''}
+              className="font-mono"
+              onPaste={(e) => e.preventDefault()}
+            />
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteConfirmText('')}>
+              Cancel
+            </AlertDialogCancel>
+            <button
+              onClick={handleConfirmDelete}
+              disabled={deleteConfirmText !== guestToDelete?.referenceNumber}
+              className="inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium h-9 px-4 py-2 bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

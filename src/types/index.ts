@@ -46,6 +46,15 @@ export interface VisaDetails {
   notes?: string;
 }
 
+export interface GuestStatusEvent {
+  id: string;
+  status: GuestStatus;
+  changedBy: string;
+  changedByRole: UserRole;
+  changedAt: string;
+  remark?: string;
+}
+
 export interface Guest {
   id: string;
   referenceNumber: string;
@@ -80,6 +89,7 @@ export interface Guest {
   department?: string;
   roomAssignment?: string;
   remarks?: GuestRemark[];
+  statusHistory?: GuestStatusEvent[];
 }
 
 export interface Designation {

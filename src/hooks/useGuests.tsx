@@ -1,11 +1,12 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import type { Guest, GuestStatus, GuestRemark } from '@/types';
+import type { Guest, GuestStatus, GuestRemark, GuestStatusEvent } from '@/types';
 import { useAuth } from './useAuth';
 
 interface GuestsContextType {
   guests: Guest[];
   addGuest: (guestData: Omit<Guest, 'id' | 'referenceNumber' | 'submittedAt' | 'status'>) => Guest;
   updateGuest: (id: string, updates: Partial<Guest>) => void;
+  deleteGuest: (id: string) => void;
   addRemark: (guestId: string, remark: Omit<GuestRemark, 'id' | 'createdAt'>) => void;
   getGuestById: (id: string) => Guest | undefined;
   getGuestsByCountry: (countryCode: string) => Guest[];
@@ -52,6 +53,31 @@ const generateSampleGuests = (): Guest[] => {
       submittedAt: '2024-01-10',
       department: 'Guest Services',
       roomAssignment: 'A-101',
+      statusHistory: [
+        {
+          id: 'sh1',
+          status: 'pending-review',
+          changedBy: 'Klaus Mueller',
+          changedByRole: 'coordinator',
+          changedAt: '2024-01-10T09:00:00',
+        },
+        {
+          id: 'sh2',
+          status: 'approved',
+          changedBy: 'Fatima Ali',
+          changedByRole: 'desk-in-charge',
+          changedAt: '2024-01-11T14:30:00',
+          remark: 'All documentation verified. Approved.',
+        },
+        {
+          id: 'sh3',
+          status: 'accommodated',
+          changedBy: 'Ahmad Khan',
+          changedByRole: 'super-admin',
+          changedAt: '2024-01-12T10:00:00',
+          remark: 'Assigned to room A-101.',
+        },
+      ] satisfies GuestStatusEvent[],
     },
     {
       id: '2',
@@ -86,6 +112,38 @@ const generateSampleGuests = (): Guest[] => {
       submittedAt: '2024-01-11',
       department: 'Guest Services',
       roomAssignment: 'A-102',
+      statusHistory: [
+        {
+          id: 'sh4',
+          status: 'pending-review',
+          changedBy: 'Klaus Mueller',
+          changedByRole: 'coordinator',
+          changedAt: '2024-01-11T10:00:00',
+        },
+        {
+          id: 'sh5',
+          status: 'needs-correction',
+          changedBy: 'Fatima Ali',
+          changedByRole: 'desk-in-charge',
+          changedAt: '2024-01-12T11:00:00',
+          remark: 'Please provide family member passport copies.',
+        },
+        {
+          id: 'sh6',
+          status: 'approved',
+          changedBy: 'Fatima Ali',
+          changedByRole: 'desk-in-charge',
+          changedAt: '2024-01-14T09:30:00',
+        },
+        {
+          id: 'sh7',
+          status: 'accommodated',
+          changedBy: 'Ahmad Khan',
+          changedByRole: 'super-admin',
+          changedAt: '2024-01-15T12:00:00',
+          remark: 'Assigned to room A-102 with family.',
+        },
+      ] satisfies GuestStatusEvent[],
     },
     {
       id: '3',
@@ -118,6 +176,31 @@ const generateSampleGuests = (): Guest[] => {
       submittedAt: '2024-01-12',
       department: 'VIP Services',
       roomAssignment: 'VIP-201',
+      statusHistory: [
+        {
+          id: 'sh8',
+          status: 'pending-review',
+          changedBy: 'Klaus Mueller',
+          changedByRole: 'coordinator',
+          changedAt: '2024-01-12T08:00:00',
+        },
+        {
+          id: 'sh9',
+          status: 'approved',
+          changedBy: 'Fatima Ali',
+          changedByRole: 'desk-in-charge',
+          changedAt: '2024-01-13T15:00:00',
+          remark: 'VIP guest. Approved with priority handling.',
+        },
+        {
+          id: 'sh10',
+          status: 'accommodated',
+          changedBy: 'Ahmad Khan',
+          changedByRole: 'super-admin',
+          changedAt: '2024-01-14T11:00:00',
+          remark: 'VIP room VIP-201 assigned. Wheelchair arrangements confirmed.',
+        },
+      ] satisfies GuestStatusEvent[],
     },
     // Draft guest for coordinator
     {
@@ -257,6 +340,10 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const deleteGuest = useCallback((id: string) => {
+    setGuests(prev => prev.filter(guest => guest.id !== id));
+  }, []);
+
   const addRemark = useCallback((guestId: string, remark: Omit<GuestRemark, 'id' | 'createdAt'>) => {
     const newRemark: GuestRemark = {
       ...remark,
@@ -321,6 +408,7 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
         guests,
         addGuest,
         updateGuest,
+        deleteGuest,
         addRemark,
         getGuestById,
         getGuestsByCountry,
