@@ -25,15 +25,32 @@ const stripHtml = (s?: string) => (s ?? '').replace(/<[^>]*>/g, '').trim();
 
 // ─── Zod schema (validation + sanitisation in onSave) ─────────────────────────
 
+/** Compute age in years from a YYYY-MM-DD string. Returns `null` if unparseable. */
+const calcAge = (dob?: string): number | null => {
+  if (!dob) return null;
+  const birth = new Date(dob);
+  if (isNaN(birth.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return Math.max(0, age);
+};
+
 const editSchema = z.object({
-  fullName: z.string().min(1, 'Full name is required'),
+  fullName: z
+    .string()
+    .min(2, 'Full name must be at least 2 characters')
+    .max(100, 'Full name is too long')
+    .regex(/^[\p{L}\s\-']+$/u, "Only letters, spaces, hyphens, and apostrophes allowed"),
   passportNumber: z
     .string()
     .min(1, 'Passport number required')
+    .max(20, 'Passport number too long')
     .regex(/^[A-Za-z0-9]+$/, 'Alphanumeric characters only'),
   country: z.string().min(1, 'Country required'),
   gender: z.enum(['male', 'female']),
-  age: z.coerce.number().int().min(0, 'Must be 0 or more').max(150, 'Invalid age'),
+  // age is derived from dateOfBirth — not included in the form
   dateOfBirth: z.string().optional(),
   contactNumber: z
     .string()
@@ -196,8 +213,12 @@ export function GuestViewModal({
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<EditFormData>({ resolver: zodResolver(editSchema) });
+
+  /** Age shown in edit mode — auto-calculated from the DOB field, falls back to stored value. */
+  const displayAge = calcAge(watch('dateOfBirth')) ?? guest?.age ?? '—';
 
   // Sync form values whenever the guest or open state changes.
   useEffect(() => {
@@ -209,7 +230,6 @@ export function GuestViewModal({
         passportNumber:       guest.passportNumber,
         country:              guest.country,
         gender:               guest.gender,
-        age:                  guest.age,
         dateOfBirth:          guest.dateOfBirth ?? '',
         contactNumber:        guest.contactNumber,
         email:                guest.email ?? '',
@@ -245,13 +265,14 @@ export function GuestViewModal({
       return;
     }
     // Sanitise: strip any HTML/script tags before persisting.
+    const dob = stripHtml(data.dateOfBirth) || undefined;
     updateGuest(guest.id, {
       fullName:             stripHtml(data.fullName),
       passportNumber:       stripHtml(data.passportNumber),
       country:              stripHtml(data.country),
       gender:               data.gender,
-      age:                  data.age,
-      dateOfBirth:          stripHtml(data.dateOfBirth) || undefined,
+      age:                  calcAge(dob) ?? guest.age,
+      dateOfBirth:          dob,
       contactNumber:        stripHtml(data.contactNumber),
       email:                stripHtml(data.email) || undefined,
       designation:          stripHtml(data.designation) || undefined,
@@ -300,13 +321,13 @@ export function GuestViewModal({
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
-        className="w-[90vw] max-w-[90vw] sm:max-w-[90vw] h-[75vh] p-0 flex flex-col overflow-hidden gap-0"
+        className="!max-w-[90vw] w-[90vw] sm:!max-w-[90vw] h-[75vh] p-0 flex flex-col overflow-hidden gap-0"
         showCloseButton={false}
       >
         {/* ── Header ── */}
         <DialogHeader className="flex-shrink-0 bg-[#D6E4D9] p-8">
           <div className="flex items-center gap-5">
-            <div className="w-20 h-20 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-3xl font-bold flex-shrink-0">
+            <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center text-[#2D5A45] text-3xl font-bold flex-shrink-0 border-2 border-[#B5CCB9]">
               {guest.fullName.charAt(0)}
             </div>
 
@@ -415,15 +436,12 @@ export function GuestViewModal({
                         <Input type="date" {...register('dateOfBirth')} />
                       </EditField>
 
-                      <EditField label="Age" error={errors.age?.message}>
-                        <Input
-                          type="number"
-                          {...register('age')}
-                          min={0}
-                          max={150}
-                          className={errors.age ? 'border-red-500' : ''}
-                        />
-                      </EditField>
+                      <div>
+                        <p className="text-xs font-medium text-[#4A4A4A] mb-1">Age (auto-calculated)</p>
+                        <div className="px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-[#F5F0E8] text-[#4A4A4A]">
+                          {displayAge}
+                        </div>
+                      </div>
 
                       <EditField label="Guest Type" error={errors.guestType?.message}>
                         <select {...register('guestType')} className={selectCls}>
@@ -829,7 +847,7 @@ export function GuestViewModal({
             </Button>
             <Button
               onClick={handleSubmit(onSave)}
-              className="bg-green-600 hover:bg-green-700 text-white"
+              className="bg-[#2D5A45] hover:bg-[#234a38] text-white"
             >
               Save Changes
             </Button>
