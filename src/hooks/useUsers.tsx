@@ -10,7 +10,8 @@ export interface SystemUser {
   userType: UserType;
   country?: string;
   countryCode?: string;
-  assignedCountries?: string[]; // For desk-in-charge
+  assignedCountries?: string[];   // For desk-in-charge
+  assignedDepartments?: string[]; // For desk-in-charge
   phone?: string;
   isActive: boolean;
   createdAt: string;
@@ -24,7 +25,8 @@ interface UsersContextType {
   updateUser: (id: string, updates: Partial<SystemUser>) => void;
   deleteUser: (id: string) => void;
   toggleUserStatus: (id: string) => void;
-  assignCountries: (userId: string, countries: string[]) => void;
+  assignItems: (userId: string, countries: string[], departments: string[]) => void;
+  removeAssignedItemFromAll: (name: string) => void;
   getUsersByType: (userType: UserType) => SystemUser[];
   resetPassword: (id: string, newPassword: string) => void;
 }
@@ -40,7 +42,7 @@ const INITIAL_USERS: SystemUser[] = [
     password: 'Desk@2024',
     userType: 'desk-in-charge',
     phone: '+44 7700 900001',
-    assignedCountries: ['DE', 'FR', 'NL'],
+    assignedCountries: ['Germany', 'France', 'Netherlands'],
     isActive: true,
     createdAt: '2024-01-01',
     lastLogin: '2024-03-01',
@@ -113,7 +115,7 @@ const INITIAL_USERS: SystemUser[] = [
     password: 'Desk@2024',
     userType: 'desk-in-charge',
     phone: '+44 7700 900004',
-    assignedCountries: ['PK', 'IN', 'BD'],
+    assignedCountries: ['Pakistan', 'India', 'Bangladesh'],
     isActive: true,
     createdAt: '2024-02-10',
     lastLogin: '2024-03-03',
@@ -270,11 +272,21 @@ export function UsersProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const assignCountries = useCallback((userId: string, countries: string[]) => {
+  const assignItems = useCallback((userId: string, countries: string[], departments: string[]) => {
     setUsers(prev =>
       prev.map(u =>
-        u.id === userId ? { ...u, assignedCountries: countries } : u
+        u.id === userId ? { ...u, assignedCountries: countries, assignedDepartments: departments } : u
       )
+    );
+  }, []);
+
+  const removeAssignedItemFromAll = useCallback((name: string) => {
+    setUsers(prev =>
+      prev.map(u => ({
+        ...u,
+        assignedCountries: u.assignedCountries?.filter(c => c !== name),
+        assignedDepartments: u.assignedDepartments?.filter(d => d !== name),
+      }))
     );
   }, []);
 
@@ -299,7 +311,8 @@ export function UsersProvider({ children }: { children: ReactNode }) {
         updateUser,
         deleteUser,
         toggleUserStatus,
-        assignCountries,
+        assignItems,
+        removeAssignedItemFromAll,
         getUsersByType,
         resetPassword,
       }}

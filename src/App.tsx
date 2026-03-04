@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { GuestsProvider } from '@/hooks/useGuests';
 import { DesignationsProvider } from '@/hooks/useDesignations';
 import { UsersProvider } from '@/hooks/useUsers';
+import { AssignableItemsProvider } from '@/hooks/useAssignableItems';
 import { Toaster } from 'sonner';
 
 import LandingPage from '@/pages/LandingPage';
@@ -81,6 +82,7 @@ function App() {
   return (
     <AuthProvider>
       <UsersProvider>
+        <AssignableItemsProvider>
         <DesignationsProvider>
           <GuestsProvider>
             <BrowserRouter>
@@ -89,6 +91,7 @@ function App() {
             <Toaster position="top-right" />
           </GuestsProvider>
         </DesignationsProvider>
+        </AssignableItemsProvider>
       </UsersProvider>
     </AuthProvider>
   );

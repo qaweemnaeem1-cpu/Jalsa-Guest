@@ -29,10 +29,9 @@ import {
   Lock,
   Globe,
   MapPin,
-  X,
-  Check,
 } from 'lucide-react';
 import { COUNTRIES, ROLE_LABELS } from '@/lib/constants';
+import { CountryAssignmentPanel } from '@/components/CountryAssignmentPanel';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { UserRole } from '@/types';
 
@@ -85,7 +84,7 @@ interface UserFormData {
 export default function UsersPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { addUser, updateUser, deleteUser, toggleUserStatus, assignCountries, getUsersByType } = useUsers();
+  const { addUser, updateUser, deleteUser, toggleUserStatus, assignItems, getUsersByType } = useUsers();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<UserType>('desk-in-charge');
   const [searchQuery, setSearchQuery] = useState('');
@@ -93,7 +92,6 @@ export default function UsersPage() {
   
   // Assign countries panel state
   const [assigningUserId, setAssigningUserId] = useState<string | null>(null);
-  const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
   
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -445,14 +443,11 @@ export default function UsersPage() {
                                         Assigned Countries ({u.assignedCountries.length})
                                       </p>
                                       <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
-                                        {u.assignedCountries.map((entry, i) => {
-                                          const country = COUNTRIES.find(c => c.code === entry);
-                                          return (
+                                        {u.assignedCountries.map((entry, i) => (
                                             <span key={i} className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
-                                              {country?.name || entry}
+                                              {entry}
                                             </span>
-                                          );
-                                        })}
+                                          ))}
                                       </div>
                                     </PopoverContent>
                                   </Popover>
@@ -478,8 +473,7 @@ export default function UsersPage() {
                                 {activeTab === 'desk-in-charge' && (
                                   <button
                                     onClick={() => {
-                                      setAssigningUserId(u.id);
-                                      setSelectedCountries(u.assignedCountries || []);
+                                      setAssigningUserId(prev => prev === u.id ? null : u.id);
                                     }}
                                     className="p-2 hover:bg-green-50 text-[#4A4A4A] hover:text-[#2D5A45] rounded-lg transition-colors"
                                     title="Assign Countries"
@@ -523,82 +517,21 @@ export default function UsersPage() {
               </CardContent>
             </Card>
 
-            {/* Assign Countries Inline Panel */}
-            {assigningUserId && (
-              <div className="mt-6 bg-[#E8F5EE] border-l-4 border-[#2D5A45] rounded-r-lg p-5 animate-in slide-in-from-top-2">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-[#1A1A1A] flex items-center gap-2">
-                    <MapPin className="w-5 h-5 text-[#2D5A45]" />
-                    Assign Countries
-                  </h3>
-                  <button
-                    onClick={() => {
-                      setAssigningUserId(null);
-                      setSelectedCountries([]);
-                    }}
-                    className="p-1 hover:bg-[#2D5A45]/10 rounded transition-colors"
-                  >
-                    <X className="w-5 h-5 text-[#4A4A4A]" />
-                  </button>
-                </div>
-                
-                <p className="text-sm text-[#4A4A4A] mb-4">
-                  Select countries to assign to {filteredUsers.find(u => u.id === assigningUserId)?.name}
-                </p>
-
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-5 max-h-64 overflow-y-auto p-2 bg-white rounded-lg border border-[#D4CFC7]">
-                  {COUNTRIES.map((country) => (
-                    <label
-                      key={country.code}
-                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${
-                        selectedCountries.includes(country.code)
-                          ? 'bg-[#E8F5EE] border border-[#2D5A45]/30'
-                          : 'hover:bg-gray-50 border border-transparent'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedCountries.includes(country.code)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedCountries([...selectedCountries, country.code]);
-                          } else {
-                            setSelectedCountries(selectedCountries.filter(c => c !== country.code));
-                          }
-                        }}
-                        className="rounded border-[#D4CFC7] text-[#2D5A45] focus:ring-[#2D5A45]"
-                      />
-                      <span className="text-sm text-[#1A1A1A]">{country.name}</span>
-                    </label>
-                  ))}
-                </div>
-
-                <div className="flex items-center justify-end gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setAssigningUserId(null);
-                      setSelectedCountries([]);
-                    }}
-                    className="border-[#D4CFC7] h-10 px-5"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      assignCountries(assigningUserId, selectedCountries);
-                      toast.success('Countries assigned successfully');
-                      setAssigningUserId(null);
-                      setSelectedCountries([]);
-                    }}
-                    className="bg-[#2D5A45] hover:bg-[#234839] text-white h-10 px-5"
-                  >
-                    <Check className="w-4 h-4 mr-2" />
-                    Save Assignment
-                  </Button>
-                </div>
-              </div>
-            )}
+            {/* Assign Countries Panel */}
+            {(() => {
+              const assigningUser = filteredUsers.find(u => u.id === assigningUserId);
+              if (!assigningUser) return null;
+              const allDeskIncharges = getUsersByType('desk-in-charge');
+              return (
+                <CountryAssignmentPanel
+                  key={assigningUserId}
+                  user={assigningUser}
+                  allDeskIncharges={allDeskIncharges}
+                  onSave={assignItems}
+                  onClose={() => setAssigningUserId(null)}
+                />
+              );
+            })()}
           </div>
         </main>
       </div>
