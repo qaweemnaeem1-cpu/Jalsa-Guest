@@ -23,6 +23,7 @@ import {
   Search,
   Plus,
   ChevronDown,
+  ChevronRight,
   LogOut,
   ArrowLeft,
   Eye,
@@ -125,7 +126,7 @@ function CoordinatorRemarksPanel({ guest, onAddReply, onResubmit }: CoordinatorR
 
   return (
     <tr>
-      <td colSpan={8} className="p-0">
+      <td colSpan={9} className="p-0">
         <div className="bg-[#FEF9C3] border-l-4 border-amber-500 p-4 m-2 rounded-r-lg">
           <h4 className="font-medium text-amber-800 mb-3 flex items-center gap-2">
             <MessageSquare className="w-4 h-4" />
@@ -198,7 +199,7 @@ function DeskInchargeRemarksPanel({ onConfirm }: DeskInchargeRemarksPanelProps) 
 
   return (
     <tr>
-      <td colSpan={9} className="p-0">
+      <td colSpan={10} className="p-0">
         <div className="bg-[#FEE2E2] border-l-4 border-red-500 p-4 m-2 rounded-r-lg">
           <h4 className="font-medium text-red-800 mb-3">Add Remark for Coordinator</h4>
           
@@ -243,6 +244,7 @@ export default function GuestsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'waiting' | 'submitted' | 'awaiting' | 'processed'>('waiting');
   const [expandedGuestId, setExpandedGuestId] = useState<string | null>(null);
+  const [expandedFamilyId, setExpandedFamilyId] = useState<string | null>(null);
   const [viewGuestId, setViewGuestId] = useState<string | null>(null);
   const [viewGuestEditMode, setViewGuestEditMode] = useState(false);
   const [deleteGuestId, setDeleteGuestId] = useState<string | null>(null);
@@ -342,6 +344,11 @@ export default function GuestsPage() {
   // Toggle inline panel
   const toggleInlinePanel = (guestId: string) => {
     setExpandedGuestId(expandedGuestId === guestId ? null : guestId);
+  };
+
+  // Toggle family members expand
+  const toggleFamilyExpand = (guestId: string) => {
+    setExpandedFamilyId(expandedFamilyId === guestId ? null : guestId);
   };
 
   // Super Admin: confirm delete
@@ -555,6 +562,7 @@ export default function GuestsPage() {
                   <table className="w-full">
                     <thead className="bg-[#F5F0E8]">
                       <tr>
+                        <th className="w-8 px-2 py-3"></th>
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Reference</th>
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Name</th>
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Country</th>
@@ -571,7 +579,24 @@ export default function GuestsPage() {
                     <tbody className="divide-y divide-[#E8E3DB]">
                       {filteredGuests.map((guest) => (
                         <>
-                          <tr key={guest.id} className="hover:bg-[#F5F0E8]">
+                          <tr
+                            key={guest.id}
+                            className={`${
+                              guest.guestType === 'family'
+                                ? `cursor-pointer hover:bg-gray-50 ${expandedFamilyId === guest.id ? 'bg-gray-50' : ''}`
+                                : 'hover:bg-[#F5F0E8]'
+                            }`}
+                            onClick={guest.guestType === 'family' ? () => toggleFamilyExpand(guest.id) : undefined}
+                          >
+                            <td className="w-8 px-2 py-3 text-center">
+                              {guest.guestType === 'family' && (
+                                <ChevronRight
+                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 inline-block ${
+                                    expandedFamilyId === guest.id ? 'rotate-90' : ''
+                                  }`}
+                                />
+                              )}
+                            </td>
                             <td className="px-4 py-3 font-medium">{guest.referenceNumber}</td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
@@ -597,8 +622,8 @@ export default function GuestsPage() {
                               )}
                             </td>
                             <td className="px-4 py-3">
-                              <Badge 
-                                variant="outline" 
+                              <Badge
+                                variant="outline"
                                 className={getStatusBadgeStyle(guest.status)}
                               >
                                 {GUEST_STATUS_LABELS[guest.status]}
@@ -613,7 +638,7 @@ export default function GuestsPage() {
                                     {guest.status === 'draft' && (
                                       <Button
                                         size="sm"
-                                        onClick={() => handleSubmitForReview(guest.id)}
+                                        onClick={(e) => { e.stopPropagation(); handleSubmitForReview(guest.id); }}
                                         className="bg-[#2D5A45] hover:bg-[#234839] text-white h-8"
                                       >
                                         Submit for Review
@@ -622,7 +647,7 @@ export default function GuestsPage() {
                                     {guest.status === 'needs-correction' && (
                                       <Button
                                         size="sm"
-                                        onClick={() => toggleInlinePanel(guest.id)}
+                                        onClick={(e) => { e.stopPropagation(); toggleInlinePanel(guest.id); }}
                                         variant="outline"
                                         className="border-amber-500 text-amber-600 hover:bg-amber-50 h-8"
                                       >
@@ -638,7 +663,7 @@ export default function GuestsPage() {
                                   <>
                                     <Button
                                       size="sm"
-                                      onClick={() => handleApprove(guest.id)}
+                                      onClick={(e) => { e.stopPropagation(); handleApprove(guest.id); }}
                                       className="bg-green-600 hover:bg-green-700 text-white h-8"
                                     >
                                       <CheckCircle className="w-4 h-4 mr-1" />
@@ -646,7 +671,7 @@ export default function GuestsPage() {
                                     </Button>
                                     <Button
                                       size="sm"
-                                      onClick={() => toggleInlinePanel(guest.id)}
+                                      onClick={(e) => { e.stopPropagation(); toggleInlinePanel(guest.id); }}
                                       variant="outline"
                                       className="border-amber-500 text-amber-600 hover:bg-amber-50 h-8"
                                     >
@@ -655,7 +680,7 @@ export default function GuestsPage() {
                                     </Button>
                                     <Button
                                       size="sm"
-                                      onClick={() => toggleInlinePanel(guest.id)}
+                                      onClick={(e) => { e.stopPropagation(); toggleInlinePanel(guest.id); }}
                                       variant="outline"
                                       className="border-red-500 text-red-600 hover:bg-red-50 h-8"
                                     >
@@ -671,7 +696,7 @@ export default function GuestsPage() {
                                   size="icon"
                                   className="h-8 w-8 text-gray-500 hover:text-gray-700"
                                   title="View guest details"
-                                  onClick={() => { setViewGuestId(guest.id); setViewGuestEditMode(false); }}
+                                  onClick={(e) => { e.stopPropagation(); setViewGuestId(guest.id); setViewGuestEditMode(false); }}
                                 >
                                   <Eye className="w-4 h-4" />
                                 </Button>
@@ -684,7 +709,7 @@ export default function GuestsPage() {
                                       size="icon"
                                       className="h-8 w-8 text-green-600 hover:text-green-800 hover:bg-green-50"
                                       title="Edit guest"
-                                      onClick={() => { setViewGuestId(guest.id); setViewGuestEditMode(true); }}
+                                      onClick={(e) => { e.stopPropagation(); setViewGuestId(guest.id); setViewGuestEditMode(true); }}
                                     >
                                       <Pencil className="w-4 h-4" />
                                     </Button>
@@ -693,7 +718,8 @@ export default function GuestsPage() {
                                       size="icon"
                                       className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
                                       title="Delete guest"
-                                      onClick={() => {
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         setDeleteConfirmText('');
                                         setDeleteGuestId(guest.id);
                                       }}
@@ -722,6 +748,49 @@ export default function GuestsPage() {
                                 />
                               )}
                             </>
+                          )}
+
+                          {/* Family Members Expanded Section */}
+                          {guest.guestType === 'family' && (
+                            <tr>
+                              <td colSpan={user.role === 'desk-in-charge' ? 10 : 9} className="p-0">
+                                <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                                  expandedFamilyId === guest.id ? 'max-h-[400px] opacity-100' : 'max-h-0 opacity-0'
+                                }`}>
+                                  <div className="mx-4 mb-3 mt-1 rounded-lg bg-white border border-gray-200 shadow-md p-5">
+                                    <h5 className="text-sm font-semibold text-[#2D5A45] mb-3 flex items-center gap-1.5">
+                                      <Users className="w-4 h-4" />
+                                      Family Members ({guest.familyMembers.length})
+                                    </h5>
+                                    {guest.familyMembers.length === 0 ? (
+                                      <div className="text-center py-4">
+                                        <Users className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                                        <p className="text-sm text-gray-400 italic">No family members added yet</p>
+                                      </div>
+                                    ) : (
+                                      <div>
+                                        {guest.familyMembers.map((member, idx) => (
+                                          <div
+                                            key={member.id}
+                                            className="flex items-center gap-4 py-2.5 border-b border-gray-100 last:border-b-0"
+                                          >
+                                            <span className="w-6 h-6 rounded-full bg-[#D6E4D9] text-[#2D5A45] text-xs font-bold flex items-center justify-center flex-shrink-0">
+                                              {idx + 1}
+                                            </span>
+                                            <span className="font-medium text-gray-800 min-w-[150px]">{member.name}</span>
+                                            <span className="text-sm text-gray-500 min-w-[60px]">Age: {member.age}</span>
+                                            <span className="text-sm text-gray-500 min-w-[70px] capitalize">{member.gender}</span>
+                                            <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-[#F5F0E8] text-[#2D5A45] border border-[#D6E4D9] capitalize">
+                                              {member.relationship}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
                           )}
                         </>
                       ))}

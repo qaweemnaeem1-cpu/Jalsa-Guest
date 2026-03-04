@@ -94,8 +94,8 @@ const generateSampleGuests = (): Guest[] => {
       visaStatus: 'not-required',
       guestType: 'family',
       familyMembers: [
-        { id: 'f1', name: 'Maria Schmidt', age: 35, relationship: 'spouse', gender: 'female' },
-        { id: 'f2', name: 'Max Schmidt', age: 10, relationship: 'son', gender: 'male' },
+        { id: 'f1', name: 'Helga Schmidt', age: 40, relationship: 'spouse', gender: 'female' },
+        { id: 'f2', name: 'Max Schmidt', age: 14, relationship: 'son', gender: 'male' },
       ],
       designation: 'Local Missionary',
       arrivalFlightNumber: 'LH902',
@@ -288,7 +288,7 @@ const generateSampleGuests = (): Guest[] => {
       visaStatus: 'not-required',
       guestType: 'family',
       familyMembers: [
-        { id: 'f3', name: 'Markus Wagner', age: 30, relationship: 'spouse', gender: 'male' },
+        { id: 'f3', name: 'Erik Wagner', age: 45, relationship: 'spouse', gender: 'male' },
       ],
       designation: 'Jamaat Member',
       arrivalFlightNumber: 'LH910',
