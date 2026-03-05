@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Send, Pencil, Trash2, X, Plane } from 'lucide-react';
+import { AuditTimeline } from '@/components/AuditTimeline';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import {
@@ -401,7 +402,7 @@ export function GuestViewModal({
                   </span>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="history" className={tabTriggerCls}>Status History</TabsTrigger>
+              <TabsTrigger value="history" className={tabTriggerCls}>Audit Trail</TabsTrigger>
             </TabsList>
           </div>
 
@@ -789,51 +790,14 @@ export function GuestViewModal({
               </div>
             </TabsContent>
 
-            {/* ── Tab 5: Status History ── */}
+            {/* ── Tab 5: Audit Trail ── */}
             <TabsContent value="history" className="mt-0 px-8 py-6">
-              {(!guest.statusHistory || guest.statusHistory.length === 0) ? (
-                <div className="text-center py-10">
-                  <p className="text-sm text-[#4A4A4A]">No status history available.</p>
-                </div>
-              ) : (
-                <div className="relative pl-6">
-                  <div className="absolute left-2.5 top-2 bottom-2 border-l-2 border-[#E8E3DB]" />
-                  <div className="space-y-6">
-                    {[...guest.statusHistory].reverse().map((event) => (
-                      <div key={event.id} className="relative">
-                        <div
-                          className={`absolute -left-[1.375rem] top-1 w-5 h-5 rounded-full border-2 border-white shadow-sm z-10 ${getStatusDotColor(event.status)}`}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                            <Badge
-                              variant="outline"
-                              className={`text-xs ${getStatusBadgeStyle(event.status)}`}
-                            >
-                              {GUEST_STATUS_LABELS[event.status]}
-                            </Badge>
-                            <span className="text-xs text-[#4A4A4A]">
-                              by <span className="font-semibold text-[#1A1A1A]">{event.changedBy}</span>
-                              {' '}· {ROLE_LABELS[event.changedByRole]}
-                            </span>
-                          </div>
-                          <p className="text-xs text-[#4A4A4A]">
-                            {new Date(event.changedAt).toLocaleString('en-GB', {
-                              day: 'numeric', month: 'short', year: 'numeric',
-                              hour: '2-digit', minute: '2-digit',
-                            })}
-                          </p>
-                          {event.remark && (
-                            <div className="bg-white rounded-lg p-3 mt-2 text-sm text-[#4A4A4A] border border-[#E8E3DB]">
-                              {event.remark}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <AuditTimeline
+                guestId={guest.id}
+                guestName={guest.fullName}
+                guestReference={guest.referenceNumber}
+                allowComment={true}
+              />
             </TabsContent>
 
           </div>{/* end scrollable body */}

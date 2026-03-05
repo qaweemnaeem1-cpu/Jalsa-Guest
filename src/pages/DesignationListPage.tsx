@@ -359,11 +359,11 @@ export default function DesignationListPage() {
             <div className="p-4 border-b border-[#E8E3DB]">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-[#2D5A45] rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">M</span>
+                  <span className="text-white font-bold text-lg">J</span>
                 </div>
                 <div>
-                  <span className="font-semibold text-[#1A1A1A]">Project Mehmaan</span>
-                  <p className="text-xs text-[#4A4A4A]">Guest Management</p>
+                  <span className="font-semibold text-[#1A1A1A]">Jalsa Guest</span>
+                  <p className="text-xs text-[#4A4A4A]">Jalsa Salana UK</p>
                 </div>
               </div>
             </div>

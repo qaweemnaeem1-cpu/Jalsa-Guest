@@ -61,8 +61,8 @@ export default function LoginPage() {
           <div className="w-16 h-16 bg-[#2D5A45] rounded-xl flex items-center justify-center mx-auto mb-4">
             <Shield className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">Project Mehmaan</h1>
-          <p className="text-[#4A4A4A]">Jalsa Salana Guest Management</p>
+          <h1 className="text-2xl font-bold text-[#1A1A1A]">Jalsa Guest</h1>
+          <p className="text-[#4A4A4A]">Jalsa Salana Jalsa Salana UK</p>
         </div>
 
         <Card className="border-[#E8E3DB] shadow-xl">

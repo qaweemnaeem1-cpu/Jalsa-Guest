@@ -5,6 +5,7 @@ import { DesignationsProvider } from '@/hooks/useDesignations';
 import { UsersProvider } from '@/hooks/useUsers';
 import { AssignableItemsProvider } from '@/hooks/useAssignableItems';
 import { CoordinatorsProvider } from '@/hooks/useCoordinators';
+import { AuditTrailProvider } from '@/hooks/useAuditTrail';
 import { Toaster } from 'sonner';
 
 import LandingPage from '@/pages/LandingPage';
@@ -15,6 +16,9 @@ import NewGuestPage from '@/pages/NewGuestPage';
 import UsersPage from '@/pages/UsersPage';
 import DesignationListPage from '@/pages/DesignationListPage';
 import CountriesDepartmentsPage from '@/pages/CountriesDepartmentsPage';
+import CoordinatorPendingPage from '@/pages/CoordinatorPendingPage';
+import CoordinatorSubmittedPage from '@/pages/CoordinatorSubmittedPage';
+import CoordinatorAuditTrailPage from '@/pages/CoordinatorAuditTrailPage';
 
 function ProtectedRoute({ children, requiredRoles }: { children: React.ReactNode; requiredRoles?: string[] }) {
   const { isAuthenticated, user } = useAuth();
@@ -83,6 +87,9 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route path="/coordinator/pending" element={<ProtectedRoute requiredRoles={['super-admin','coordinator']}><CoordinatorPendingPage /></ProtectedRoute>} />
+      <Route path="/coordinator/submitted" element={<ProtectedRoute requiredRoles={['super-admin','coordinator']}><CoordinatorSubmittedPage /></ProtectedRoute>} />
+      <Route path="/coordinator/audit-trail" element={<ProtectedRoute requiredRoles={['super-admin','coordinator']}><CoordinatorAuditTrailPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -95,12 +102,14 @@ function App() {
         <CoordinatorsProvider>
         <AssignableItemsProvider>
         <DesignationsProvider>
+          <AuditTrailProvider>
           <GuestsProvider>
             <BrowserRouter>
               <AppRoutes />
             </BrowserRouter>
             <Toaster position="top-right" />
           </GuestsProvider>
+          </AuditTrailProvider>
         </DesignationsProvider>
         </AssignableItemsProvider>
         </CoordinatorsProvider>

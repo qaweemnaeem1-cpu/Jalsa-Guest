@@ -86,9 +86,9 @@ export default function LandingPage() {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-[#2D5A45] rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">M</span>
+                <span className="text-white font-bold text-lg">J</span>
               </div>
-              <span className="text-xl font-semibold text-[#1A1A1A]">Project Mehmaan</span>
+              <span className="text-xl font-semibold text-[#1A1A1A]">Jalsa Guest</span>
             </div>
 
             <div className="hidden md:flex items-center gap-4">
@@ -298,11 +298,11 @@ export default function LandingPage() {
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center gap-3 mb-4 md:mb-0">
               <div className="w-10 h-10 bg-[#2D5A45] rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">M</span>
+                <span className="text-white font-bold text-lg">J</span>
               </div>
               <div>
-                <span className="text-xl font-semibold">Project Mehmaan</span>
-                <p className="text-sm text-gray-400">Guest Management</p>
+                <span className="text-xl font-semibold">Jalsa Guest</span>
+                <p className="text-sm text-gray-400">Jalsa Salana UK</p>
               </div>
             </div>
             <p className="text-gray-400 text-sm">
@@ -310,7 +310,7 @@ export default function LandingPage() {
             </p>
           </div>
           <div className="mt-8 pt-8 border-t border-gray-700 text-center text-gray-400 text-sm">
-            © 2024 Project Mehmaan. All rights reserved.
+            © 2024 Jalsa Guest. All rights reserved.
           </div>
         </div>
       </footer>
