@@ -22,7 +22,8 @@ export interface AuditEntry {
     role: 'super-admin' | 'desk-in-charge' | 'coordinator';
   };
   createdAt: string;
-  isRead?: boolean;
+  /** IDs of users who have read this entry */
+  readBy?: string[];
 }
 
 // ── Strip HTML for security ────────────────────────────────────────────────────
@@ -175,7 +176,8 @@ interface AuditTrailContextType {
     createdBy: AuditEntry['createdBy'];
   }) => AuditEntry;
   getEntriesForGuest: (guestId: string) => AuditEntry[];
-  markAsRead: (entryId: string) => void;
+  markAsRead: (entryId: string, userId: string) => void;
+  markGuestEntriesAsRead: (guestId: string, userId: string) => void;
 }
 
 const AuditTrailContext = createContext<AuditTrailContextType | undefined>(undefined);
@@ -207,7 +209,7 @@ export function AuditTrailProvider({ children }: { children: ReactNode }) {
       comment: safeComment,
       createdBy: params.createdBy,
       createdAt: new Date().toISOString(),
-      isRead: false,
+      readBy: [],
     };
     setEntries(prev => [...prev, newEntry]);
     return newEntry;
@@ -218,14 +220,28 @@ export function AuditTrailProvider({ children }: { children: ReactNode }) {
     [entries]
   );
 
-  const markAsRead = useCallback((entryId: string) => {
+  const markAsRead = useCallback((entryId: string, userId: string) => {
     setEntries(prev =>
-      prev.map(e => (e.id === entryId ? { ...e, isRead: true } : e))
+      prev.map(e =>
+        e.id === entryId && !e.readBy?.includes(userId)
+          ? { ...e, readBy: [...(e.readBy ?? []), userId] }
+          : e
+      )
+    );
+  }, []);
+
+  const markGuestEntriesAsRead = useCallback((guestId: string, userId: string) => {
+    setEntries(prev =>
+      prev.map(e =>
+        e.guestId === guestId && !e.readBy?.includes(userId)
+          ? { ...e, readBy: [...(e.readBy ?? []), userId] }
+          : e
+      )
     );
   }, []);
 
   return (
-    <AuditTrailContext.Provider value={{ entries, addEntry, addComment, getEntriesForGuest, markAsRead }}>
+    <AuditTrailContext.Provider value={{ entries, addEntry, addComment, getEntriesForGuest, markAsRead, markGuestEntriesAsRead }}>
       {children}
     </AuditTrailContext.Provider>
   );

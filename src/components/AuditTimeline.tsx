@@ -78,10 +78,13 @@ const TYPE_ICON: Record<string, React.FC<{ className?: string }>> = {
 
 // ── Single entry card ─────────────────────────────────────────────────────────
 
-function EntryCard({ entry, showGuestInfo }: { entry: AuditEntry; showGuestInfo: boolean }) {
+function EntryCard({ entry, showGuestInfo, userId }: { entry: AuditEntry; showGuestInfo: boolean; userId?: string }) {
   const dot = TYPE_DOT[entry.type] ?? 'bg-gray-400';
   const isComment = entry.type === 'comment';
   const Icon = TYPE_ICON[entry.type];
+  const isUnread = userId
+    ? !entry.readBy?.includes(userId) && entry.createdBy.id !== userId
+    : false;
 
   return (
     <div className="relative pl-8">
@@ -98,14 +101,14 @@ function EntryCard({ entry, showGuestInfo }: { entry: AuditEntry; showGuestInfo:
 
       {isComment ? (
         /* ── Comment card ── */
-        <div className={`bg-white border border-[#D6E4D9] rounded-lg px-4 py-3 shadow-sm ${!entry.isRead ? 'ring-1 ring-[#2D5A45]/20' : ''}`}>
+        <div className={`bg-white border border-[#D6E4D9] rounded-lg px-4 py-3 shadow-sm ${isUnread ? 'ring-1 ring-[#2D5A45]/20' : ''}`}>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="w-7 h-7 rounded-full bg-[#D6E4D9] text-[#2D5A45] text-[10px] font-bold flex items-center justify-center flex-shrink-0">
               {getInitials(entry.createdBy.name)}
             </span>
             <span className="text-sm font-semibold text-gray-800">{entry.createdBy.name}</span>
             <RoleBadge role={entry.createdBy.role} />
-            {!entry.isRead && (
+            {isUnread && (
               <span className="w-2 h-2 rounded-full bg-red-500 ml-auto" title="Unread" />
             )}
           </div>
@@ -272,7 +275,7 @@ export function AuditTimeline({
           <div className="absolute left-[0.875rem] top-3 bottom-3 border-l-2 border-gray-100 pointer-events-none" />
           <div className="space-y-4">
             {visible.map(entry => (
-              <EntryCard key={entry.id} entry={entry} showGuestInfo={showGuestInfo} />
+              <EntryCard key={entry.id} entry={entry} showGuestInfo={showGuestInfo} userId={user?.id} />
             ))}
           </div>
         </div>

@@ -2,18 +2,18 @@ import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
-import { useAuditTrail } from '@/hooks/useAuditTrail';
-import { sanitizeComment } from '@/hooks/useAuditTrail';
+import { useAuditTrail, sanitizeComment } from '@/hooks/useAuditTrail';
 import type { AuditEntry } from '@/hooks/useAuditTrail';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import {
   LayoutDashboard, ClipboardList, CheckSquare, ScrollText,
-  ChevronDown, LogOut, MessageSquare, Send, Search,
-  Clock, CheckCircle, FileText,
+  ChevronDown, LogOut, Search, Send, MessageSquare,
+  Clock, CheckCircle,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import type { Guest } from '@/types';
@@ -25,28 +25,7 @@ const DESK_NAV = [
   { icon: ScrollText,      label: 'Audit Trail',      href: '/desk/audit-trail' },
 ];
 
-type FilterType = 'all' | 'comments' | 'status_changes' | 'edits';
-type DateRange = 'all' | '7days' | '30days';
-
-const TYPE_MAP: Record<string, string> = {
-  comments: 'comment',
-  status_changes: 'status_change',
-  edits: 'field_edit',
-};
-
-const TYPE_DOT: Record<string, string> = {
-  submission: 'bg-blue-400',
-  status_change: 'bg-amber-400',
-  field_edit: 'bg-gray-400',
-  assignment: 'bg-purple-400',
-  comment: 'bg-[#2D5A45]',
-};
-
-const ROLE_BADGE_CLS: Record<string, string> = {
-  'super-admin': 'bg-red-50 text-red-700 border-red-200',
-  'desk-in-charge': 'bg-blue-50 text-blue-700 border-blue-200',
-  'coordinator': 'bg-[#E8F5EE] text-[#2D5A45] border-[#D6E4D9]',
-};
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
@@ -65,72 +44,54 @@ function getInitials(name: string): string {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
-interface TimelineEntryProps {
-  entry: AuditEntry;
-  guest: Guest | undefined;
-  showCountryBadge?: boolean;
+function statusBadgeCls(status: string): string {
+  if (status === 'pending-review') return 'bg-amber-50 text-amber-700 border-amber-200';
+  if (status === 'needs-correction') return 'bg-red-50 text-red-700 border-red-200';
+  if (status === 'approved') return 'bg-green-50 text-green-700 border-green-200';
+  if (status === 'rejected') return 'bg-gray-50 text-gray-500 border-gray-200';
+  if (status === 'accommodated') return 'bg-blue-50 text-blue-700 border-blue-200';
+  if (status === 'checked-in') return 'bg-purple-50 text-purple-700 border-purple-200';
+  return 'bg-gray-50 text-gray-700 border-gray-200';
 }
 
-function TimelineEntry({ entry, guest, showCountryBadge = true }: TimelineEntryProps) {
+const TYPE_DOT: Record<string, string> = {
+  submission: 'bg-blue-400',
+  status_change: 'bg-amber-400',
+  field_edit: 'bg-gray-400',
+  assignment: 'bg-purple-400',
+  comment: 'bg-[#2D5A45]',
+};
+
+const ROLE_BADGE_CLS: Record<string, string> = {
+  'super-admin': 'bg-red-50 text-red-700 border-red-200',
+  'desk-in-charge': 'bg-blue-50 text-blue-700 border-blue-200',
+  'coordinator': 'bg-[#E8F5EE] text-[#2D5A45] border-[#D6E4D9]',
+};
+
+function DialogEntryCard({ entry }: { entry: AuditEntry }) {
   const isComment = entry.type === 'comment';
-  const isUnread = !entry.isRead;
   const role = entry.createdBy.role;
 
   return (
-    <div className={`relative pl-8 ${isUnread ? 'opacity-100' : ''}`}>
-      {/* Dot */}
-      <span
-        className={`absolute left-2 top-3.5 w-3 h-3 rounded-full border-2 border-white shadow z-10 ${TYPE_DOT[entry.type] ?? 'bg-gray-400'}`}
-      />
-
-      {/* Guest info + country badge */}
-      {showCountryBadge && (
-        <div className="flex items-center gap-2 mb-1 flex-wrap">
-          {guest && (
-            <span className="bg-blue-50 text-blue-700 text-[10px] font-semibold px-2 py-0.5 rounded border border-blue-100">
-              {guest.country}
-            </span>
-          )}
-          <p className="text-xs text-[#4A4A4A] font-medium">
-            {entry.guestName}
-            <span className="font-normal text-[#4A4A4A]/50 ml-1">({entry.guestReference})</span>
-          </p>
-        </div>
-      )}
+    <div className="relative pl-8">
+      <span className={`absolute left-2 top-3.5 w-3 h-3 rounded-full border-2 border-white shadow z-10 ${TYPE_DOT[entry.type] ?? 'bg-gray-400'}`} />
 
       {isComment ? (
-        <div
-          className={`bg-white rounded-lg px-4 py-3 shadow-sm border ${
-            isUnread ? 'border-l-4 border-l-blue-400 border-blue-200 bg-blue-50/30' : 'border-[#D6E4D9]'
-          }`}
-        >
-          <div className="flex items-center gap-2 mb-1.5">
+        <div className="bg-white rounded-lg px-4 py-3 shadow-sm border border-[#D6E4D9]">
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <div className="w-7 h-7 rounded-full bg-[#2D5A45] flex items-center justify-center text-white text-[10px] font-bold shrink-0">
               {getInitials(entry.createdBy.name)}
             </div>
             <span className="text-sm font-medium text-[#1A1A1A]">{entry.createdBy.name}</span>
-            <span
-              className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
-                ROLE_BADGE_CLS[role] ?? 'bg-gray-50 text-gray-600 border-gray-200'
-              }`}
-            >
-              {ROLE_LABELS[role] ?? role}
+            <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${ROLE_BADGE_CLS[role] ?? 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+              {ROLE_LABELS[role as keyof typeof ROLE_LABELS] ?? role}
             </span>
-            {isUnread && (
-              <span className="w-2 h-2 bg-red-500 rounded-full shrink-0" title="Unread" />
-            )}
             <span className="text-xs text-[#4A4A4A]/60 ml-auto">{formatTime(entry.createdAt)}</span>
           </div>
-          <p className="text-sm text-[#1A1A1A] leading-relaxed whitespace-pre-wrap break-words">
-            {entry.comment}
-          </p>
+          <p className="text-sm text-[#1A1A1A] leading-relaxed whitespace-pre-wrap break-words">{entry.comment}</p>
         </div>
       ) : (
-        <div
-          className={`bg-gray-50 border border-gray-100 rounded-lg px-4 py-3 ${
-            isUnread ? 'border-l-4 border-l-blue-400 bg-blue-50/20' : ''
-          }`}
-        >
+        <div className="bg-gray-50 border border-gray-100 rounded-lg px-4 py-3">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm text-[#1A1A1A]">{entry.action}</span>
             {entry.details && (
@@ -140,6 +101,13 @@ function TimelineEntry({ entry, guest, showCountryBadge = true }: TimelineEntryP
             )}
             <span className="text-xs text-[#4A4A4A]/60 ml-auto">{formatTime(entry.createdAt)}</span>
           </div>
+          {entry.fieldName && (
+            <p className="text-xs text-[#4A4A4A] mt-1">
+              Changed <span className="font-medium">{entry.fieldName}</span>
+              {' '}from <span className="line-through text-red-500">{entry.oldValue}</span>
+              {' '}to <span className="text-green-600 font-medium">{entry.newValue}</span>
+            </p>
+          )}
           <p className="text-xs text-[#4A4A4A]/70 mt-1">By: {entry.createdBy.name}</p>
         </div>
       )}
@@ -147,149 +115,158 @@ function TimelineEntry({ entry, guest, showCountryBadge = true }: TimelineEntryP
   );
 }
 
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+type QuickFilter = 'all' | 'unread' | 'awaiting-review' | 'needs-correction';
+type DialogFilter = 'all' | 'comments' | 'status_changes' | 'edits';
+
 export default function DeskAuditTrailPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { guests } = useGuests();
-  const { entries, addComment, markAsRead } = useAuditTrail();
+  const { entries, addComment, markGuestEntriesAsRead } = useAuditTrail();
 
-  // Filters
-  const [countryFilter, setCountryFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [typeFilter, setTypeFilter] = useState<FilterType>('all');
-  const [dateFilter, setDateFilter] = useState<DateRange>('all');
-  const [unreadOnly, setUnreadOnly] = useState(false);
   const [search, setSearch] = useState('');
-
-  // Comment input
-  const [selectedGuestId, setSelectedGuestId] = useState('');
-  const [commentText, setCommentText] = useState('');
-
-  // UI state
+  const [countryFilter, setCountryFilter] = useState('all');
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+  // Dialog state
+  const [openGuestId, setOpenGuestId] = useState<string | null>(null);
+  const [dialogFilter, setDialogFilter] = useState<DialogFilter>('all');
+  const [commentText, setCommentText] = useState('');
 
   if (!user) return null;
 
-  const assignedCountries = user.assignedCountries || [];
+  const assignedCountries = user.assignedCountries ?? [];
 
-  // Guest lookup map (only DI's guests)
+  // Guests in DI's assigned countries
+  const myGuests = useMemo(
+    () => guests.filter(g => assignedCountries.includes(g.country)),
+    [guests, assignedCountries]
+  );
+
+  // Map for quick guest lookup
   const guestMap = useMemo(() => {
     const map = new Map<string, Guest>();
-    guests.filter(g => assignedCountries.includes(g.country)).forEach(g => map.set(g.id, g));
+    myGuests.forEach(g => map.set(g.id, g));
     return map;
-  }, [guests, assignedCountries]);
+  }, [myGuests]);
 
-  // IDs of guests from DI's countries
-  const myGuestIds = useMemo(() => new Set(guestMap.keys()), [guestMap]);
-
-  // Raw entries scoped to DI's guests
-  const myRawEntries = useMemo(() =>
-    entries.filter(e => myGuestIds.has(e.guestId)),
-    [entries, myGuestIds]
+  // Entries scoped to DI's guests
+  const myEntries = useMemo(
+    () => entries.filter(e => guestMap.has(e.guestId)),
+    [entries, guestMap]
   );
 
-  // Filtered + sorted entries
-  const filteredEntries = useMemo(() => {
-    const now = Date.now();
-    return [...myRawEntries]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .filter(e => {
-        const guest = guestMap.get(e.guestId);
+  // Countries that have guests (for filter dropdown)
+  const countriesWithGuests = useMemo(() => {
+    const s = new Set(myGuests.map(g => g.country));
+    return Array.from(s).sort();
+  }, [myGuests]);
 
-        if (countryFilter !== 'all') {
-          if (!guest || guest.country !== countryFilter) return false;
-        }
-        if (statusFilter !== 'all') {
-          if (!guest || guest.status !== statusFilter) return false;
-        }
-        if (typeFilter !== 'all' && e.type !== TYPE_MAP[typeFilter]) return false;
-        if (dateFilter !== 'all') {
-          const diffDays = (now - new Date(e.createdAt).getTime()) / (1000 * 60 * 60 * 24);
-          if (dateFilter === '7days' && diffDays > 7) return false;
-          if (dateFilter === '30days' && diffDays > 30) return false;
-        }
-        if (unreadOnly && e.isRead) return false;
-        if (search) {
-          const s = search.toLowerCase();
-          if (
-            !e.guestName.toLowerCase().includes(s) &&
-            !e.guestReference.toLowerCase().includes(s) &&
-            !(e.comment ?? '').toLowerCase().includes(s) &&
-            !e.action.toLowerCase().includes(s)
-          ) return false;
-        }
-        return true;
-      });
-  }, [myRawEntries, guestMap, countryFilter, statusFilter, typeFilter, dateFilter, unreadOnly, search]);
+  // Review count for sidebar badge
+  const reviewCount = useMemo(() =>
+    myGuests.filter(g => g.status === 'pending-review' || g.status === 'needs-correction').length,
+    [myGuests]
+  );
 
   // Summary stats
-  const unreadCommentCount = useMemo(() =>
-    myRawEntries.filter(e => e.type === 'comment' && !e.isRead).length,
-    [myRawEntries]
+  const totalUnreadCount = useMemo(() =>
+    myEntries.filter(e => !e.readBy?.includes(user.id) && e.createdBy.id !== user.id).length,
+    [myEntries, user.id]
   );
   const needsReviewCount = useMemo(() =>
-    guests.filter(g => assignedCountries.includes(g.country) && g.status === 'pending-review').length,
-    [guests, assignedCountries]
+    myGuests.filter(g => g.status === 'pending-review').length,
+    [myGuests]
   );
   const approvedThisWeek = useMemo(() => {
     const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    return guests.filter(g => {
-      if (!assignedCountries.includes(g.country)) return false;
-      return g.statusHistory?.some(
-        sh => sh.status === 'approved' && new Date(sh.changedAt).getTime() > cutoff
-      ) ?? false;
-    }).length;
-  }, [guests, assignedCountries]);
+    return myGuests.filter(g =>
+      g.statusHistory?.some(sh => sh.status === 'approved' && new Date(sh.changedAt).getTime() > cutoff)
+    ).length;
+  }, [myGuests]);
 
-  // Auto-mark unread entries as read after 2s
+  // Guest list rows
+  const guestRows = useMemo(() => {
+    return myGuests
+      .map(guest => {
+        const guestEntries = myEntries
+          .filter(e => e.guestId === guest.id)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const unreadCount = guestEntries.filter(
+          e => !e.readBy?.includes(user.id) && e.createdBy.id !== user.id
+        ).length;
+        const lastEntry = guestEntries[0];
+        return {
+          guest,
+          entries: guestEntries,
+          unreadCount,
+          lastActivityAt: lastEntry?.createdAt ?? '',
+          lastActivity: lastEntry
+            ? (lastEntry.type === 'comment' ? lastEntry.comment ?? lastEntry.action : lastEntry.action)
+            : 'No activity yet',
+        };
+      })
+      .filter(row => {
+        if (countryFilter !== 'all' && row.guest.country !== countryFilter) return false;
+        if (quickFilter === 'unread' && row.unreadCount === 0) return false;
+        if (quickFilter === 'awaiting-review' && row.guest.status !== 'pending-review') return false;
+        if (quickFilter === 'needs-correction' && row.guest.status !== 'needs-correction') return false;
+        if (search) {
+          const s = search.toLowerCase();
+          if (
+            !row.guest.fullName.toLowerCase().includes(s) &&
+            !row.guest.referenceNumber.toLowerCase().includes(s) &&
+            !row.guest.country.toLowerCase().includes(s)
+          ) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
+        if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
+        return new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime();
+      });
+  }, [myGuests, myEntries, user.id, countryFilter, quickFilter, search]);
+
+  // Mark as read when dialog opens
   useEffect(() => {
-    const unread = filteredEntries.filter(e => !e.isRead);
-    if (unread.length === 0) return;
-    const timer = setTimeout(() => {
-      unread.forEach(e => markAsRead(e.id));
-    }, 2000);
-    return () => clearTimeout(timer);
+    if (openGuestId) {
+      markGuestEntriesAsRead(openGuestId, user.id);
+      setDialogFilter('all');
+      setCommentText('');
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredEntries.map(e => e.id).join(',')]);
+  }, [openGuestId]);
 
-  const reviewCount = useMemo(() =>
-    guests.filter(g =>
-      assignedCountries.includes(g.country) &&
-      (g.status === 'pending-review' || g.status === 'needs-correction')
-    ).length,
-    [guests, assignedCountries]
-  );
+  const openGuestData = guestMap.get(openGuestId ?? '');
 
-  // Countries with entries (for filter)
-  const countriesWithEntries = useMemo(() => {
-    const s = new Set<string>();
-    myRawEntries.forEach(e => {
-      const g = guestMap.get(e.guestId);
-      if (g) s.add(g.country);
-    });
-    return Array.from(s).sort();
-  }, [myRawEntries, guestMap]);
-
-  // Guest selector options (for comment input)
-  const myGuestsForComment = useMemo(() =>
-    Array.from(guestMap.values()).sort((a, b) => a.fullName.localeCompare(b.fullName)),
-    [guestMap]
-  );
+  const dialogEntries = useMemo(() => {
+    if (!openGuestId) return [];
+    return entries
+      .filter(e => e.guestId === openGuestId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .filter(e => {
+        if (dialogFilter === 'comments') return e.type === 'comment';
+        if (dialogFilter === 'status_changes') return e.type === 'status_change';
+        if (dialogFilter === 'edits') return e.type === 'field_edit';
+        return true;
+      });
+  }, [entries, openGuestId, dialogFilter]);
 
   const handleSendComment = () => {
-    const guest = guestMap.get(selectedGuestId);
-    if (!guest) return;
+    if (!openGuestData) return;
     const safe = sanitizeComment(commentText);
     if (!safe) return;
     addComment({
-      guestId: guest.id,
-      guestName: guest.fullName,
-      guestReference: guest.referenceNumber,
+      guestId: openGuestData.id,
+      guestName: openGuestData.fullName,
+      guestReference: openGuestData.referenceNumber,
       comment: safe,
       createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
     });
     setCommentText('');
-    setSelectedGuestId('');
     toast.success('Comment added');
   };
 
@@ -297,14 +274,6 @@ export default function DeskAuditTrailPage() {
     active
       ? 'bg-[#2D5A45] text-white px-3 py-1 rounded-full text-xs font-medium cursor-pointer transition-all'
       : 'bg-white text-[#4A4A4A] border border-[#D4CFC7] px-3 py-1 rounded-full text-xs font-medium cursor-pointer hover:bg-[#F5F0E8] transition-all';
-
-  const STATUSES = [
-    { value: 'pending-review', label: 'Awaiting Review' },
-    { value: 'needs-correction', label: 'Needs Correction' },
-    { value: 'approved', label: 'Approved' },
-    { value: 'accommodated', label: 'Accommodated' },
-    { value: 'rejected', label: 'Rejected' },
-  ];
 
   return (
     <div className="min-h-screen bg-[#F5F0E8]">
@@ -358,6 +327,11 @@ export default function DeskAuditTrailPage() {
                   <h1 className="text-xl font-semibold text-[#1A1A1A]">Audit Trail</h1>
                   <p className="text-xs text-[#4A4A4A]">Activity across your assigned countries</p>
                 </div>
+                {totalUnreadCount > 0 && (
+                  <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                    {totalUnreadCount} unread
+                  </span>
+                )}
               </div>
               <div className="relative">
                 <button
@@ -388,26 +362,25 @@ export default function DeskAuditTrailPage() {
             </div>
           </header>
 
-          <div className="p-6 max-w-5xl mx-auto space-y-5">
-
+          <div className="p-6 max-w-4xl mx-auto space-y-5">
             {/* Summary Bar */}
             <div className="grid grid-cols-3 gap-4">
               <button
-                onClick={() => { setTypeFilter('comments'); setUnreadOnly(true); }}
-                className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3 text-left hover:bg-red-100 transition-colors cursor-pointer"
+                onClick={() => setQuickFilter('unread')}
+                className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3 text-left hover:bg-red-100 transition-colors"
               >
                 <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shrink-0">
                   <MessageSquare className="w-5 h-5 text-red-500" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-red-700">{unreadCommentCount}</p>
-                  <p className="text-xs text-red-600 font-medium">Unread Comments</p>
+                  <p className="text-2xl font-bold text-red-700">{totalUnreadCount}</p>
+                  <p className="text-xs text-red-600 font-medium">Unread</p>
                 </div>
               </button>
 
               <button
                 onClick={() => navigate('/desk/review')}
-                className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3 text-left hover:bg-amber-100 transition-colors cursor-pointer"
+                className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3 text-left hover:bg-amber-100 transition-colors"
               >
                 <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shrink-0">
                   <Clock className="w-5 h-5 text-amber-500" />
@@ -429,160 +402,185 @@ export default function DeskAuditTrailPage() {
               </div>
             </div>
 
-            {/* Filter Bar */}
-            <Card className="shadow-sm">
-              <CardContent className="p-4 space-y-3">
-                {/* Row 1: Country + Status dropdowns */}
-                <div className="flex flex-wrap gap-3">
-                  <select
-                    value={countryFilter}
-                    onChange={e => setCountryFilter(e.target.value)}
-                    className="px-3 py-1.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none h-9"
-                  >
-                    <option value="all">All Countries</option>
-                    {countriesWithEntries.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <select
-                    value={statusFilter}
-                    onChange={e => setStatusFilter(e.target.value)}
-                    className="px-3 py-1.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none h-9"
-                  >
-                    <option value="all">All Statuses</option>
-                    {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                  </select>
-                </div>
-
-                {/* Row 2: Type chips */}
-                <div className="flex flex-wrap gap-1.5">
-                  {(['all', 'comments', 'status_changes', 'edits'] as FilterType[]).map(t => (
-                    <button key={t} onClick={() => setTypeFilter(t)} className={chipCls(typeFilter === t)}>
-                      {t === 'all' ? 'All' : t === 'comments' ? 'Comments' : t === 'status_changes' ? 'Status Changes' : 'Edits'}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Row 3: Date chips + unread only */}
-                <div className="flex flex-wrap gap-1.5 items-center">
-                  {(['all', '7days', '30days'] as DateRange[]).map(d => (
-                    <button key={d} onClick={() => setDateFilter(d)} className={chipCls(dateFilter === d)}>
-                      {d === 'all' ? 'All Time' : d === '7days' ? 'Last 7 days' : 'Last 30 days'}
-                    </button>
-                  ))}
-                  <label className="flex items-center gap-1.5 ml-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={unreadOnly}
-                      onChange={e => setUnreadOnly(e.target.checked)}
-                      className="rounded border-[#D4CFC7] text-[#2D5A45]"
-                    />
-                    <span className="text-xs text-[#4A4A4A]">Unread only</span>
-                  </label>
-                </div>
-
-                {/* Row 4: Search */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
-                  <Input
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    placeholder="Search by guest name, reference, or comment text..."
-                    className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-9"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Timeline */}
-            <Card className="shadow-sm">
-              <CardHeader className="bg-[#F9F8F6]">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <FileText className="w-5 h-5 text-[#2D5A45]" />
-                  Activity Timeline
-                  <span className="text-sm font-normal text-[#4A4A4A] ml-1">
-                    ({filteredEntries.length} {filteredEntries.length === 1 ? 'entry' : 'entries'})
-                  </span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-6">
-                {filteredEntries.length === 0 ? (
-                  <div className="text-center py-10">
-                    <ScrollText className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                    <p className="text-sm text-gray-400">No activity matches the selected filters.</p>
-                    {(countryFilter !== 'all' || statusFilter !== 'all' || typeFilter !== 'all' || dateFilter !== 'all' || unreadOnly || search) && (
-                      <button
-                        onClick={() => { setCountryFilter('all'); setStatusFilter('all'); setTypeFilter('all'); setDateFilter('all'); setUnreadOnly(false); setSearch(''); }}
-                        className="mt-3 text-sm text-[#2D5A45] hover:underline"
-                      >
-                        Clear all filters
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="relative space-y-4">
-                    {/* Vertical line */}
-                    <div className="absolute left-[15px] top-0 bottom-0 w-px bg-[#E8E3DB]" />
-                    {filteredEntries.map(entry => (
-                      <TimelineEntry
-                        key={entry.id}
-                        entry={entry}
-                        guest={guestMap.get(entry.guestId)}
-                        showCountryBadge
-                      />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Comment Input */}
-            <Card className="shadow-sm border-[#D6E4D9]">
-              <CardHeader className="bg-[#F9F8F6] pb-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <MessageSquare className="w-4 h-4 text-[#2D5A45]" />
-                  Add a Comment
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 space-y-3">
-                <div>
-                  <label className="text-xs font-medium text-[#4A4A4A] mb-1 block">Guest</label>
-                  <select
-                    value={selectedGuestId}
-                    onChange={e => setSelectedGuestId(e.target.value)}
-                    className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
-                  >
-                    <option value="">Select a guest...</option>
-                    {myGuestsForComment.map(g => (
-                      <option key={g.id} value={g.id}>
-                        {g.fullName} ({g.referenceNumber}) — {g.country}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <Textarea
-                  value={commentText}
-                  onChange={e => setCommentText(e.target.value)}
-                  placeholder="Type your comment or feedback..."
-                  rows={3}
-                  maxLength={1000}
-                  className="border-[#D4CFC7] focus:border-[#2D5A45] resize-none text-sm"
+            {/* Filter bar */}
+            <div className="bg-white rounded-xl border border-[#E8E3DB] shadow-sm p-4 flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
+                <Input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search guests..."
+                  className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-9"
                 />
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-[#4A4A4A]/50">{commentText.length}/1000</span>
-                  <Button
-                    onClick={handleSendComment}
-                    disabled={!selectedGuestId || !commentText.trim()}
-                    className="bg-[#2D5A45] hover:bg-[#234839] text-white"
-                  >
-                    <Send className="w-4 h-4 mr-1.5" />
-                    Send Comment
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+              <select
+                value={countryFilter}
+                onChange={e => setCountryFilter(e.target.value)}
+                className="px-3 py-1.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none h-9"
+              >
+                <option value="all">All Countries</option>
+                {countriesWithGuests.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <div className="flex flex-wrap gap-1.5">
+                <button onClick={() => setQuickFilter('all')} className={chipCls(quickFilter === 'all')}>All</button>
+                <button onClick={() => setQuickFilter('unread')} className={chipCls(quickFilter === 'unread')}>With Unread</button>
+                <button onClick={() => setQuickFilter('awaiting-review')} className={chipCls(quickFilter === 'awaiting-review')}>Awaiting Review</button>
+                <button onClick={() => setQuickFilter('needs-correction')} className={chipCls(quickFilter === 'needs-correction')}>Needs Correction</button>
+              </div>
+            </div>
 
+            {/* Guest inbox list */}
+            <div className="bg-white rounded-xl border border-[#E8E3DB] shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-[#E8E3DB] bg-[#F9F8F6] flex items-center justify-between">
+                <span className="text-sm font-semibold text-[#1A1A1A]">Guests</span>
+                <span className="text-xs text-[#4A4A4A]/60">{guestRows.length} shown</span>
+              </div>
+
+              {guestRows.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                  <ScrollText className="w-10 h-10 text-gray-300" />
+                  <p className="text-sm font-medium text-[#1A1A1A]">No guests match the selected filters.</p>
+                  {(search || countryFilter !== 'all' || quickFilter !== 'all') && (
+                    <button
+                      onClick={() => { setSearch(''); setCountryFilter('all'); setQuickFilter('all'); }}
+                      className="text-xs text-[#2D5A45] hover:underline"
+                    >
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+              ) : (
+                guestRows.map(({ guest, unreadCount, lastActivityAt, lastActivity }) => (
+                  <button
+                    key={guest.id}
+                    onClick={() => setOpenGuestId(guest.id)}
+                    className="w-full flex items-center gap-4 px-5 py-4 hover:bg-[#F9F8F6] transition-colors border-b border-[#E8E3DB] last:border-b-0 text-left"
+                  >
+                    {/* Avatar */}
+                    <div className="w-10 h-10 bg-[#2D5A45] rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0">
+                      {guest.fullName.charAt(0)}
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-[#1A1A1A] ${unreadCount > 0 ? 'font-semibold' : 'font-medium'}`}>
+                          {guest.fullName}
+                        </span>
+                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusBadgeCls(guest.status)}`}>
+                          {GUEST_STATUS_LABELS[guest.status as keyof typeof GUEST_STATUS_LABELS] ?? guest.status}
+                        </Badge>
+                        <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-100 px-1.5 py-0.5 rounded font-medium">
+                          {guest.country}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#4A4A4A] mt-0.5">{guest.referenceNumber}</p>
+                      <p className={`text-xs mt-0.5 truncate ${unreadCount > 0 ? 'text-[#1A1A1A]' : 'text-[#4A4A4A]/60'}`}>
+                        {lastActivity}
+                      </p>
+                    </div>
+
+                    {/* Right: time + unread badge */}
+                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      {lastActivityAt && (
+                        <span className="text-xs text-[#4A4A4A]/50">{formatTime(lastActivityAt)}</span>
+                      )}
+                      {unreadCount > 0 && (
+                        <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                          {unreadCount}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
           </div>
         </main>
       </div>
+
+      {/* Guest Audit Trail Dialog */}
+      <Dialog open={!!openGuestId} onOpenChange={open => { if (!open) setOpenGuestId(null); }}>
+        <DialogContent className="max-w-2xl w-full h-[85vh] flex flex-col p-0 gap-0">
+          {/* Header */}
+          <DialogHeader className="px-6 py-4 border-b border-[#E8E3DB] shrink-0">
+            <div>
+              <DialogTitle className="text-lg font-semibold text-[#1A1A1A]">
+                {openGuestData?.fullName ?? ''}
+              </DialogTitle>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <span className="text-xs text-[#4A4A4A]">{openGuestData?.referenceNumber}</span>
+                <span className="text-[#4A4A4A]/40">·</span>
+                <span className="text-xs text-[10px] bg-blue-50 text-blue-700 border border-blue-100 px-1.5 py-0.5 rounded font-medium">
+                  {openGuestData?.country}
+                </span>
+                {openGuestData && (
+                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusBadgeCls(openGuestData.status)}`}>
+                    {GUEST_STATUS_LABELS[openGuestData.status as keyof typeof GUEST_STATUS_LABELS] ?? openGuestData.status}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </DialogHeader>
+
+          {/* Filter chips */}
+          <div className="px-6 py-3 border-b border-[#E8E3DB] flex gap-1.5 shrink-0 bg-[#F9F8F6]">
+            {(['all', 'comments', 'status_changes', 'edits'] as DialogFilter[]).map(f => (
+              <button
+                key={f}
+                onClick={() => setDialogFilter(f)}
+                className={chipCls(dialogFilter === f)}
+              >
+                {f === 'all' ? 'All' : f === 'comments' ? 'Comments' : f === 'status_changes' ? 'Status Changes' : 'Edits'}
+              </button>
+            ))}
+            <span className="ml-auto text-xs text-[#4A4A4A]/50 self-center">{dialogEntries.length} entries</span>
+          </div>
+
+          {/* Timeline */}
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            {dialogEntries.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-3">
+                <ScrollText className="w-8 h-8 text-gray-300" />
+                <p className="text-sm text-gray-400">No activity matches the selected filter.</p>
+              </div>
+            ) : (
+              <div className="relative space-y-4">
+                <div className="absolute left-[15px] top-0 bottom-0 w-px bg-[#E8E3DB]" />
+                {dialogEntries.map(entry => (
+                  <DialogEntryCard key={entry.id} entry={entry} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Comment input */}
+          <div className="px-6 py-4 border-t border-[#E8E3DB] bg-[#F9F8F6] shrink-0">
+            <div className="flex items-center gap-2 mb-2">
+              <MessageSquare className="w-4 h-4 text-[#2D5A45]" />
+              <span className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Add a comment</span>
+            </div>
+            <div className="flex gap-2">
+              <Textarea
+                value={commentText}
+                onChange={e => setCommentText(e.target.value)}
+                placeholder="Type your comment..."
+                rows={2}
+                maxLength={1000}
+                className="flex-1 border-[#D4CFC7] focus:border-[#2D5A45] resize-none text-sm"
+              />
+              <Button
+                onClick={handleSendComment}
+                disabled={!commentText.trim()}
+                className="bg-[#2D5A45] hover:bg-[#234839] text-white self-end px-3"
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
+            <p className="text-[10px] text-[#4A4A4A]/40 mt-1 text-right">{commentText.length}/1000</p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
