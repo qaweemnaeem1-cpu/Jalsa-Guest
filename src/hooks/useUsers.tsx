@@ -33,46 +33,8 @@ interface UsersContextType {
 
 const UsersContext = createContext<UsersContextType | undefined>(undefined);
 
-// Initial demo users
+// Initial users — only real data
 const INITIAL_USERS: SystemUser[] = [
-  {
-    id: 'u1',
-    name: 'Fatima Ali',
-    email: 'fatima.ali@mehmaan.local',
-    password: 'Desk@2024',
-    userType: 'desk-in-charge',
-    phone: '+44 7700 900001',
-    assignedCountries: ['Germany', 'France', 'Netherlands'],
-    isActive: true,
-    createdAt: '2024-01-01',
-    lastLogin: '2024-03-01',
-  },
-  {
-    id: 'u2',
-    name: 'Klaus Mueller',
-    email: 'klaus.mueller@external.local',
-    password: 'Coord@2024',
-    userType: 'coordinator',
-    country: 'Germany',
-    countryCode: 'DE',
-    phone: '+49 170 1234567',
-    isActive: true,
-    createdAt: '2024-01-05',
-    lastLogin: '2024-03-02',
-  },
-  {
-    id: 'u3',
-    name: 'Ahmed Hassan',
-    email: 'ahmed.hassan@external.local',
-    password: 'Coord@2024',
-    userType: 'coordinator',
-    country: 'Pakistan',
-    countryCode: 'PK',
-    phone: '+92 300 1234567',
-    isActive: true,
-    createdAt: '2024-01-10',
-    lastLogin: '2024-02-28',
-  },
   {
     id: 'u4',
     name: 'Omar Hassan',
@@ -94,31 +56,6 @@ const INITIAL_USERS: SystemUser[] = [
     isActive: true,
     createdAt: '2024-01-20',
     lastLogin: '2024-03-02',
-  },
-  {
-    id: 'u6',
-    name: 'Inactive User',
-    email: 'inactive@mehmaan.local',
-    password: 'Inactive@2024',
-    userType: 'coordinator',
-    country: 'India',
-    countryCode: 'IN',
-    phone: '+91 98765 43210',
-    isActive: false,
-    createdAt: '2024-02-01',
-    lastLogin: undefined,
-  },
-  {
-    id: 'u7',
-    name: 'Sarah Johnson',
-    email: 'sarah.johnson@mehmaan.local',
-    password: 'Desk@2024',
-    userType: 'desk-in-charge',
-    phone: '+44 7700 900004',
-    assignedCountries: ['Pakistan', 'India', 'Bangladesh'],
-    isActive: true,
-    createdAt: '2024-02-10',
-    lastLogin: '2024-03-03',
   },
   // Real Jalsa Desk Incharges
   {

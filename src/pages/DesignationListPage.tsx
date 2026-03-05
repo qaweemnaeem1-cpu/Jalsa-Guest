@@ -59,6 +59,7 @@ const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> 
     { icon: Users, label: 'Guests', href: '/guests' },
     { icon: Users, label: 'Users', href: '/users' },
     { icon: Briefcase, label: 'Designation List', href: '/designations' },
+    { icon: Globe, label: 'Countries & Depts', href: '/countries-departments' },
   ],
   'desk-in-charge': [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },

@@ -4,6 +4,7 @@ import { GuestsProvider } from '@/hooks/useGuests';
 import { DesignationsProvider } from '@/hooks/useDesignations';
 import { UsersProvider } from '@/hooks/useUsers';
 import { AssignableItemsProvider } from '@/hooks/useAssignableItems';
+import { CoordinatorsProvider } from '@/hooks/useCoordinators';
 import { Toaster } from 'sonner';
 
 import LandingPage from '@/pages/LandingPage';
@@ -13,6 +14,7 @@ import GuestsPage from '@/pages/GuestsPage';
 import NewGuestPage from '@/pages/NewGuestPage';
 import UsersPage from '@/pages/UsersPage';
 import DesignationListPage from '@/pages/DesignationListPage';
+import CountriesDepartmentsPage from '@/pages/CountriesDepartmentsPage';
 
 function ProtectedRoute({ children, requiredRoles }: { children: React.ReactNode; requiredRoles?: string[] }) {
   const { isAuthenticated, user } = useAuth();
@@ -73,6 +75,14 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/countries-departments"
+        element={
+          <ProtectedRoute requiredRoles={['super-admin']}>
+            <CountriesDepartmentsPage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -82,6 +92,7 @@ function App() {
   return (
     <AuthProvider>
       <UsersProvider>
+        <CoordinatorsProvider>
         <AssignableItemsProvider>
         <DesignationsProvider>
           <GuestsProvider>
@@ -92,6 +103,7 @@ function App() {
           </GuestsProvider>
         </DesignationsProvider>
         </AssignableItemsProvider>
+        </CoordinatorsProvider>
       </UsersProvider>
     </AuthProvider>
   );

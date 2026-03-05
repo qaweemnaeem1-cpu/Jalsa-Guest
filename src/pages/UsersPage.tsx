@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useUsers, USER_TYPE_LABELS, type UserType, type SystemUser } from '@/hooks/useUsers';
+import { useCoordinators, type Coordinator } from '@/hooks/useCoordinators';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,6 +42,7 @@ const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> 
     { icon: Users, label: 'Guests', href: '/guests' },
     { icon: Users, label: 'Users', href: '/users' },
     { icon: Briefcase, label: 'Designation List', href: '/designations' },
+    { icon: Globe, label: 'Countries & Depts', href: '/countries-departments' },
   ],
   'desk-in-charge': [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
@@ -79,23 +81,31 @@ interface UserFormData {
   country: string;
   countryCode: string;
   isActive: boolean;
+  assignedDeskInchargeId: string;
 }
+
+const COORD_PAGE_SIZE = 20;
 
 export default function UsersPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { addUser, updateUser, deleteUser, toggleUserStatus, assignItems, getUsersByType } = useUsers();
+  const { coordinators, addCoordinator, updateCoordinator, deleteCoordinator, toggleCoordinatorActive } = useCoordinators();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<UserType>('desk-in-charge');
   const [searchQuery, setSearchQuery] = useState('');
   const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
-  
+
+  // Coordinator pagination
+  const [coordPage, setCoordPage] = useState(1);
+
   // Assign countries panel state
   const [assigningUserId, setAssigningUserId] = useState<string | null>(null);
-  
+
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<SystemUser | null>(null);
+  const [editingCoordinator, setEditingCoordinator] = useState<Coordinator | null>(null);
   const [formData, setFormData] = useState<UserFormData>({
     name: '',
     email: '',
@@ -104,15 +114,33 @@ export default function UsersPage() {
     country: '',
     countryCode: '',
     isActive: true,
+    assignedDeskInchargeId: '',
   });
 
   if (!user) return null;
 
   const navItems = NAV_ITEMS[user.role] || [];
 
-  const filteredUsers = getUsersByType(activeTab).filter(u => 
+  // Non-coordinator users (desk-in-charge, driver, nizamat-in-charge)
+  const filteredUsers = getUsersByType(activeTab).filter(u =>
     u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     u.email.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Coordinator-specific filtering + pagination
+  const filteredCoordinators = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return coordinators.filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      c.email.toLowerCase().includes(q) ||
+      c.country.toLowerCase().includes(q)
+    );
+  }, [coordinators, searchQuery]);
+
+  const coordTotalPages = Math.max(1, Math.ceil(filteredCoordinators.length / COORD_PAGE_SIZE));
+  const pagedCoordinators = filteredCoordinators.slice(
+    (coordPage - 1) * COORD_PAGE_SIZE,
+    coordPage * COORD_PAGE_SIZE
   );
 
   const togglePasswordVisibility = (userId: string) => {
@@ -121,6 +149,7 @@ export default function UsersPage() {
 
   const openAddModal = () => {
     setEditingUser(null);
+    setEditingCoordinator(null);
     setFormData({
       name: '',
       email: '',
@@ -129,12 +158,14 @@ export default function UsersPage() {
       country: '',
       countryCode: '',
       isActive: true,
+      assignedDeskInchargeId: '',
     });
     setIsModalOpen(true);
   };
 
   const openEditModal = (userToEdit: SystemUser) => {
     setEditingUser(userToEdit);
+    setEditingCoordinator(null);
     setFormData({
       name: userToEdit.name,
       email: userToEdit.email,
@@ -143,6 +174,23 @@ export default function UsersPage() {
       country: userToEdit.country || '',
       countryCode: userToEdit.countryCode || '',
       isActive: userToEdit.isActive,
+      assignedDeskInchargeId: '',
+    });
+    setIsModalOpen(true);
+  };
+
+  const openEditCoordinator = (coord: Coordinator) => {
+    setEditingUser(null);
+    setEditingCoordinator(coord);
+    setFormData({
+      name: coord.name,
+      email: coord.email,
+      password: coord.password,
+      phone: coord.phone,
+      country: coord.country,
+      countryCode: '',
+      isActive: coord.isActive,
+      assignedDeskInchargeId: coord.assignedDeskInchargeId,
     });
     setIsModalOpen(true);
   };
@@ -150,33 +198,69 @@ export default function UsersPage() {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingUser(null);
+    setEditingCoordinator(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.name.trim() || !formData.email.trim() || !formData.password.trim()) {
       toast.error('Please fill in all required fields');
       return;
     }
 
-    const country = COUNTRIES.find(c => c.code === formData.countryCode);
-
-    if (editingUser) {
-      updateUser(editingUser.id, {
-        ...formData,
-        country: country?.name || formData.country,
-      });
-      toast.success('User updated successfully');
+    if (activeTab === 'coordinator') {
+      const diUser = getUsersByType('desk-in-charge').find(d => d.id === formData.assignedDeskInchargeId);
+      if (editingCoordinator) {
+        updateCoordinator(editingCoordinator.id, {
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          phone: formData.phone,
+          country: formData.country,
+          isActive: formData.isActive,
+          assignedDeskInchargeId: formData.assignedDeskInchargeId,
+          assignedDeskInchargeName: diUser?.name ?? '',
+        });
+        toast.success('Coordinator updated successfully');
+      } else {
+        addCoordinator({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          phone: formData.phone,
+          country: formData.country,
+          isActive: formData.isActive,
+          assignedDeskInchargeId: formData.assignedDeskInchargeId,
+          assignedDeskInchargeName: diUser?.name ?? '',
+        });
+        toast.success('Coordinator added successfully');
+      }
     } else {
-      addUser({
-        ...formData,
-        userType: activeTab,
-        country: country?.name || formData.country,
-      });
-      toast.success('User added successfully');
+      const country = COUNTRIES.find(c => c.code === formData.countryCode);
+      if (editingUser) {
+        updateUser(editingUser.id, {
+          ...formData,
+          country: country?.name || formData.country,
+        });
+        toast.success('User updated successfully');
+      } else {
+        addUser({
+          ...formData,
+          userType: activeTab,
+          country: country?.name || formData.country,
+        });
+        toast.success('User added successfully');
+      }
     }
     closeModal();
+  };
+
+  const handleDeleteCoordinator = (coord: Coordinator) => {
+    if (confirm(`Are you sure you want to delete "${coord.name}"?`)) {
+      deleteCoordinator(coord.id);
+      toast.success('Coordinator deleted successfully');
+    }
   };
 
   const handleDelete = (userToDelete: SystemUser) => {
@@ -186,12 +270,24 @@ export default function UsersPage() {
     }
   };
 
+  const handleToggleCoordinator = (coord: Coordinator) => {
+    toggleCoordinatorActive(coord.id);
+    toast.success(`"${coord.name}" is now ${coord.isActive ? 'inactive' : 'active'}`);
+  };
+
   const handleToggleStatus = (userToToggle: SystemUser) => {
     toggleUserStatus(userToToggle.id);
     toast.success(`"${userToToggle.name}" is now ${!userToToggle.isActive ? 'active' : 'inactive'}`);
   };
 
   const getStats = () => {
+    if (activeTab === 'coordinator') {
+      return {
+        total: coordinators.length,
+        active: coordinators.filter(c => c.isActive).length,
+        inactive: coordinators.filter(c => !c.isActive).length,
+      };
+    }
     const typeUsers = getUsersByType(activeTab);
     return {
       total: typeUsers.length,
@@ -303,6 +399,7 @@ export default function UsersPage() {
                   onClick={() => {
                     setActiveTab(tab.value);
                     setSearchQuery('');
+                    setCoordPage(1);
                   }}
                   className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
                     activeTab === tab.value
@@ -346,7 +443,7 @@ export default function UsersPage() {
                     <Input
                       placeholder={`Search ${USER_TYPE_LABELS[activeTab].toLowerCase()}...`}
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onChange={(e) => { setSearchQuery(e.target.value); setCoordPage(1); }}
                       className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-11"
                     />
                   </div>
@@ -382,6 +479,9 @@ export default function UsersPage() {
                         {activeTab === 'coordinator' && (
                           <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Country</th>
                         )}
+                        {activeTab === 'coordinator' && (
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Desk Incharge</th>
+                        )}
                         {activeTab === 'desk-in-charge' && (
                           <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Countries</th>
                         )}
@@ -391,9 +491,87 @@ export default function UsersPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E8E3DB]">
-                      {filteredUsers.length === 0 ? (
+                      {activeTab === 'coordinator' ? (
+                        // ── Coordinator rows ──────────────────────────────────
+                        filteredCoordinators.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="px-4 py-8 text-center text-[#4A4A4A]">
+                              No coordinators found.
+                            </td>
+                          </tr>
+                        ) : (
+                          pagedCoordinators.map((coord) => (
+                            <tr key={coord.id} className="hover:bg-[#FAFAFA]">
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium">
+                                    {coord.name.charAt(0)}
+                                  </div>
+                                  <span className="font-medium text-[#1A1A1A]">{coord.name}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-[#4A4A4A]">{coord.email}</td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[#4A4A4A] font-mono">
+                                    {showPasswordMap[coord.id] ? coord.password : '••••••••'}
+                                  </span>
+                                  <button
+                                    onClick={() => togglePasswordVisibility(coord.id)}
+                                    className="p-1 hover:bg-gray-100 rounded text-[#4A4A4A]"
+                                  >
+                                    {showPasswordMap[coord.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-[#4A4A4A]">{coord.country}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{coord.assignedDeskInchargeName || '—'}</td>
+                              <td className="px-4 py-3 text-[#4A4A4A]">{coord.phone || '—'}</td>
+                              <td className="px-4 py-3">
+                                <Badge
+                                  variant="outline"
+                                  className={coord.isActive
+                                    ? 'bg-green-50 text-green-700 border-green-200'
+                                    : 'bg-gray-50 text-gray-600 border-gray-200'
+                                  }
+                                >
+                                  {coord.isActive ? 'Active' : 'Inactive'}
+                                </Badge>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() => handleToggleCoordinator(coord)}
+                                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                    title={coord.isActive ? 'Deactivate' : 'Activate'}
+                                  >
+                                    {coord.isActive
+                                      ? <ToggleRight className="w-5 h-5 text-green-600" />
+                                      : <ToggleLeft className="w-5 h-5 text-gray-400" />
+                                    }
+                                  </button>
+                                  <button
+                                    onClick={() => openEditCoordinator(coord)}
+                                    className="p-2 hover:bg-blue-50 text-[#4A4A4A] hover:text-blue-600 rounded-lg transition-colors"
+                                    title="Edit"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteCoordinator(coord)}
+                                    className="p-2 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded-lg transition-colors"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )
+                      ) : filteredUsers.length === 0 ? (
                         <tr>
-                          <td colSpan={activeTab === 'coordinator' ? 7 : 6} className="px-4 py-8 text-center text-[#4A4A4A]">
+                          <td colSpan={6} className="px-4 py-8 text-center text-[#4A4A4A]">
                             No {USER_TYPE_LABELS[activeTab].toLowerCase()} found. Click "Add" to create one.
                           </td>
                         </tr>
@@ -431,28 +609,55 @@ export default function UsersPage() {
                             )}
                             {activeTab === 'desk-in-charge' && (
                               <td className="px-4 py-3">
-                                {u.assignedCountries && u.assignedCountries.length > 0 ? (
+                                {((u.assignedCountries?.length ?? 0) > 0 || (u.assignedDepartments?.length ?? 0) > 0) ? (
                                   <Popover>
                                     <PopoverTrigger asChild>
-                                      <button className="text-xs font-medium px-2.5 py-1 rounded-full bg-[#D6E4D9] text-[#2D5A45] hover:bg-[#C5D9C9] transition-colors cursor-pointer">
-                                        {u.assignedCountries.length} countries
-                                      </button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-72 p-3" align="start">
-                                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                                        Assigned Countries ({u.assignedCountries.length})
-                                      </p>
-                                      <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
-                                        {u.assignedCountries.map((entry, i) => (
-                                            <span key={i} className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
-                                              {entry}
-                                            </span>
-                                          ))}
+                                      <div className="flex items-center gap-1.5 cursor-pointer">
+                                        {(u.assignedCountries?.length ?? 0) > 0 && (
+                                          <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-[#D6E4D9] text-[#2D5A45] hover:bg-[#C5D9C9] transition-colors">
+                                            {u.assignedCountries!.length} countries
+                                          </span>
+                                        )}
+                                        {(u.assignedDepartments?.length ?? 0) > 0 && (
+                                          <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition-colors">
+                                            {u.assignedDepartments!.length} dept{u.assignedDepartments!.length > 1 ? 's' : ''}
+                                          </span>
+                                        )}
                                       </div>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-80 p-3" align="start">
+                                      {(u.assignedDepartments?.length ?? 0) > 0 && (
+                                        <div className="mb-3">
+                                          <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide mb-2">
+                                            Departments ({u.assignedDepartments!.length})
+                                          </p>
+                                          <div className="flex flex-wrap gap-1.5">
+                                            {u.assignedDepartments!.map((dept, i) => (
+                                              <span key={i} className="text-xs bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full">
+                                                {dept}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {(u.assignedCountries?.length ?? 0) > 0 && (
+                                        <>
+                                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                                            Countries ({u.assignedCountries!.length})
+                                          </p>
+                                          <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
+                                            {u.assignedCountries!.map((entry, i) => (
+                                              <span key={i} className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
+                                                {entry}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        </>
+                                      )}
                                     </PopoverContent>
                                   </Popover>
                                 ) : (
-                                  <span className="text-[#4A4A4A]/50 text-sm">No countries assigned</span>
+                                  <span className="text-[#4A4A4A]/50 text-sm">No items assigned</span>
                                 )}
                               </td>
                             )}
@@ -514,6 +719,55 @@ export default function UsersPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Coordinator pagination */}
+                {activeTab === 'coordinator' && coordTotalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t border-[#E8E3DB]">
+                    <p className="text-sm text-[#4A4A4A]">
+                      Showing {Math.min((coordPage - 1) * COORD_PAGE_SIZE + 1, filteredCoordinators.length)}–{Math.min(coordPage * COORD_PAGE_SIZE, filteredCoordinators.length)} of {filteredCoordinators.length} coordinators
+                    </p>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setCoordPage(p => Math.max(1, p - 1))}
+                        disabled={coordPage === 1}
+                        className="px-3 py-1.5 text-sm border border-[#D4CFC7] rounded-lg hover:bg-[#F5F0E8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Previous
+                      </button>
+                      {Array.from({ length: coordTotalPages }, (_, i) => i + 1)
+                        .filter(p => p === 1 || p === coordTotalPages || Math.abs(p - coordPage) <= 1)
+                        .reduce<(number | '...')[]>((acc, p, idx, arr) => {
+                          if (idx > 0 && (arr[idx - 1] as number) < p - 1) acc.push('...');
+                          acc.push(p);
+                          return acc;
+                        }, [])
+                        .map((p, i) =>
+                          p === '...' ? (
+                            <span key={`e${i}`} className="px-2 text-[#4A4A4A]">…</span>
+                          ) : (
+                            <button
+                              key={p}
+                              onClick={() => setCoordPage(p as number)}
+                              className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
+                                coordPage === p
+                                  ? 'bg-[#2D5A45] text-white'
+                                  : 'border border-[#D4CFC7] text-[#4A4A4A] hover:bg-[#F5F0E8]'
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          )
+                        )}
+                      <button
+                        onClick={() => setCoordPage(p => Math.min(coordTotalPages, p + 1))}
+                        disabled={coordPage === coordTotalPages}
+                        className="px-3 py-1.5 text-sm border border-[#D4CFC7] rounded-lg hover:bg-[#F5F0E8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -601,22 +855,33 @@ export default function UsersPage() {
               </div>
 
               {activeTab === 'coordinator' && (
-                <div className="space-y-2">
-                  <Label className="text-[#1A1A1A]">Country</Label>
-                  <div className="relative">
-                    <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
+                <>
+                  <div className="space-y-2">
+                    <Label className="text-[#1A1A1A]">Country</Label>
+                    <div className="relative">
+                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
+                      <Input
+                        value={formData.country}
+                        onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                        placeholder="Enter country name"
+                        className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-11"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[#1A1A1A]">Desk Incharge</Label>
                     <select
-                      value={formData.countryCode}
-                      onChange={(e) => setFormData({ ...formData, countryCode: e.target.value })}
-                      className="w-full pl-10 pr-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] h-11"
+                      value={formData.assignedDeskInchargeId}
+                      onChange={(e) => setFormData({ ...formData, assignedDeskInchargeId: e.target.value })}
+                      className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] h-11"
                     >
-                      <option value="">Select country</option>
-                      {COUNTRIES.map((country) => (
-                        <option key={country.code} value={country.code}>{country.name}</option>
+                      <option value="">— Select desk incharge —</option>
+                      {getUsersByType('desk-in-charge').map((di) => (
+                        <option key={di.id} value={di.id}>{di.name}</option>
                       ))}
                     </select>
                   </div>
-                </div>
+                </>
               )}
 
               <div className="flex items-center space-x-2 pt-2">
