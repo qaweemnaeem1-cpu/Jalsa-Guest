@@ -182,6 +182,8 @@ interface AuditTimelineProps {
   showFilters?: boolean;
   /** If true, allow commenting */
   allowComment?: boolean;
+  /** When provided, bypass context and use these entries directly */
+  overrideEntries?: AuditEntry[];
 }
 
 export function AuditTimeline({
@@ -191,6 +193,7 @@ export function AuditTimeline({
   showGuestInfo = false,
   showFilters = false,
   allowComment = true,
+  overrideEntries,
 }: AuditTimelineProps) {
   const { entries, addComment, getEntriesForGuest } = useAuditTrail();
   const { user } = useAuth();
@@ -198,7 +201,9 @@ export function AuditTimeline({
   const [filterType, setFilterType] = useState<FilterType>('all');
 
   // Decide which entries to show
-  const rawEntries = guestId ? getEntriesForGuest(guestId) : entries;
+  const rawEntries = overrideEntries !== undefined
+    ? overrideEntries
+    : guestId ? getEntriesForGuest(guestId) : entries;
 
   // Sort newest first, apply filter
   const sorted = [...rawEntries].sort(

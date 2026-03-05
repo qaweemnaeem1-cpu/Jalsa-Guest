@@ -12,7 +12,7 @@ import {
 import { ROLE_LABELS } from '@/lib/constants';
 
 const COORD_NAV = [
-  { icon: LayoutDashboard, label: 'Dashboard',       href: '/coordinator/dashboard' },
+  { icon: LayoutDashboard, label: 'Dashboard',       href: '/dashboard' },
   { icon: Clock,           label: 'Pending Guests',  href: '/coordinator/pending' },
   { icon: Users,           label: 'Submitted Guests',href: '/coordinator/submitted' },
   { icon: ScrollText,      label: 'Audit Trail',     href: '/coordinator/audit-trail' },
@@ -31,21 +31,33 @@ export default function CoordinatorAuditTrailPage() {
 
   if (!user) return null;
 
-  const pendingCount = guests.filter(g => g.status === 'pending-review').length;
+  const pendingCount = guests.filter(g => g.status === 'pending-review' && g.submittedBy === user.id).length;
 
-  // Unique guest options from entries
+  // Only this coordinator's guests
+  const myGuestIds = useMemo(() =>
+    new Set(guests.filter(g => g.submittedBy === user.id).map(g => g.id)),
+    [guests, user.id]
+  );
+
+  // Entries scoped to coordinator's own guests
+  const myEntries = useMemo(() =>
+    entries.filter(e => myGuestIds.has(e.guestId)),
+    [entries, myGuestIds]
+  );
+
+  // Unique guest options from MY entries only
   const guestOptions = useMemo(() => {
     const seen = new Map<string, string>();
-    for (const e of entries) {
+    for (const e of myEntries) {
       if (!seen.has(e.guestId)) seen.set(e.guestId, `${e.guestName} (${e.guestReference})`);
     }
     return Array.from(seen.entries()).map(([id, label]) => ({ id, label }));
-  }, [entries]);
+  }, [myEntries]);
 
   // Filtered entries for the timeline
   const filteredEntries = useMemo(() => {
     const now = new Date();
-    return entries.filter(e => {
+    return myEntries.filter(e => {
       if (guestFilter !== 'all' && e.guestId !== guestFilter) return false;
       if (dateRange === '7days') {
         const diff = (now.getTime() - new Date(e.createdAt).getTime()) / (1000 * 60 * 60 * 24);
@@ -57,7 +69,7 @@ export default function CoordinatorAuditTrailPage() {
       }
       return true;
     });
-  }, [entries, guestFilter, dateRange]);
+  }, [myEntries, guestFilter, dateRange]);
 
   const filterCls = (active: boolean) =>
     active
@@ -199,6 +211,7 @@ export default function CoordinatorAuditTrailPage() {
                   </div>
                 ) : (
                   <AuditTimeline
+                    overrideEntries={filteredEntries}
                     guestId={guestFilter === 'all' ? undefined : guestFilter}
                     showGuestInfo={guestFilter === 'all'}
                     showFilters

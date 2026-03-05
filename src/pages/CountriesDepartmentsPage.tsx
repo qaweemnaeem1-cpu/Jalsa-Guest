@@ -23,6 +23,10 @@ import {
   Briefcase,
   ChevronLeft,
   ChevronRight,
+  Clock,
+  ScrollText,
+  ClipboardList,
+  CheckSquare,
 } from 'lucide-react';
 import type { UserRole } from '@/types';
 
@@ -30,19 +34,24 @@ import type { UserRole } from '@/types';
 
 const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> = {
   'super-admin': [
-    { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
-    { icon: Users, label: 'Guests', href: '/guests' },
-    { icon: Users, label: 'Users', href: '/users' },
-    { icon: Briefcase, label: 'Designation List', href: '/designations' },
-    { icon: Globe, label: 'Countries & Depts', href: '/countries-departments' },
+    { icon: LayoutDashboard, label: 'Dashboard',         href: '/dashboard' },
+    { icon: Users,           label: 'Guests',            href: '/guests' },
+    { icon: Users,           label: 'Users',             href: '/users' },
+    { icon: Briefcase,       label: 'Designation List',  href: '/designations' },
+    { icon: Globe,           label: 'Countries & Depts', href: '/countries-departments' },
+    { icon: ScrollText,      label: 'Audit Trail',       href: '/admin/audit-trail' },
   ],
   'desk-in-charge': [
-    { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
-    { icon: Users, label: 'Guests', href: '/guests' },
+    { icon: LayoutDashboard, label: 'Dashboard',         href: '/dashboard' },
+    { icon: ClipboardList,   label: 'Guests to Review',  href: '/desk/review' },
+    { icon: CheckSquare,     label: 'Approved Guests',   href: '/desk/approved' },
+    { icon: ScrollText,      label: 'Audit Trail',       href: '/desk/audit-trail' },
   ],
   'coordinator': [
-    { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
-    { icon: Users, label: 'Guests', href: '/guests' },
+    { icon: LayoutDashboard, label: 'Dashboard',        href: '/dashboard' },
+    { icon: Clock,           label: 'Pending Guests',   href: '/coordinator/pending' },
+    { icon: Users,           label: 'Submitted Guests', href: '/coordinator/submitted' },
+    { icon: ScrollText,      label: 'Audit Trail',      href: '/coordinator/audit-trail' },
   ],
   'transport': [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },

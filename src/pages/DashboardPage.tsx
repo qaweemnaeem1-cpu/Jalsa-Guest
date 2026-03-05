@@ -2,12 +2,12 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { Button } from '@/components/ui/button';
-import { 
-  Users, 
-  Globe, 
-  Clock, 
-  CheckCircle, 
-  AlertCircle, 
+import {
+  Users,
+  Globe,
+  Clock,
+  CheckCircle,
+  AlertCircle,
   ArrowRight,
   Plane,
   Bed,
@@ -16,6 +16,9 @@ import {
   UserCheck,
   Plus,
   Search,
+  ScrollText,
+  ClipboardList,
+  CheckSquare,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ROLE_LABELS } from '@/lib/constants';
@@ -23,19 +26,24 @@ import type { UserRole } from '@/types';
 
 const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> = {
   'super-admin': [
-    { icon: FileText, label: 'Dashboard', href: '/dashboard' },
-    { icon: Users, label: 'Guests', href: '/guests' },
-    { icon: Users, label: 'Users', href: '/users' },
-    { icon: Briefcase, label: 'Designation List', href: '/designations' },
-    { icon: Globe, label: 'Countries & Depts', href: '/countries-departments' },
+    { icon: FileText,      label: 'Dashboard',          href: '/dashboard' },
+    { icon: Users,         label: 'Guests',             href: '/guests' },
+    { icon: Users,         label: 'Users',              href: '/users' },
+    { icon: Briefcase,     label: 'Designation List',   href: '/designations' },
+    { icon: Globe,         label: 'Countries & Depts',  href: '/countries-departments' },
+    { icon: ScrollText,    label: 'Audit Trail',        href: '/admin/audit-trail' },
   ],
   'desk-in-charge': [
-    { icon: FileText, label: 'Dashboard', href: '/dashboard' },
-    { icon: Users, label: 'Guests', href: '/guests' },
+    { icon: FileText,      label: 'Dashboard',          href: '/dashboard' },
+    { icon: ClipboardList, label: 'Guests to Review',   href: '/desk/review' },
+    { icon: CheckSquare,   label: 'Approved Guests',    href: '/desk/approved' },
+    { icon: ScrollText,    label: 'Audit Trail',        href: '/desk/audit-trail' },
   ],
   'coordinator': [
-    { icon: FileText, label: 'Dashboard', href: '/dashboard' },
-    { icon: Users, label: 'Guests', href: '/guests' },
+    { icon: FileText,    label: 'Dashboard',        href: '/dashboard' },
+    { icon: Clock,       label: 'Pending Guests',   href: '/coordinator/pending' },
+    { icon: Users,       label: 'Submitted Guests', href: '/coordinator/submitted' },
+    { icon: ScrollText,  label: 'Audit Trail',      href: '/coordinator/audit-trail' },
   ],
   'transport': [
     { icon: FileText, label: 'Dashboard', href: '/dashboard' },
@@ -73,8 +81,12 @@ export default function DashboardPage() {
     if (user.role === 'coordinator') {
       return guests.filter(g => g.submittedBy === user.id);
     }
+    if (user.role === 'desk-in-charge') {
+      const countries = user.assignedCountries || [];
+      return guests.filter(g => countries.includes(g.country));
+    }
     return guests;
-  }, [guests, user.role, user.id]);
+  }, [guests, user.role, user.id, user.assignedCountries]);
 
   // Get unique countries count
   const uniqueCountries = useMemo(() => {
@@ -155,7 +167,7 @@ export default function DashboardPage() {
       case 'super-admin':
         return 'Global system overview and management';
       case 'desk-in-charge':
-        return 'Review and manage all guest submissions';
+        return `${user.name} — ${(user.assignedCountries || []).length} assigned countries`;
       case 'coordinator':
         return `${user.country} (${user.countryCode}) Coordinator`;
       case 'transport':
@@ -184,10 +196,10 @@ export default function DashboardPage() {
     if (user.role === 'desk-in-charge') {
       return (
         <Button
-          onClick={() => navigate('/guests')}
+          onClick={() => navigate('/desk/review')}
           className="bg-[#2D5A45] hover:bg-[#234839] text-white h-11 px-6"
         >
-          <Search className="w-4 h-4 mr-2" />
+          <ClipboardList className="w-4 h-4 mr-2" />
           Review Guests
         </Button>
       );
@@ -264,8 +276,8 @@ export default function DashboardPage() {
       case 'super-admin':
         actions.push(
           { label: 'View All Guests', href: '/guests', icon: Users },
-          { label: 'Manage Designations', href: '/designations', icon: Briefcase },
           { label: 'Manage Users', href: '/users', icon: UserCheck },
+          { label: 'View Audit Trail', href: '/admin/audit-trail', icon: ScrollText },
         );
         break;
       case 'coordinator':
@@ -276,8 +288,9 @@ export default function DashboardPage() {
         break;
       case 'desk-in-charge':
         actions.push(
-          { label: 'Review Pending Guests', href: '/guests', icon: Search },
-          { label: 'View All Guests', href: '/guests', icon: Users },
+          { label: 'Review Pending Guests', href: '/desk/review', icon: ClipboardList },
+          { label: 'View Approved Guests', href: '/desk/approved', icon: CheckSquare },
+          { label: 'View Audit Trail', href: '/desk/audit-trail', icon: ScrollText },
         );
         break;
       default:
@@ -328,10 +341,25 @@ export default function DashboardPage() {
         return 'System Overview';
       case 'coordinator':
         return 'Country Statistics';
+      case 'desk-in-charge':
+        return 'My Countries';
       default:
         return 'Overview';
     }
   };
+
+  // DI-specific: country breakdown for stats panel
+  const countryBreakdown = useMemo(() => {
+    if (user.role !== 'desk-in-charge') return [];
+    const countries = user.assignedCountries || [];
+    return countries
+      .map(country => ({
+        country,
+        total: guests.filter(g => g.country === country).length,
+        pending: guests.filter(g => g.country === country && g.status === 'pending-review').length,
+      }))
+      .filter(c => c.total > 0);
+  }, [guests, user.role, user.assignedCountries]);
 
   const statCards = getStatCards();
   const quickActions = getQuickActions();
@@ -356,20 +384,40 @@ export default function DashboardPage() {
 
           <nav className="p-4 space-y-1">
             <div className="text-xs font-medium text-[#4A4A4A] uppercase tracking-wider mb-2">Main</div>
-            {navItems.map((item, index) => (
-              <button
-                key={index}
-                onClick={() => navigate(item.href)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                  item.href === '/dashboard'
-                    ? 'bg-[#2D5A45] text-white'
-                    : 'text-[#4A4A4A] hover:bg-[#F5F0E8]'
-                }`}
-              >
-                <item.icon className="w-5 h-5" />
-                {item.label}
-              </button>
-            ))}
+            {navItems.map((item, index) => {
+              const reviewCount = user.role === 'desk-in-charge'
+                ? guests.filter(g => (user.assignedCountries || []).includes(g.country) && (g.status === 'pending-review' || g.status === 'needs-correction')).length
+                : 0;
+              const coordPendingCount = user.role === 'coordinator'
+                ? guests.filter(g => g.submittedBy === user.id && g.status === 'pending-review').length
+                : 0;
+              return (
+                <button
+                  key={index}
+                  onClick={() => navigate(item.href)}
+                  className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                    item.href === '/dashboard'
+                      ? 'bg-[#2D5A45] text-white'
+                      : 'text-[#4A4A4A] hover:bg-[#F5F0E8]'
+                  }`}
+                >
+                  <span className="flex items-center gap-3">
+                    <item.icon className="w-5 h-5" />
+                    {item.label}
+                  </span>
+                  {item.href === '/desk/review' && reviewCount > 0 && (
+                    <span className="bg-amber-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                      {reviewCount}
+                    </span>
+                  )}
+                  {item.href === '/coordinator/pending' && coordPendingCount > 0 && (
+                    <span className="bg-amber-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                      {coordPendingCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </nav>
         </aside>
 
@@ -381,18 +429,6 @@ export default function DashboardPage() {
               <h1 className="text-xl font-semibold text-[#1A1A1A]">Dashboard</h1>
               
               <div className="flex items-center gap-3">
-                {/* Coordinator View Switcher — Super Admin only */}
-                {user.role === 'super-admin' && (
-                  <button
-                    onClick={() => navigate('/coordinator/pending')}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#D4CFC7] text-sm text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors"
-                    title="Preview the Coordinator experience"
-                  >
-                    <Users className="w-4 h-4" />
-                    Preview Coordinator View
-                  </button>
-                )}
-
               {/* User Menu */}
               <div className="relative">
                 <button
@@ -529,19 +565,41 @@ export default function DashboardPage() {
                 <div className="px-6 py-4 border-b border-[#E8E3DB]">
                   <h3 className="text-lg font-semibold text-[#1A1A1A]">{getStatsPanelTitle()}</h3>
                 </div>
-                <div className="p-6 space-y-4">
-                  {statsPanel.map((stat, index) => (
-                    <div key={index}>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[#4A4A4A]">{stat.label}</span>
-                        <span className={`font-bold ${stat.color || 'text-[#1A1A1A]'}`}>{stat.value}</span>
+                {user.role === 'desk-in-charge' ? (
+                  <div className="p-4 space-y-2 max-h-64 overflow-y-auto">
+                    {countryBreakdown.length === 0 ? (
+                      <p className="text-sm text-[#4A4A4A]/60 text-center py-4">No guests registered yet from your countries.</p>
+                    ) : (
+                      countryBreakdown.map(c => (
+                        <div key={c.country} className="flex items-center justify-between py-2 border-b border-[#E8E3DB] last:border-0">
+                          <span className="text-sm text-[#4A4A4A]">{c.country}</span>
+                          <div className="flex items-center gap-2">
+                            {c.pending > 0 && (
+                              <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full font-medium">
+                                {c.pending} pending
+                              </span>
+                            )}
+                            <span className="text-sm font-bold text-[#1A1A1A]">{c.total}</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-6 space-y-4">
+                    {statsPanel.map((stat, index) => (
+                      <div key={index}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[#4A4A4A]">{stat.label}</span>
+                          <span className={`font-bold ${stat.color || 'text-[#1A1A1A]'}`}>{stat.value}</span>
+                        </div>
+                        {index < statsPanel.length - 1 && (
+                          <div className="border-b border-[#E8E3DB] mt-4" />
+                        )}
                       </div>
-                      {index < statsPanel.length - 1 && (
-                        <div className="border-b border-[#E8E3DB] mt-4" />
-                      )}
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 

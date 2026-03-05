@@ -7,6 +7,7 @@ export interface User {
   role: UserRole;
   country?: string;
   countryCode?: string;
+  assignedCountries?: string[];
 }
 
 export interface FamilyMember {

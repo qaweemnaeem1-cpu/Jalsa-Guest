@@ -12,7 +12,7 @@ import {
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 
 const COORD_NAV = [
-  { icon: LayoutDashboard, label: 'Dashboard',       href: '/coordinator/dashboard' },
+  { icon: LayoutDashboard, label: 'Dashboard',       href: '/dashboard' },
   { icon: Clock,           label: 'Pending Guests',  href: '/coordinator/pending' },
   { icon: Users,           label: 'Submitted Guests',href: '/coordinator/submitted' },
   { icon: ScrollText,      label: 'Audit Trail',     href: '/coordinator/audit-trail' },

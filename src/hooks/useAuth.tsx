@@ -19,10 +19,15 @@ const DEMO_USERS: Record<UserRole, User> = {
     role: 'super-admin',
   },
   'desk-in-charge': {
-    id: '2',
-    name: 'Fatima Ali',
-    email: 'desk.incharge@mehmaan.local',
+    id: 'di-002',
+    name: 'Rana Mahmood Sahib',
+    email: 'rana.jalsa@tabshir.org',
     role: 'desk-in-charge',
+    assignedCountries: [
+      'Austria', 'Brazil', 'Burkina Faso', 'Chad', 'Equatorial Guinea',
+      'France', 'French Guiana', 'Germany', 'Mali', 'Nepal',
+      'New Zealand', 'Slovenia', 'United States of America', 'Zambia', 'Zimbabwe',
+    ],
   },
   'coordinator': {
     id: '3',
