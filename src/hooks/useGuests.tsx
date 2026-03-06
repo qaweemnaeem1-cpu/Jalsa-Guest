@@ -4,7 +4,7 @@ import { useAuth } from './useAuth';
 
 interface GuestsContextType {
   guests: Guest[];
-  addGuest: (guestData: Omit<Guest, 'id' | 'referenceNumber' | 'submittedAt' | 'status'>) => Guest;
+  addGuest: (guestData: Omit<Guest, 'id' | 'referenceNumber' | 'submittedAt' | 'status' | 'resubmitCount' | 'appealStatus'>) => Guest;
   updateGuest: (id: string, updates: Partial<Guest>) => void;
   deleteGuest: (id: string) => void;
   addRemark: (guestId: string, remark: Omit<GuestRemark, 'id' | 'createdAt'>) => void;
@@ -48,22 +48,24 @@ const generateSampleGuests = (): Guest[] => {
       departureTerminal: 'T2',
       departureTime: '2024-07-20T14:00',
       wheelchairRequired: false,
-      status: 'accommodated',
+      status: 'Accommodated',
       submittedBy: '3',
       submittedAt: '2024-01-10',
+      resubmitCount: 0,
+      appealStatus: 'none',
       department: 'Guest Services',
       roomAssignment: 'A-101',
       statusHistory: [
         {
           id: 'sh1',
-          status: 'pending-review',
+          status: 'Awaiting Review',
           changedBy: 'Klaus Mueller',
           changedByRole: 'coordinator',
           changedAt: '2024-01-10T09:00:00',
         },
         {
           id: 'sh2',
-          status: 'approved',
+          status: 'Approved',
           changedBy: 'Fatima Ali',
           changedByRole: 'desk-in-charge',
           changedAt: '2024-01-11T14:30:00',
@@ -71,7 +73,7 @@ const generateSampleGuests = (): Guest[] => {
         },
         {
           id: 'sh3',
-          status: 'accommodated',
+          status: 'Accommodated',
           changedBy: 'Ahmad Khan',
           changedByRole: 'super-admin',
           changedAt: '2024-01-12T10:00:00',
@@ -107,22 +109,25 @@ const generateSampleGuests = (): Guest[] => {
       departureTerminal: 'N',
       departureTime: '2024-07-20T16:00',
       wheelchairRequired: false,
-      status: 'accommodated',
+      status: 'Accommodated',
       submittedBy: '3',
       submittedAt: '2024-01-11',
+      resubmitCount: 1,
+      resubmittedAt: '2024-01-13T08:00:00',
+      appealStatus: 'none',
       department: 'Guest Services',
       roomAssignment: 'A-102',
       statusHistory: [
         {
           id: 'sh4',
-          status: 'pending-review',
+          status: 'Awaiting Review',
           changedBy: 'Klaus Mueller',
           changedByRole: 'coordinator',
           changedAt: '2024-01-11T10:00:00',
         },
         {
           id: 'sh5',
-          status: 'needs-correction',
+          status: 'Needs Correction',
           changedBy: 'Fatima Ali',
           changedByRole: 'desk-in-charge',
           changedAt: '2024-01-12T11:00:00',
@@ -130,14 +135,14 @@ const generateSampleGuests = (): Guest[] => {
         },
         {
           id: 'sh6',
-          status: 'approved',
+          status: 'Approved',
           changedBy: 'Fatima Ali',
           changedByRole: 'desk-in-charge',
           changedAt: '2024-01-14T09:30:00',
         },
         {
           id: 'sh7',
-          status: 'accommodated',
+          status: 'Accommodated',
           changedBy: 'Ahmad Khan',
           changedByRole: 'super-admin',
           changedAt: '2024-01-15T12:00:00',
@@ -171,22 +176,26 @@ const generateSampleGuests = (): Guest[] => {
       departureTime: '2024-07-20T12:00',
       wheelchairRequired: true,
       specialNeeds: 'Requires wheelchair assistance',
-      status: 'accommodated',
+      status: 'Accommodated',
       submittedBy: '3',
       submittedAt: '2024-01-12',
+      resubmitCount: 0,
+      appealStatus: 'none',
+      reviewedBy: 'di-002',
+      reviewedAt: '2024-01-13T15:00:00',
       department: 'VIP Services',
       roomAssignment: 'VIP-201',
       statusHistory: [
         {
           id: 'sh8',
-          status: 'pending-review',
+          status: 'Awaiting Review',
           changedBy: 'Klaus Mueller',
           changedByRole: 'coordinator',
           changedAt: '2024-01-12T08:00:00',
         },
         {
           id: 'sh9',
-          status: 'approved',
+          status: 'Approved',
           changedBy: 'Fatima Ali',
           changedByRole: 'desk-in-charge',
           changedAt: '2024-01-13T15:00:00',
@@ -194,7 +203,7 @@ const generateSampleGuests = (): Guest[] => {
         },
         {
           id: 'sh10',
-          status: 'accommodated',
+          status: 'Accommodated',
           changedBy: 'Ahmad Khan',
           changedByRole: 'super-admin',
           changedAt: '2024-01-14T11:00:00',
@@ -228,9 +237,11 @@ const generateSampleGuests = (): Guest[] => {
       departureTerminal: 'T2',
       departureTime: '2024-07-21T15:00',
       wheelchairRequired: false,
-      status: 'draft',
+      status: 'Awaiting Review',
       submittedBy: '3',
       submittedAt: '2024-02-01',
+      resubmitCount: 0,
+      appealStatus: 'none',
     },
     // Needs correction guest for coordinator
     {
@@ -258,9 +269,11 @@ const generateSampleGuests = (): Guest[] => {
       departureTerminal: 'T3',
       departureTime: '2024-07-22T10:00',
       wheelchairRequired: false,
-      status: 'needs-correction',
+      status: 'Needs Correction',
       submittedBy: '3',
       submittedAt: '2024-02-05',
+      resubmitCount: 1,
+      appealStatus: 'none',
       remarks: [
         {
           id: 'r1',
@@ -300,9 +313,11 @@ const generateSampleGuests = (): Guest[] => {
       departureTerminal: 'N',
       departureTime: '2024-07-23T16:00',
       wheelchairRequired: false,
-      status: 'pending-review',
+      status: 'Awaiting Review',
       submittedBy: '3',
       submittedAt: '2024-02-10',
+      resubmitCount: 0,
+      appealStatus: 'none',
     },
   ];
 };
@@ -320,13 +335,15 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
     return `MEH-2024-${num}`;
   }, []);
 
-  const addGuest = useCallback((guestData: Omit<Guest, 'id' | 'referenceNumber' | 'submittedAt' | 'status'>) => {
+  const addGuest = useCallback((guestData: Omit<Guest, 'id' | 'referenceNumber' | 'submittedAt' | 'status' | 'resubmitCount' | 'appealStatus'>) => {
     const newGuest: Guest = {
       ...guestData,
       id: (nextId++).toString(),
       referenceNumber: generateReferenceNumber(),
       submittedAt: new Date().toISOString().split('T')[0],
-      status: 'draft',
+      status: 'Awaiting Review',
+      resubmitCount: 0,
+      appealStatus: 'none',
     };
     setGuests(prev => [newGuest, ...prev]);
     return newGuest;
@@ -376,29 +393,29 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
     return guests.filter(guest => guest.submittedBy === user.id);
   }, [guests, user]);
 
-  // For Coordinator: Waiting tab (draft + needs-correction)
+  // For Coordinator: Waiting tab (needs-correction only — no more draft)
   const getMyWaitingGuests = useCallback(() => {
     if (!user) return [];
-    return guests.filter(guest => 
-      guest.submittedBy === user.id && 
-      (guest.status === 'draft' || guest.status === 'needs-correction')
+    return guests.filter(guest =>
+      guest.submittedBy === user.id &&
+      guest.status === 'Needs Correction'
     );
   }, [guests, user]);
 
-  // For Coordinator: Submitted tab (pending-review + approved + rejected)
+  // For Coordinator: Submitted tab (Awaiting Review + Approved + Rejected)
   const getMySubmittedGuests = useCallback(() => {
     if (!user) return [];
-    return guests.filter(guest => 
-      guest.submittedBy === user.id && 
-      (guest.status === 'pending-review' || guest.status === 'approved' || guest.status === 'rejected')
+    return guests.filter(guest =>
+      guest.submittedBy === user.id &&
+      (guest.status === 'Awaiting Review' || guest.status === 'Approved' || guest.status === 'Rejected')
     );
   }, [guests, user]);
 
   // Count of needs-correction guests for notification badge
   const getNeedsCorrectionCount = useCallback(() => {
     if (!user) return 0;
-    return guests.filter(guest => 
-      guest.submittedBy === user.id && guest.status === 'needs-correction'
+    return guests.filter(guest =>
+      guest.submittedBy === user.id && guest.status === 'Needs Correction'
     ).length;
   }, [guests, user]);
 

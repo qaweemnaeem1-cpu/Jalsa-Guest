@@ -18,22 +18,22 @@ import {
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { toast } from 'sonner';
 import {
-  LayoutDashboard, ClipboardList, CheckSquare, ScrollText,
+  LayoutDashboard, ClipboardList, CheckSquare, MessageSquare,
   ArrowLeft, Search, ChevronDown, LogOut,
-  CheckCircle, AlertCircle, XCircle, Eye,
+  CheckCircle, AlertCircle, XCircle, Eye, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import { sanitizeComment } from '@/hooks/useAuditTrail';
 import type { Guest } from '@/types';
 
 const DESK_NAV = [
-  { icon: LayoutDashboard, label: 'Dashboard',        href: '/dashboard' },
-  { icon: ClipboardList,   label: 'Guests to Review', href: '/desk/review' },
-  { icon: CheckSquare,     label: 'Approved Guests',  href: '/desk/approved' },
-  { icon: ScrollText,      label: 'Audit Trail',      href: '/desk/audit-trail' },
+  { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
+  { icon: ClipboardList,   label: 'Guests to Review',   href: '/desk/review' },
+  { icon: CheckSquare,     label: 'Processed Guests',   href: '/desk/processed' },
+  { icon: MessageSquare,   label: 'Messages & Updates', href: '/desk/messages' },
 ];
 
-type StatusFilter = 'all' | 'pending-review' | 'needs-correction';
+const PAGE_SIZE = 15;
 
 export default function GuestsToReviewPage() {
   const navigate = useNavigate();
@@ -42,11 +42,13 @@ export default function GuestsToReviewPage() {
   const { addEntry, addComment } = useAuditTrail();
 
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [countryFilter, setCountryFilter] = useState('all');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [viewGuestId, setViewGuestId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
+  // Approve confirmation dialog
+  const [approveGuestId, setApproveGuestId] = useState<string | null>(null);
   // Needs Correction dialog
   const [correctionDialog, setCorrectionDialog] = useState<{ open: boolean; guest: Guest | null; reason: string }>({
     open: false, guest: null, reason: '',
@@ -60,29 +62,25 @@ export default function GuestsToReviewPage() {
 
   const assignedCountries = user.assignedCountries || [];
 
-  // Guests from DI's countries that need review
+  // Only "Awaiting Review" guests from DI's countries
   const reviewGuests = useMemo(() =>
     guests.filter(g =>
       assignedCountries.includes(g.country) &&
-      (g.status === 'pending-review' || g.status === 'needs-correction')
+      g.status === 'Awaiting Review'
     ),
     [guests, assignedCountries]
   );
 
-  const pendingCount = reviewGuests.filter(g => g.status === 'pending-review').length;
-  const correctionCount = reviewGuests.filter(g => g.status === 'needs-correction').length;
   const reviewCount = reviewGuests.length;
 
-  // Countries with review guests (for filter dropdown)
   const countriesWithGuests = useMemo(() => {
     const s = new Set(reviewGuests.map(g => g.country));
     return Array.from(s).sort();
   }, [reviewGuests]);
 
-  // Apply search + status + country filters
   const filtered = useMemo(() => {
+    setPage(1);
     return reviewGuests.filter(g => {
-      if (statusFilter !== 'all' && g.status !== statusFilter) return false;
       if (countryFilter !== 'all' && g.country !== countryFilter) return false;
       if (search) {
         const s = search.toLowerCase();
@@ -92,7 +90,11 @@ export default function GuestsToReviewPage() {
       }
       return true;
     }).sort((a, b) => (b.submittedAt ?? '').localeCompare(a.submittedAt ?? ''));
-  }, [reviewGuests, statusFilter, countryFilter, search]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewGuests, countryFilter, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const makeAuditEntry = (guest: Guest, oldStatus: string, newStatus: string) => {
     addEntry({
@@ -109,18 +111,22 @@ export default function GuestsToReviewPage() {
     });
   };
 
-  const handleApprove = (guest: Guest) => {
-    updateGuest(guest.id, { status: 'approved' });
-    makeAuditEntry(guest, guest.status, 'approved');
-    toast.success(`${guest.fullName} approved`);
+  const approveGuest = guests.find(g => g.id === approveGuestId) ?? null;
+
+  const handleApproveConfirm = () => {
+    if (!approveGuest) return;
+    updateGuest(approveGuest.id, { status: 'Approved' });
+    makeAuditEntry(approveGuest, approveGuest.status, 'Approved');
+    toast.success(`${approveGuest.fullName} approved`);
+    setApproveGuestId(null);
   };
 
   const handleNeedsCorrection = () => {
     const { guest, reason } = correctionDialog;
-    if (!guest) return;
+    if (!guest || reason.trim().length < 10) return;
     const safe = sanitizeComment(reason);
-    updateGuest(guest.id, { status: 'needs-correction' });
-    makeAuditEntry(guest, guest.status, 'needs-correction');
+    updateGuest(guest.id, { status: 'Needs Correction' });
+    makeAuditEntry(guest, guest.status, 'Needs Correction');
     if (safe) {
       addComment({
         guestId: guest.id,
@@ -136,10 +142,13 @@ export default function GuestsToReviewPage() {
 
   const handleReject = () => {
     const { guest, reason } = rejectDialog;
-    if (!guest) return;
+    if (!guest || reason.trim().length < 10) return;
     const safe = sanitizeComment(reason);
-    updateGuest(guest.id, { status: 'rejected' });
-    makeAuditEntry(guest, guest.status, 'rejected');
+    updateGuest(guest.id, {
+      status: 'Rejected',
+      rejectionReason: safe,
+    });
+    makeAuditEntry(guest, guest.status, 'Rejected');
     if (safe) {
       addComment({
         guestId: guest.id,
@@ -152,11 +161,6 @@ export default function GuestsToReviewPage() {
     toast.error(`Guest rejected: ${guest.fullName}`);
     setRejectDialog({ open: false, guest: null, reason: '' });
   };
-
-  const filterCls = (active: boolean) =>
-    active
-      ? 'bg-[#2D5A45] text-white px-3 py-1 rounded-full text-xs font-medium cursor-pointer transition-all'
-      : 'bg-white text-[#4A4A4A] border border-[#D4CFC7] px-3 py-1 rounded-full text-xs font-medium cursor-pointer hover:bg-[#F5F0E8] transition-all';
 
   return (
     <div className="min-h-screen bg-[#F5F0E8]">
@@ -218,7 +222,7 @@ export default function GuestsToReviewPage() {
                 <h1 className="text-xl font-semibold text-[#1A1A1A]">Guests to Review</h1>
                 {reviewCount > 0 && (
                   <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
-                    {reviewCount} need attention
+                    {reviewCount} awaiting review
                   </Badge>
                 )}
               </div>
@@ -252,41 +256,28 @@ export default function GuestsToReviewPage() {
           </header>
 
           <div className="p-6 max-w-7xl mx-auto space-y-5">
-            {/* Status chips + search + country filter */}
+            {/* Search + country filter */}
             <Card className="shadow-sm">
-              <CardContent className="p-4 flex flex-wrap items-center gap-4">
-                <div className="flex gap-1.5 flex-wrap">
-                  <button onClick={() => setStatusFilter('all')} className={filterCls(statusFilter === 'all')}>
-                    All ({reviewCount})
-                  </button>
-                  <button onClick={() => setStatusFilter('pending-review')} className={filterCls(statusFilter === 'pending-review')}>
-                    Awaiting Review ({pendingCount})
-                  </button>
-                  <button onClick={() => setStatusFilter('needs-correction')} className={filterCls(statusFilter === 'needs-correction')}>
-                    Needs Correction ({correctionCount})
-                  </button>
+              <CardContent className="p-4 flex flex-wrap items-center gap-3">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
+                  <Input
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Search guests..."
+                    className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-9"
+                  />
                 </div>
-                <div className="flex items-center gap-3 ml-auto flex-wrap">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
-                    <Input
-                      value={search}
-                      onChange={e => setSearch(e.target.value)}
-                      placeholder="Search guests..."
-                      className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-9 w-56"
-                    />
-                  </div>
-                  <select
-                    value={countryFilter}
-                    onChange={e => setCountryFilter(e.target.value)}
-                    className="px-3 py-1.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none h-9"
-                  >
-                    <option value="all">All Countries</option>
-                    {countriesWithGuests.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
+                <select
+                  value={countryFilter}
+                  onChange={e => setCountryFilter(e.target.value)}
+                  className="px-3 py-1.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none h-9"
+                >
+                  <option value="all">All Countries</option>
+                  {countriesWithGuests.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
               </CardContent>
             </Card>
 
@@ -295,7 +286,8 @@ export default function GuestsToReviewPage() {
               <CardHeader className="bg-[#F9F8F6]">
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <ClipboardList className="w-5 h-5 text-[#2D5A45]" />
-                  Guests Awaiting Your Review
+                  Awaiting Review
+                  <span className="text-sm font-normal text-[#4A4A4A] ml-1">({filtered.length})</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
@@ -306,84 +298,115 @@ export default function GuestsToReviewPage() {
                     <p className="text-sm text-[#4A4A4A]">
                       {reviewCount === 0 ? 'No guests need your review right now.' : 'No guests match the selected filters.'}
                     </p>
-                    <Button onClick={() => navigate('/desk/approved')} variant="outline" className="mt-2 border-[#D4CFC7]">
-                      View Approved Guests
+                    <Button onClick={() => navigate('/desk/processed')} variant="outline" className="mt-2 border-[#D4CFC7]">
+                      View Processed Guests
                     </Button>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-[#F9F8F6]">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Type</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Submitted</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Status</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#E8E3DB]">
-                        {filtered.map(g => (
-                          <tr key={g.id} className="hover:bg-[#FAFAFA]">
-                            <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">{g.referenceNumber}</td>
-                            <td className="px-4 py-3 font-medium text-[#1A1A1A]">{g.fullName}</td>
-                            <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.country}</td>
-                            <td className="px-4 py-3">
-                              <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200 capitalize">
-                                {g.guestType}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.submittedAt ?? '—'}</td>
-                            <td className="px-4 py-3">
-                              <Badge
-                                variant="outline"
-                                className={`text-xs ${g.status === 'pending-review'
-                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                  : 'bg-orange-50 text-orange-700 border-orange-200'
-                                }`}
-                              >
-                                {GUEST_STATUS_LABELS[g.status] ?? g.status}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-1.5">
-                                <button
-                                  onClick={() => setViewGuestId(g.id)}
-                                  title="View details"
-                                  className="p-1.5 rounded-md text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors"
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleApprove(g)}
-                                  title="Approve"
-                                  className="p-1.5 rounded-md text-green-600 hover:bg-green-50 transition-colors"
-                                >
-                                  <CheckCircle className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => setCorrectionDialog({ open: true, guest: g, reason: '' })}
-                                  title="Needs Correction"
-                                  className="p-1.5 rounded-md text-orange-500 hover:bg-orange-50 transition-colors"
-                                >
-                                  <AlertCircle className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => setRejectDialog({ open: true, guest: g, reason: '' })}
-                                  title="Reject"
-                                  className="p-1.5 rounded-md text-red-500 hover:bg-red-50 transition-colors"
-                                >
-                                  <XCircle className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </td>
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-[#F9F8F6]">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Type</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Submitted</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Status</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody className="divide-y divide-[#E8E3DB]">
+                          {paginated.map(g => (
+                            <tr key={g.id} className="hover:bg-[#FAFAFA]">
+                              <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">{g.referenceNumber}</td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium text-[#1A1A1A]">{g.fullName}</span>
+                                  {(g.resubmitCount ?? 0) > 0 && (
+                                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">
+                                      Re-submitted
+                                    </Badge>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.country}</td>
+                              <td className="px-4 py-3">
+                                <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200 capitalize">
+                                  {g.guestType}
+                                </Badge>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.submittedAt ?? '—'}</td>
+                              <td className="px-4 py-3">
+                                <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
+                                  {GUEST_STATUS_LABELS[g.status] ?? g.status}
+                                </Badge>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    onClick={() => setViewGuestId(g.id)}
+                                    title="View details"
+                                    className="p-1.5 rounded-md text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => setApproveGuestId(g.id)}
+                                    title="Approve"
+                                    className="p-1.5 rounded-md text-green-600 hover:bg-green-50 transition-colors"
+                                  >
+                                    <CheckCircle className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => setCorrectionDialog({ open: true, guest: g, reason: '' })}
+                                    title="Needs Correction"
+                                    className="p-1.5 rounded-md text-orange-500 hover:bg-orange-50 transition-colors"
+                                  >
+                                    <AlertCircle className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => setRejectDialog({ open: true, guest: g, reason: '' })}
+                                    title="Reject"
+                                    className="p-1.5 rounded-md text-red-500 hover:bg-red-50 transition-colors"
+                                  >
+                                    <XCircle className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between px-4 py-3 border-t border-[#E8E3DB] bg-[#F9F8F6]">
+                        <span className="text-xs text-[#4A4A4A]">
+                          Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                            disabled={page === 1}
+                            className="p-1.5 rounded-md text-[#4A4A4A] hover:bg-white disabled:opacity-40 transition-colors"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                          <span className="text-xs text-[#4A4A4A] px-2">Page {page} of {totalPages}</span>
+                          <button
+                            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                            disabled={page === totalPages}
+                            className="p-1.5 rounded-md text-[#4A4A4A] hover:bg-white disabled:opacity-40 transition-colors"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -397,6 +420,30 @@ export default function GuestsToReviewPage() {
         open={!!viewGuestId}
         onClose={() => setViewGuestId(null)}
       />
+
+      {/* Approve Confirmation Dialog */}
+      <Dialog open={!!approveGuestId} onOpenChange={open => { if (!open) setApproveGuestId(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              Approve Guest
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-[#4A4A4A] py-2">
+            Are you sure you want to approve{' '}
+            <span className="font-semibold">{approveGuest?.fullName}</span>?
+            This will change their status to "Approved".
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApproveGuestId(null)}>Cancel</Button>
+            <Button onClick={handleApproveConfirm} className="bg-green-600 hover:bg-green-700 text-white">
+              <CheckCircle className="w-4 h-4 mr-1.5" />
+              Confirm Approve
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Needs Correction Dialog */}
       <Dialog
@@ -419,17 +466,24 @@ export default function GuestsToReviewPage() {
             <Textarea
               value={correctionDialog.reason}
               onChange={e => setCorrectionDialog(d => ({ ...d, reason: e.target.value }))}
-              placeholder="Describe what needs to be corrected (optional)..."
+              placeholder="Describe what needs to be corrected (required, min. 10 chars)..."
               rows={4}
               maxLength={1000}
               className="border-[#D4CFC7] focus:border-[#2D5A45] resize-none text-sm"
             />
+            {correctionDialog.reason.length > 0 && correctionDialog.reason.trim().length < 10 && (
+              <p className="text-xs text-red-500">Please provide at least 10 characters.</p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCorrectionDialog({ open: false, guest: null, reason: '' })}>
               Cancel
             </Button>
-            <Button onClick={handleNeedsCorrection} className="bg-orange-500 hover:bg-orange-600 text-white">
+            <Button
+              onClick={handleNeedsCorrection}
+              disabled={correctionDialog.reason.trim().length < 10}
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+            >
               <AlertCircle className="w-4 h-4 mr-1.5" />
               Send for Correction
             </Button>
@@ -458,17 +512,24 @@ export default function GuestsToReviewPage() {
             <Textarea
               value={rejectDialog.reason}
               onChange={e => setRejectDialog(d => ({ ...d, reason: e.target.value }))}
-              placeholder="Reason for rejection (optional)..."
+              placeholder="Reason for rejection (required, min. 10 chars)..."
               rows={4}
               maxLength={1000}
               className="border-[#D4CFC7] focus:border-[#2D5A45] resize-none text-sm"
             />
+            {rejectDialog.reason.length > 0 && rejectDialog.reason.trim().length < 10 && (
+              <p className="text-xs text-red-500">Please provide at least 10 characters.</p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRejectDialog({ open: false, guest: null, reason: '' })}>
               Cancel
             </Button>
-            <Button onClick={handleReject} className="bg-red-600 hover:bg-red-700 text-white">
+            <Button
+              onClick={handleReject}
+              disabled={rejectDialog.reason.trim().length < 10}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
               <XCircle className="w-4 h-4 mr-1.5" />
               Confirm Reject
             </Button>

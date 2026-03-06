@@ -34,23 +34,22 @@ export default function ApprovedGuestsPage() {
 
   const assignedCountries = user.assignedCountries || [];
 
-  // Guests from DI's countries that are approved/accommodated/checked-in
+  // Guests from DI's countries that are approved/accommodated
   const approvedGuests = useMemo(() =>
     guests.filter(g =>
       assignedCountries.includes(g.country) &&
-      (g.status === 'approved' || g.status === 'accommodated' || g.status === 'checked-in')
+      (g.status === 'Approved' || g.status === 'Accommodated')
     ),
     [guests, assignedCountries]
   );
 
-  const approvedCount = approvedGuests.filter(g => g.status === 'approved').length;
-  const accommodatedCount = approvedGuests.filter(g => g.status === 'accommodated').length;
-  const checkedInCount = approvedGuests.filter(g => g.status === 'checked-in').length;
+  const approvedCount = approvedGuests.filter(g => g.status === 'Approved').length;
+  const accommodatedCount = approvedGuests.filter(g => g.status === 'Accommodated').length;
 
   const reviewCount = useMemo(() =>
     guests.filter(g =>
       assignedCountries.includes(g.country) &&
-      (g.status === 'pending-review' || g.status === 'needs-correction')
+      (g.status === 'Awaiting Review' || g.status === 'Needs Correction')
     ).length,
     [guests, assignedCountries]
   );
@@ -61,7 +60,7 @@ export default function ApprovedGuestsPage() {
   }, [approvedGuests]);
 
   const getApprovedDate = (guest: Guest): string => {
-    const event = guest.statusHistory?.find(sh => sh.status === 'approved');
+    const event = guest.statusHistory?.find(sh => sh.status === 'Approved');
     if (!event) return '—';
     return new Date(event.changedAt).toLocaleDateString('en-GB', {
       day: 'numeric', month: 'short', year: 'numeric',
@@ -81,16 +80,15 @@ export default function ApprovedGuestsPage() {
         return true;
       })
       .sort((a, b) => {
-        const dateA = a.statusHistory?.find(sh => sh.status === 'approved')?.changedAt ?? '';
-        const dateB = b.statusHistory?.find(sh => sh.status === 'approved')?.changedAt ?? '';
+        const dateA = a.statusHistory?.find(sh => sh.status === 'Approved')?.changedAt ?? '';
+        const dateB = b.statusHistory?.find(sh => sh.status === 'Approved')?.changedAt ?? '';
         return dateB.localeCompare(dateA);
       });
   }, [approvedGuests, countryFilter, search]);
 
   const statusBadge = (status: string) => {
-    if (status === 'approved') return 'bg-green-50 text-green-700 border-green-200';
-    if (status === 'accommodated') return 'bg-blue-50 text-blue-700 border-blue-200';
-    if (status === 'checked-in') return 'bg-purple-50 text-purple-700 border-purple-200';
+    if (status === 'Approved')     return 'bg-green-50 text-green-700 border-green-200';
+    if (status === 'Accommodated') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
     return 'bg-gray-50 text-gray-700 border-gray-200';
   };
 
@@ -199,7 +197,7 @@ export default function ApprovedGuestsPage() {
                   <CheckSquare className="w-5 h-5 text-[#2D5A45]" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-[#1A1A1A]">{approvedCount + accommodatedCount + checkedInCount}</p>
+                  <p className="text-2xl font-bold text-[#1A1A1A]">{approvedCount + accommodatedCount}</p>
                   <p className="text-xs text-[#4A4A4A]">Total Processed</p>
                 </div>
               </div>

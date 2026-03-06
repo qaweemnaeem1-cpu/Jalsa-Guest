@@ -47,12 +47,11 @@ function getInitials(name: string): string {
 }
 
 function statusBadgeCls(status: string): string {
-  if (status === 'pending-review') return 'bg-amber-50 text-amber-700 border-amber-200';
-  if (status === 'needs-correction') return 'bg-red-50 text-red-700 border-red-200';
-  if (status === 'approved') return 'bg-green-50 text-green-700 border-green-200';
-  if (status === 'rejected') return 'bg-gray-50 text-gray-500 border-gray-200';
-  if (status === 'accommodated') return 'bg-blue-50 text-blue-700 border-blue-200';
-  if (status === 'checked-in') return 'bg-purple-50 text-purple-700 border-purple-200';
+  if (status === 'Awaiting Review')  return 'bg-amber-50 text-amber-700 border-amber-200';
+  if (status === 'Needs Correction') return 'bg-orange-50 text-orange-700 border-orange-200';
+  if (status === 'Approved')         return 'bg-green-50 text-green-700 border-green-200';
+  if (status === 'Accommodated')     return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (status === 'Rejected')         return 'bg-red-50 text-red-700 border-red-200';
   return 'bg-gray-50 text-gray-700 border-gray-200';
 }
 
@@ -119,8 +118,9 @@ function DialogEntryCard({ entry }: { entry: AuditEntry }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type QuickFilter = 'all' | 'unread' | 'pending-review' | 'needs-correction';
-type DialogFilter = 'all' | 'comments' | 'status_changes' | 'edits';
+type QuickFilter = 'all' | 'unread' | 'Awaiting Review' | 'Needs Correction';
+type DialogFilter = 'all' | 'comments' | 'status_changes' | 'edits' | 'submissions';
+type DateRangeFilter = 'all' | 'today' | 'week' | 'month';
 
 export default function AdminAuditTrailPage() {
   const navigate = useNavigate();
@@ -133,12 +133,17 @@ export default function AdminAuditTrailPage() {
   const [countryFilter, setCountryFilter] = useState('all');
   const [diFilter, setDiFilter] = useState('all');
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
+  const [dateFilter, setDateFilter] = useState<DateRangeFilter>('all');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   // Dialog state
   const [openGuestId, setOpenGuestId] = useState<string | null>(null);
   const [dialogFilter, setDialogFilter] = useState<DialogFilter>('all');
   const [commentText, setCommentText] = useState('');
+
+  // Standalone comment state (outside dialog)
+  const [standaloneGuestId, setStandaloneGuestId] = useState('');
+  const [standaloneComment, setStandaloneComment] = useState('');
 
   if (!user) return null;
 
@@ -171,7 +176,7 @@ export default function AdminAuditTrailPage() {
     [entries]
   );
   const needsReviewTotal = useMemo(() =>
-    guests.filter(g => g.status === 'pending-review').length,
+    guests.filter(g => g.status === 'Awaiting Review').length,
     [guests]
   );
 
@@ -217,6 +222,21 @@ export default function AdminAuditTrailPage() {
     return filtered;
   }, [guests, countryFilter, diFilter, diUsers]);
 
+  // Date range helper
+  const dateRangeCutoff = useMemo(() => {
+    const now = new Date();
+    if (dateFilter === 'today') {
+      const start = new Date(now); start.setHours(0, 0, 0, 0); return start;
+    }
+    if (dateFilter === 'week') {
+      const start = new Date(now); start.setDate(now.getDate() - 7); return start;
+    }
+    if (dateFilter === 'month') {
+      const start = new Date(now); start.setMonth(now.getMonth() - 1); return start;
+    }
+    return null;
+  }, [dateFilter]);
+
   // Guest list rows
   const guestRows = useMemo(() => {
     return filteredGuests
@@ -234,8 +254,11 @@ export default function AdminAuditTrailPage() {
       })
       .filter(row => {
         if (quickFilter === 'unread' && row.unreadCount === 0) return false;
-        if (quickFilter === 'pending-review' && row.guest.status !== 'pending-review') return false;
-        if (quickFilter === 'needs-correction' && row.guest.status !== 'needs-correction') return false;
+        if (quickFilter === 'Awaiting Review' && row.guest.status !== 'Awaiting Review') return false;
+        if (quickFilter === 'Needs Correction' && row.guest.status !== 'Needs Correction') return false;
+        if (dateRangeCutoff && row.lastActivityAt) {
+          if (new Date(row.lastActivityAt) < dateRangeCutoff) return false;
+        }
         if (search) {
           const s = search.toLowerCase();
           if (
@@ -254,7 +277,7 @@ export default function AdminAuditTrailPage() {
         if (!b.lastActivityAt) return -1;
         return new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime();
       });
-  }, [filteredGuests, unreadByGuest, lastEntryByGuest, quickFilter, search]);
+  }, [filteredGuests, unreadByGuest, lastEntryByGuest, quickFilter, search, dateRangeCutoff]);
 
   // Mark as read when dialog opens
   useEffect(() => {
@@ -277,6 +300,7 @@ export default function AdminAuditTrailPage() {
         if (dialogFilter === 'comments') return e.type === 'comment';
         if (dialogFilter === 'status_changes') return e.type === 'status_change';
         if (dialogFilter === 'edits') return e.type === 'field_edit';
+        if (dialogFilter === 'submissions') return e.type === 'submission';
         return true;
       });
   }, [entries, openGuestId, dialogFilter]);
@@ -301,7 +325,24 @@ export default function AdminAuditTrailPage() {
       ? 'bg-[#2D5A45] text-white px-3 py-1 rounded-full text-xs font-medium cursor-pointer transition-all'
       : 'bg-white text-[#4A4A4A] border border-[#D4CFC7] px-3 py-1 rounded-full text-xs font-medium cursor-pointer hover:bg-[#F5F0E8] transition-all';
 
-  const hasActiveFilters = search || countryFilter !== 'all' || diFilter !== 'all' || quickFilter !== 'all';
+  const hasActiveFilters = search || countryFilter !== 'all' || diFilter !== 'all' || quickFilter !== 'all' || dateFilter !== 'all';
+
+  const handleStandaloneComment = () => {
+    if (!standaloneGuestId || !standaloneComment.trim()) return;
+    const g = guests.find(x => x.id === standaloneGuestId);
+    if (!g) return;
+    const safe = sanitizeComment(standaloneComment);
+    if (!safe) return;
+    addComment({
+      guestId: g.id,
+      guestName: g.fullName,
+      guestReference: g.referenceNumber,
+      comment: safe,
+      createdBy: { id: user.id, name: user.name, role: 'super-admin' },
+    });
+    setStandaloneComment('');
+    toast.success('Comment added');
+  };
 
   return (
     <div className="min-h-screen bg-[#F5F0E8]">
@@ -450,18 +491,69 @@ export default function AdminAuditTrailPage() {
                 </select>
                 {hasActiveFilters && (
                   <button
-                    onClick={() => { setSearch(''); setCountryFilter('all'); setDiFilter('all'); setQuickFilter('all'); }}
+                    onClick={() => { setSearch(''); setCountryFilter('all'); setDiFilter('all'); setQuickFilter('all'); setDateFilter('all'); }}
                     className="text-xs text-red-600 hover:text-red-800 px-2 h-9"
                   >
                     Clear filters
                   </button>
                 )}
               </div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1.5 items-center">
+                <span className="text-[10px] text-[#4A4A4A]/50 uppercase tracking-wider mr-1">Status:</span>
                 <button onClick={() => setQuickFilter('all')} className={chipCls(quickFilter === 'all')}>All</button>
                 <button onClick={() => setQuickFilter('unread')} className={chipCls(quickFilter === 'unread')}>With Unread</button>
-                <button onClick={() => setQuickFilter('pending-review')} className={chipCls(quickFilter === 'pending-review')}>Pending Review</button>
-                <button onClick={() => setQuickFilter('needs-correction')} className={chipCls(quickFilter === 'needs-correction')}>Needs Correction</button>
+                <button onClick={() => setQuickFilter('Awaiting Review')} className={chipCls(quickFilter === 'Awaiting Review')}>Awaiting Review</button>
+                <button onClick={() => setQuickFilter('Needs Correction')} className={chipCls(quickFilter === 'Needs Correction')}>Needs Correction</button>
+              </div>
+              <div className="flex flex-wrap gap-1.5 items-center">
+                <span className="text-[10px] text-[#4A4A4A]/50 uppercase tracking-wider mr-1">Activity:</span>
+                <button onClick={() => setDateFilter('all')} className={chipCls(dateFilter === 'all')}>Any Time</button>
+                <button onClick={() => setDateFilter('today')} className={chipCls(dateFilter === 'today')}>Today</button>
+                <button onClick={() => setDateFilter('week')} className={chipCls(dateFilter === 'week')}>Last 7 Days</button>
+                <button onClick={() => setDateFilter('month')} className={chipCls(dateFilter === 'month')}>Last 30 Days</button>
+              </div>
+            </div>
+
+            {/* Standalone Comment Input */}
+            <div className="bg-white rounded-xl border border-[#E8E3DB] shadow-sm p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <MessageSquare className="w-4 h-4 text-[#2D5A45]" />
+                <span className="text-sm font-semibold text-[#1A1A1A]">Post a Comment</span>
+                <span className="text-xs text-[#4A4A4A]/50">— add a comment to any guest without opening their timeline</span>
+              </div>
+              <div className="flex gap-3 items-end">
+                <select
+                  value={standaloneGuestId}
+                  onChange={e => setStandaloneGuestId(e.target.value)}
+                  className="w-64 px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
+                >
+                  <option value="">Select a guest...</option>
+                  {guests
+                    .slice()
+                    .sort((a, b) => a.fullName.localeCompare(b.fullName))
+                    .map(g => (
+                      <option key={g.id} value={g.id}>
+                        {g.fullName} ({g.referenceNumber})
+                      </option>
+                    ))}
+                </select>
+                <div className="flex-1 flex gap-2 items-end">
+                  <Textarea
+                    value={standaloneComment}
+                    onChange={e => setStandaloneComment(e.target.value)}
+                    placeholder="Write your comment..."
+                    rows={2}
+                    maxLength={1000}
+                    className="flex-1 border-[#D4CFC7] focus:border-[#2D5A45] resize-none text-sm"
+                  />
+                  <Button
+                    onClick={handleStandaloneComment}
+                    disabled={!standaloneGuestId || !standaloneComment.trim()}
+                    className="bg-[#2D5A45] hover:bg-[#234839] text-white px-3 self-end"
+                  >
+                    <Send className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -478,7 +570,7 @@ export default function AdminAuditTrailPage() {
                   <p className="text-sm font-medium text-[#1A1A1A]">No guests match the selected filters.</p>
                   {hasActiveFilters && (
                     <button
-                      onClick={() => { setSearch(''); setCountryFilter('all'); setDiFilter('all'); setQuickFilter('all'); }}
+                      onClick={() => { setSearch(''); setCountryFilter('all'); setDiFilter('all'); setQuickFilter('all'); setDateFilter('all'); }}
                       className="text-xs text-[#2D5A45] hover:underline"
                     >
                       Clear filters
@@ -560,14 +652,14 @@ export default function AdminAuditTrailPage() {
           </DialogHeader>
 
           {/* Filter chips */}
-          <div className="px-6 py-3 border-b border-[#E8E3DB] flex gap-1.5 shrink-0 bg-[#F9F8F6]">
-            {(['all', 'comments', 'status_changes', 'edits'] as DialogFilter[]).map(f => (
+          <div className="px-6 py-3 border-b border-[#E8E3DB] flex gap-1.5 shrink-0 bg-[#F9F8F6] flex-wrap">
+            {(['all', 'comments', 'status_changes', 'edits', 'submissions'] as DialogFilter[]).map(f => (
               <button
                 key={f}
                 onClick={() => setDialogFilter(f)}
                 className={chipCls(dialogFilter === f)}
               >
-                {f === 'all' ? 'All' : f === 'comments' ? 'Comments' : f === 'status_changes' ? 'Status Changes' : 'Edits'}
+                {f === 'all' ? 'All' : f === 'comments' ? 'Comments' : f === 'status_changes' ? 'Status Changes' : f === 'edits' ? 'Edits' : 'Submissions'}
               </button>
             ))}
             <span className="ml-auto text-xs text-[#4A4A4A]/50 self-center">{dialogEntries.length} entries</span>

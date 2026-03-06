@@ -27,14 +27,12 @@ export interface GuestRemark {
   createdAt: string;
 }
 
-export type GuestStatus = 
-  | 'draft'            // Coordinator saved but not yet submitted
-  | 'pending-review'   // Submitted, waiting for Desk Incharge approval
-  | 'needs-correction' // Desk Incharge flagged it, sent back to Coordinator
-  | 'approved'         // Desk Incharge approved
-  | 'rejected'         // Desk Incharge rejected permanently
-  | 'accommodated'
-  | 'checked-in';
+export type GuestStatus =
+  | 'Awaiting Review'   // Submitted, waiting for Desk Incharge approval
+  | 'Needs Correction'  // Desk Incharge flagged it, sent back to Coordinator
+  | 'Approved'          // Desk Incharge approved
+  | 'Rejected'          // Desk Incharge rejected permanently
+  | 'Accommodated';     // Guest has been assigned accommodation
 
 export type VisaStatus = 'not-required' | 'pending' | 'approved' | 'rejected' | 'expired';
 export type GuestType = 'individual' | 'family';
@@ -87,10 +85,29 @@ export interface Guest {
   status: GuestStatus;
   submittedBy: string;
   submittedAt: string;
+  resubmittedAt?: string;
+  resubmitCount: number;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  rejectionReason?: string;
+  appealStatus?: 'none' | 'pending' | 'overturned' | 'denied';
+  appealReason?: string;
+  appealedAt?: string;
   department?: string;
   roomAssignment?: string;
   remarks?: GuestRemark[];
   statusHistory?: GuestStatusEvent[];
+}
+
+export function canTransitionStatus(from: GuestStatus, to: GuestStatus): boolean {
+  const transitions: Record<GuestStatus, GuestStatus[]> = {
+    'Awaiting Review': ['Approved', 'Needs Correction', 'Rejected'],
+    'Needs Correction': ['Awaiting Review'],
+    'Rejected': ['Awaiting Review'],
+    'Approved': ['Accommodated'],
+    'Accommodated': [],
+  };
+  return transitions[from]?.includes(to) ?? false;
 }
 
 export interface Designation {

@@ -123,14 +123,34 @@ export const RELATIONSHIP_OPTIONS = [
 ] as const;
 
 export const GUEST_STATUS_LABELS: Record<string, string> = {
-  'draft': 'Draft',
-  'pending-review': 'Awaiting Review',
-  'needs-correction': 'Needs Correction',
-  'approved': 'Approved',
-  'rejected': 'Rejected',
-  'accommodated': 'Accommodated',
-  'checked-in': 'Checked In',
+  'Awaiting Review': 'Awaiting Review',
+  'Needs Correction': 'Needs Correction',
+  'Approved': 'Approved',
+  'Rejected': 'Rejected',
+  'Accommodated': 'Accommodated',
 };
+
+export function getStatusBadgeClass(status: string): string {
+  switch (status) {
+    case 'Awaiting Review': return 'bg-amber-50 text-amber-700 border-amber-200';
+    case 'Needs Correction': return 'bg-orange-50 text-orange-700 border-orange-200';
+    case 'Approved':         return 'bg-green-50 text-green-700 border-green-200';
+    case 'Accommodated':     return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    case 'Rejected':         return 'bg-red-50 text-red-700 border-red-200';
+    default:                 return 'bg-gray-50 text-gray-700 border-gray-200';
+  }
+}
+
+export function getStatusDotColor(status: string): string {
+  switch (status) {
+    case 'Awaiting Review': return 'bg-amber-500';
+    case 'Needs Correction': return 'bg-orange-500';
+    case 'Approved':         return 'bg-green-500';
+    case 'Accommodated':     return 'bg-emerald-600';
+    case 'Rejected':         return 'bg-red-600';
+    default:                 return 'bg-gray-400';
+  }
+}
 
 export const ROLE_LABELS: Record<string, string> = {
   'super-admin': 'Super Admin',

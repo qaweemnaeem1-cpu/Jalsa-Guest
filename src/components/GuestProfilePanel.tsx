@@ -41,27 +41,23 @@ const formatTimeAgo = (dateString: string): string => {
 
 const getStatusBadgeStyle = (status: string): string => {
   switch (status) {
-    case 'draft': return 'bg-gray-100 text-gray-600 border-gray-200';
-    case 'pending-review': return 'bg-amber-100 text-amber-700 border-amber-200';
-    case 'needs-correction': return 'bg-red-100 text-red-700 border-red-200';
-    case 'approved': return 'bg-green-100 text-green-700 border-green-200';
-    case 'rejected': return 'bg-red-100 text-red-700 border-red-200';
-    case 'accommodated': return 'bg-purple-100 text-purple-700 border-purple-200';
-    case 'checked-in': return 'bg-green-100 text-green-700 border-green-200';
-    default: return 'bg-gray-100 text-gray-600 border-gray-200';
+    case 'Awaiting Review':  return 'bg-amber-100 text-amber-700 border-amber-200';
+    case 'Needs Correction': return 'bg-orange-100 text-orange-700 border-orange-200';
+    case 'Approved':         return 'bg-green-100 text-green-700 border-green-200';
+    case 'Accommodated':     return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+    case 'Rejected':         return 'bg-red-100 text-red-700 border-red-200';
+    default:                 return 'bg-gray-100 text-gray-600 border-gray-200';
   }
 };
 
 const getStatusDotColor = (status: GuestStatus): string => {
   switch (status) {
-    case 'draft': return 'bg-gray-400';
-    case 'pending-review': return 'bg-amber-500';
-    case 'needs-correction': return 'bg-red-500';
-    case 'approved': return 'bg-green-500';
-    case 'rejected': return 'bg-red-600';
-    case 'accommodated': return 'bg-purple-500';
-    case 'checked-in': return 'bg-emerald-600';
-    default: return 'bg-gray-400';
+    case 'Awaiting Review':  return 'bg-amber-500';
+    case 'Needs Correction': return 'bg-orange-500';
+    case 'Approved':         return 'bg-green-500';
+    case 'Accommodated':     return 'bg-emerald-600';
+    case 'Rejected':         return 'bg-red-600';
+    default:                 return 'bg-gray-400';
   }
 };
 

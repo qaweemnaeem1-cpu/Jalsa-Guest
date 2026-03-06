@@ -47,9 +47,10 @@ export interface GuestEditModalProps {
   guest: Guest | null;
   open: boolean;
   onClose: () => void;
+  onSaveAndResubmit?: () => void;
 }
 
-export function GuestEditModal({ guest, open, onClose }: GuestEditModalProps) {
+export function GuestEditModal({ guest, open, onClose, onSaveAndResubmit }: GuestEditModalProps) {
   const { user } = useAuth();
   const { updateGuest } = useGuests();
 
@@ -57,6 +58,8 @@ export function GuestEditModal({ guest, open, onClose }: GuestEditModalProps) {
     register,
     handleSubmit,
     reset,
+    trigger,
+    getValues,
     formState: { errors },
   } = useForm<EditFormData>({
     resolver: zodResolver(editSchema),
@@ -93,40 +96,65 @@ export function GuestEditModal({ guest, open, onClose }: GuestEditModalProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guest?.id, open]);
 
+  const isCoordinatorNeedsCorrection =
+    user?.role === 'coordinator' &&
+    guest?.status === 'Needs Correction' &&
+    guest?.submittedBy === user?.id;
+
+  const canEdit =
+    user?.role === 'super-admin' ||
+    user?.role === 'desk-in-charge' ||
+    isCoordinatorNeedsCorrection;
+
+  const buildUpdates = (data: EditFormData): Partial<Guest> => ({
+    fullName: data.fullName,
+    passportNumber: data.passportNumber,
+    country: data.country,
+    gender: data.gender,
+    age: data.age,
+    dateOfBirth: data.dateOfBirth || undefined,
+    contactNumber: data.contactNumber,
+    email: data.email || undefined,
+    designation: data.designation || undefined,
+    guestType: data.guestType,
+    wheelchairRequired: data.wheelchairRequired,
+    specialNeeds: data.specialNeeds || undefined,
+    visaStatus: data.visaStatus,
+    arrivalFlightNumber: data.arrivalFlightNumber || undefined,
+    arrivalAirport: data.arrivalAirport || undefined,
+    arrivalTerminal: data.arrivalTerminal || undefined,
+    arrivalTime: data.arrivalTime || undefined,
+    departureFlightNumber: data.departureFlightNumber || undefined,
+    departureAirport: data.departureAirport || undefined,
+    departureTerminal: data.departureTerminal || undefined,
+    departureTime: data.departureTime || undefined,
+  });
+
   const onSave = (data: EditFormData) => {
     if (!guest || !user) return;
-    if (user.role !== 'super-admin' && user.role !== 'desk-in-charge') {
+    if (!canEdit) {
       toast.error('You do not have permission to edit guests');
       return;
     }
-    updateGuest(guest.id, {
-      fullName: data.fullName,
-      passportNumber: data.passportNumber,
-      country: data.country,
-      gender: data.gender,
-      age: data.age,
-      dateOfBirth: data.dateOfBirth || undefined,
-      contactNumber: data.contactNumber,
-      email: data.email || undefined,
-      designation: data.designation || undefined,
-      guestType: data.guestType,
-      wheelchairRequired: data.wheelchairRequired,
-      specialNeeds: data.specialNeeds || undefined,
-      visaStatus: data.visaStatus,
-      arrivalFlightNumber: data.arrivalFlightNumber || undefined,
-      arrivalAirport: data.arrivalAirport || undefined,
-      arrivalTerminal: data.arrivalTerminal || undefined,
-      arrivalTime: data.arrivalTime || undefined,
-      departureFlightNumber: data.departureFlightNumber || undefined,
-      departureAirport: data.departureAirport || undefined,
-      departureTerminal: data.departureTerminal || undefined,
-      departureTime: data.departureTime || undefined,
-    });
+    updateGuest(guest.id, buildUpdates(data));
     toast.success('Guest updated successfully');
     onClose();
   };
 
-  if (!user || !guest) return null;
+  const onSaveAndResubmitHandler = (data: EditFormData) => {
+    if (!guest || !user || !isCoordinatorNeedsCorrection) return;
+    updateGuest(guest.id, {
+      ...buildUpdates(data),
+      status: 'Awaiting Review',
+      resubmitCount: (guest.resubmitCount ?? 0) + 1,
+      resubmittedAt: new Date().toISOString(),
+    });
+    toast.success('Guest updated and re-submitted for review');
+    onSaveAndResubmit?.();
+    onClose();
+  };
+
+  if (!user || !guest || !canEdit) return null;
 
   const selectCls =
     'w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none focus:ring-1 focus:ring-[#2D5A45]';
@@ -337,6 +365,14 @@ export function GuestEditModal({ guest, open, onClose }: GuestEditModalProps) {
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
+          {isCoordinatorNeedsCorrection && (
+            <Button
+              onClick={async () => { const valid = await trigger(); if (valid) onSaveAndResubmitHandler(getValues()); }}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              Save &amp; Re-Submit
+            </Button>
+          )}
           <Button
             onClick={handleSubmit(onSave)}
             className="bg-[#2D5A45] hover:bg-[#234839] text-white"

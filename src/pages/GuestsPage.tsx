@@ -98,22 +98,12 @@ const formatTimeAgo = (dateString: string) => {
 // Get status badge styling
 const getStatusBadgeStyle = (status: string) => {
   switch (status) {
-    case 'draft':
-      return 'bg-gray-100 text-gray-600 border-gray-200';
-    case 'pending-review':
-      return 'bg-amber-100 text-amber-700 border-amber-200';
-    case 'needs-correction':
-      return 'bg-red-100 text-red-700 border-red-200';
-    case 'approved':
-      return 'bg-green-100 text-green-700 border-green-200';
-    case 'rejected':
-      return 'bg-red-100 text-red-700 border-red-200';
-    case 'accommodated':
-      return 'bg-purple-100 text-purple-700 border-purple-200';
-    case 'checked-in':
-      return 'bg-green-100 text-green-700 border-green-200';
-    default:
-      return 'bg-gray-100 text-gray-600 border-gray-200';
+    case 'Awaiting Review':  return 'bg-amber-100 text-amber-700 border-amber-200';
+    case 'Needs Correction': return 'bg-orange-100 text-orange-700 border-orange-200';
+    case 'Approved':         return 'bg-green-100 text-green-700 border-green-200';
+    case 'Accommodated':     return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+    case 'Rejected':         return 'bg-red-100 text-red-700 border-red-200';
+    default:                 return 'bg-gray-100 text-gray-600 border-gray-200';
   }
 };
 
@@ -193,13 +183,13 @@ function CoordinatorRemarksPanel({ guest, onAddReply, onResubmit }: CoordinatorR
 
 // Inline Remarks Panel for Desk Incharge
 interface DeskInchargeRemarksPanelProps {
-  onConfirm: (remark: string, action: 'needs-correction' | 'rejected') => void;
+  onConfirm: (remark: string, action: 'Needs Correction' | 'Rejected') => void;
 }
 
 function DeskInchargeRemarksPanel({ onConfirm }: DeskInchargeRemarksPanelProps) {
   const [remarkText, setRemarkText] = useState('');
 
-  const handleConfirm = (action: 'needs-correction' | 'rejected') => {
+  const handleConfirm = (action: 'Needs Correction' | 'Rejected') => {
     if (!remarkText.trim()) {
       toast.error('Please add a remark before confirming');
       return;
@@ -224,7 +214,7 @@ function DeskInchargeRemarksPanel({ onConfirm }: DeskInchargeRemarksPanelProps) 
 
           <div className="flex gap-2 justify-end">
             <Button
-              onClick={() => handleConfirm('needs-correction')}
+              onClick={() => handleConfirm('Needs Correction')}
               disabled={!remarkText.trim()}
               className="bg-amber-600 hover:bg-amber-700 text-white h-10 px-4"
             >
@@ -232,7 +222,7 @@ function DeskInchargeRemarksPanel({ onConfirm }: DeskInchargeRemarksPanelProps) 
               Confirm Needs Correction
             </Button>
             <Button
-              onClick={() => handleConfirm('rejected')}
+              onClick={() => handleConfirm('Rejected')}
               disabled={!remarkText.trim()}
               className="bg-red-600 hover:bg-red-700 text-white h-10 px-4"
             >
@@ -285,8 +275,8 @@ export default function GuestsPage() {
       result = activeTab === 'waiting' ? getMyWaitingGuests() : getMySubmittedGuests();
     } else if (user.role === 'desk-in-charge') {
       result = activeTab === 'awaiting'
-        ? guests.filter(g => g.status === 'pending-review')
-        : guests.filter(g => g.status === 'approved' || g.status === 'rejected' || g.status === 'needs-correction');
+        ? guests.filter(g => g.status === 'Awaiting Review')
+        : guests.filter(g => g.status === 'Approved' || g.status === 'Rejected' || g.status === 'Needs Correction');
     } else {
       result = guests;
     }
@@ -308,31 +298,31 @@ export default function GuestsPage() {
 
   // Handle submit for review (coordinator)
   const handleSubmitForReview = (guestId: string) => {
-    updateGuest(guestId, { status: 'pending-review' });
+    updateGuest(guestId, { status: 'Awaiting Review' });
     toast.success('Guest submitted for review');
   };
 
   // Handle approve (desk incharge)
   const handleApprove = (guestId: string) => {
-    updateGuest(guestId, { status: 'approved' });
+    updateGuest(guestId, { status: 'Approved' });
     toast.success('Guest approved');
   };
 
   // Handle needs correction or reject (desk incharge)
-  const handleDeskAction = (guestId: string, remark: string, action: 'needs-correction' | 'rejected') => {
+  const handleDeskAction = (guestId: string, remark: string, action: 'Needs Correction' | 'Rejected') => {
     if (!user) return;
-    
+
     addRemark(guestId, {
       authorId: user.id,
       authorName: user.name,
       authorRole: user.role,
       message: remark,
     });
-    
+
     updateGuest(guestId, { status: action });
     setExpandedGuestId(null);
-    
-    toast.success(`Guest marked as ${action === 'needs-correction' ? 'needs correction' : 'rejected'}`);
+
+    toast.success(`Guest marked as ${action === 'Needs Correction' ? 'needs correction' : 'rejected'}`);
   };
 
   // Handle add reply (coordinator)
@@ -351,7 +341,7 @@ export default function GuestsPage() {
 
   // Handle resubmit (coordinator)
   const handleResubmit = (guestId: string) => {
-    updateGuest(guestId, { status: 'pending-review' });
+    updateGuest(guestId, { status: 'Awaiting Review' });
     setExpandedGuestId(null);
     toast.success('Guest resubmitted for review');
   };
@@ -570,9 +560,9 @@ export default function GuestsPage() {
                       }`}
                     >
                       Awaiting Review
-                      {guests.filter(g => g.status === 'pending-review').length > 0 && (
+                      {guests.filter(g => g.status === 'Awaiting Review').length > 0 && (
                         <span className="ml-2 bg-amber-500 text-white text-xs rounded-full px-2 py-0.5">
-                          {guests.filter(g => g.status === 'pending-review').length}
+                          {guests.filter(g => g.status === 'Awaiting Review').length}
                         </span>
                       )}
                     </button>
@@ -666,16 +656,16 @@ export default function GuestsPage() {
                                 {/* Coordinator Actions */}
                                 {user.role === 'coordinator' && activeTab === 'waiting' && (
                                   <>
-                                    {guest.status === 'draft' && (
+                                    {guest.status === 'Needs Correction' && (
                                       <Button
                                         size="sm"
                                         onClick={(e) => { e.stopPropagation(); handleSubmitForReview(guest.id); }}
                                         className="bg-[#2D5A45] hover:bg-[#234839] text-white h-8"
                                       >
-                                        Submit for Review
+                                        Resubmit for Review
                                       </Button>
                                     )}
-                                    {guest.status === 'needs-correction' && (
+                                    {guest.status === 'Needs Correction' && (
                                       <Button
                                         size="sm"
                                         onClick={(e) => { e.stopPropagation(); toggleInlinePanel(guest.id); }}
@@ -766,14 +756,14 @@ export default function GuestsPage() {
                           {/* Inline Remarks Panel */}
                           {expandedGuestId === guest.id && (
                             <>
-                              {user.role === 'coordinator' && guest.status === 'needs-correction' && (
+                              {user.role === 'coordinator' && guest.status === 'Needs Correction' && (
                                 <CoordinatorRemarksPanel
                                   guest={guest}
                                   onAddReply={(message) => handleAddReply(guest.id, message)}
                                   onResubmit={() => handleResubmit(guest.id)}
                                 />
                               )}
-                              {user.role === 'desk-in-charge' && guest.status === 'pending-review' && (
+                              {user.role === 'desk-in-charge' && guest.status === 'Awaiting Review' && (
                                 <DeskInchargeRemarksPanel
                                   onConfirm={(remark, action) => handleDeskAction(guest.id, remark, action)}
                                 />

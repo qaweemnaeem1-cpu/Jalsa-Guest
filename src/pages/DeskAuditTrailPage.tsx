@@ -11,18 +11,18 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import {
-  LayoutDashboard, ClipboardList, CheckSquare, ScrollText,
-  ChevronDown, LogOut, Search, Send, MessageSquare,
+  LayoutDashboard, ClipboardList, CheckSquare, MessageSquare,
+  ChevronDown, LogOut, Search, Send,
   Clock, CheckCircle,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import type { Guest } from '@/types';
 
 const DESK_NAV = [
-  { icon: LayoutDashboard, label: 'Dashboard',        href: '/dashboard' },
-  { icon: ClipboardList,   label: 'Guests to Review', href: '/desk/review' },
-  { icon: CheckSquare,     label: 'Approved Guests',  href: '/desk/approved' },
-  { icon: ScrollText,      label: 'Audit Trail',      href: '/desk/audit-trail' },
+  { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
+  { icon: ClipboardList,   label: 'Guests to Review',   href: '/desk/review' },
+  { icon: CheckSquare,     label: 'Processed Guests',   href: '/desk/processed' },
+  { icon: MessageSquare,   label: 'Messages & Updates', href: '/desk/messages' },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -45,12 +45,11 @@ function getInitials(name: string): string {
 }
 
 function statusBadgeCls(status: string): string {
-  if (status === 'pending-review') return 'bg-amber-50 text-amber-700 border-amber-200';
-  if (status === 'needs-correction') return 'bg-red-50 text-red-700 border-red-200';
-  if (status === 'approved') return 'bg-green-50 text-green-700 border-green-200';
-  if (status === 'rejected') return 'bg-gray-50 text-gray-500 border-gray-200';
-  if (status === 'accommodated') return 'bg-blue-50 text-blue-700 border-blue-200';
-  if (status === 'checked-in') return 'bg-purple-50 text-purple-700 border-purple-200';
+  if (status === 'Awaiting Review')  return 'bg-amber-50 text-amber-700 border-amber-200';
+  if (status === 'Needs Correction') return 'bg-orange-50 text-orange-700 border-orange-200';
+  if (status === 'Approved')         return 'bg-green-50 text-green-700 border-green-200';
+  if (status === 'Accommodated')     return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (status === 'Rejected')         return 'bg-red-50 text-red-700 border-red-200';
   return 'bg-gray-50 text-gray-700 border-gray-200';
 }
 
@@ -118,7 +117,7 @@ function DialogEntryCard({ entry }: { entry: AuditEntry }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 type QuickFilter = 'all' | 'unread' | 'awaiting-review' | 'needs-correction';
-type DialogFilter = 'all' | 'comments' | 'status_changes' | 'edits';
+type DialogFilter = 'all' | 'comments' | 'status_changes';
 
 export default function DeskAuditTrailPage() {
   const navigate = useNavigate();
@@ -167,7 +166,7 @@ export default function DeskAuditTrailPage() {
 
   // Review count for sidebar badge
   const reviewCount = useMemo(() =>
-    myGuests.filter(g => g.status === 'pending-review' || g.status === 'needs-correction').length,
+    myGuests.filter(g => g.status === 'Awaiting Review' || g.status === 'Needs Correction').length,
     [myGuests]
   );
 
@@ -177,13 +176,13 @@ export default function DeskAuditTrailPage() {
     [myEntries, user.id]
   );
   const needsReviewCount = useMemo(() =>
-    myGuests.filter(g => g.status === 'pending-review').length,
+    myGuests.filter(g => g.status === 'Awaiting Review').length,
     [myGuests]
   );
   const approvedThisWeek = useMemo(() => {
     const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
     return myGuests.filter(g =>
-      g.statusHistory?.some(sh => sh.status === 'approved' && new Date(sh.changedAt).getTime() > cutoff)
+      g.statusHistory?.some(sh => sh.status === 'Approved' && new Date(sh.changedAt).getTime() > cutoff)
     ).length;
   }, [myGuests]);
 
@@ -211,8 +210,8 @@ export default function DeskAuditTrailPage() {
       .filter(row => {
         if (countryFilter !== 'all' && row.guest.country !== countryFilter) return false;
         if (quickFilter === 'unread' && row.unreadCount === 0) return false;
-        if (quickFilter === 'awaiting-review' && row.guest.status !== 'pending-review') return false;
-        if (quickFilter === 'needs-correction' && row.guest.status !== 'needs-correction') return false;
+        if (quickFilter === 'awaiting-review' && row.guest.status !== 'Awaiting Review') return false;
+        if (quickFilter === 'needs-correction' && row.guest.status !== 'Needs Correction') return false;
         if (search) {
           const s = search.toLowerCase();
           if (
@@ -247,10 +246,10 @@ export default function DeskAuditTrailPage() {
     return entries
       .filter(e => e.guestId === openGuestId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .filter(e => e.type === 'comment' || e.type === 'status_change')
       .filter(e => {
         if (dialogFilter === 'comments') return e.type === 'comment';
         if (dialogFilter === 'status_changes') return e.type === 'status_change';
-        if (dialogFilter === 'edits') return e.type === 'field_edit';
         return true;
       });
   }, [entries, openGuestId, dialogFilter]);
@@ -298,7 +297,7 @@ export default function DeskAuditTrailPage() {
                 key={i}
                 onClick={() => navigate(item.href)}
                 className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                  item.href === '/desk/audit-trail'
+                  item.href === '/desk/messages'
                     ? 'bg-[#2D5A45] text-white'
                     : 'text-[#4A4A4A] hover:bg-[#F5F0E8]'
                 }`}
@@ -322,10 +321,10 @@ export default function DeskAuditTrailPage() {
           <header className="bg-white border-b border-[#E8E3DB] px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <ScrollText className="w-5 h-5 text-[#2D5A45]" />
+                <MessageSquare className="w-5 h-5 text-[#2D5A45]" />
                 <div>
-                  <h1 className="text-xl font-semibold text-[#1A1A1A]">Audit Trail</h1>
-                  <p className="text-xs text-[#4A4A4A]">Activity across your assigned countries</p>
+                  <h1 className="text-xl font-semibold text-[#1A1A1A]">Messages &amp; Updates</h1>
+                  <p className="text-xs text-[#4A4A4A]">Comments and status changes across your countries</p>
                 </div>
                 {totalUnreadCount > 0 && (
                   <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
@@ -438,7 +437,7 @@ export default function DeskAuditTrailPage() {
 
               {guestRows.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 gap-3">
-                  <ScrollText className="w-10 h-10 text-gray-300" />
+                  <MessageSquare className="w-10 h-10 text-gray-300" />
                   <p className="text-sm font-medium text-[#1A1A1A]">No guests match the selected filters.</p>
                   {(search || countryFilter !== 'all' || quickFilter !== 'all') && (
                     <button
@@ -525,13 +524,13 @@ export default function DeskAuditTrailPage() {
 
           {/* Filter chips */}
           <div className="px-6 py-3 border-b border-[#E8E3DB] flex gap-1.5 shrink-0 bg-[#F9F8F6]">
-            {(['all', 'comments', 'status_changes', 'edits'] as DialogFilter[]).map(f => (
+            {(['all', 'comments', 'status_changes'] as DialogFilter[]).map(f => (
               <button
                 key={f}
                 onClick={() => setDialogFilter(f)}
                 className={chipCls(dialogFilter === f)}
               >
-                {f === 'all' ? 'All' : f === 'comments' ? 'Comments' : f === 'status_changes' ? 'Status Changes' : 'Edits'}
+                {f === 'all' ? 'All' : f === 'comments' ? 'Comments' : 'Status Changes'}
               </button>
             ))}
             <span className="ml-auto text-xs text-[#4A4A4A]/50 self-center">{dialogEntries.length} entries</span>
@@ -541,7 +540,7 @@ export default function DeskAuditTrailPage() {
           <div className="flex-1 overflow-y-auto px-6 py-4">
             {dialogEntries.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-3">
-                <ScrollText className="w-8 h-8 text-gray-300" />
+                <MessageSquare className="w-8 h-8 text-gray-300" />
                 <p className="text-sm text-gray-400">No activity matches the selected filter.</p>
               </div>
             ) : (

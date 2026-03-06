@@ -11,16 +11,16 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import {
-  LayoutDashboard, Clock, Users, ScrollText,
+  LayoutDashboard, Clock, Users,
   ChevronDown, LogOut, ArrowLeft, Search, Send, MessageSquare,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 
 const COORD_NAV = [
-  { icon: LayoutDashboard, label: 'Dashboard',        href: '/dashboard' },
-  { icon: Clock,           label: 'Pending Guests',   href: '/coordinator/pending' },
-  { icon: Users,           label: 'Submitted Guests', href: '/coordinator/submitted' },
-  { icon: ScrollText,      label: 'Audit Trail',      href: '/coordinator/audit-trail' },
+  { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
+  { icon: Clock,           label: 'Pending Guests',     href: '/coordinator/pending' },
+  { icon: Users,           label: 'Submitted Guests',   href: '/coordinator/submitted' },
+  { icon: MessageSquare,   label: 'Messages & Updates', href: '/coordinator/messages' },
 ];
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
@@ -43,12 +43,11 @@ function getInitials(name: string): string {
 }
 
 function statusBadgeCls(status: string): string {
-  if (status === 'pending-review') return 'bg-amber-50 text-amber-700 border-amber-200';
-  if (status === 'needs-correction') return 'bg-red-50 text-red-700 border-red-200';
-  if (status === 'approved') return 'bg-green-50 text-green-700 border-green-200';
-  if (status === 'rejected') return 'bg-gray-50 text-gray-500 border-gray-200';
-  if (status === 'accommodated') return 'bg-blue-50 text-blue-700 border-blue-200';
-  if (status === 'checked-in') return 'bg-purple-50 text-purple-700 border-purple-200';
+  if (status === 'Awaiting Review')  return 'bg-amber-50 text-amber-700 border-amber-200';
+  if (status === 'Needs Correction') return 'bg-orange-50 text-orange-700 border-orange-200';
+  if (status === 'Approved')         return 'bg-green-50 text-green-700 border-green-200';
+  if (status === 'Accommodated')     return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (status === 'Rejected')         return 'bg-red-50 text-red-700 border-red-200';
   return 'bg-gray-50 text-gray-700 border-gray-200';
 }
 
@@ -118,7 +117,7 @@ function DialogEntryCard({ entry }: { entry: AuditEntry }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 type QuickFilter = 'all' | 'unread';
-type DialogFilter = 'all' | 'comments' | 'status_changes' | 'edits';
+type DialogFilter = 'all' | 'comments' | 'status_changes';
 
 export default function CoordinatorAuditTrailPage() {
   const navigate = useNavigate();
@@ -137,7 +136,9 @@ export default function CoordinatorAuditTrailPage() {
 
   if (!user) return null;
 
-  const pendingCount = guests.filter(g => g.status === 'pending-review' && g.submittedBy === user.id).length;
+  const pendingCount = guests.filter(
+    g => g.submittedBy === user.id && (g.status === 'Needs Correction' || g.status === 'Rejected')
+  ).length;
 
   // Coordinator's own guests
   const myGuests = useMemo(
@@ -207,10 +208,10 @@ export default function CoordinatorAuditTrailPage() {
     return entries
       .filter(e => e.guestId === openGuestId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .filter(e => e.type === 'comment' || e.type === 'status_change')
       .filter(e => {
         if (dialogFilter === 'comments') return e.type === 'comment';
         if (dialogFilter === 'status_changes') return e.type === 'status_change';
-        if (dialogFilter === 'edits') return e.type === 'field_edit';
         return true;
       });
   }, [entries, openGuestId, dialogFilter]);
@@ -262,7 +263,7 @@ export default function CoordinatorAuditTrailPage() {
                 key={i}
                 onClick={() => navigate(item.href)}
                 className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                  item.href === '/coordinator/audit-trail'
+                  item.href === '/coordinator/messages'
                     ? 'bg-[#2D5A45] text-white'
                     : 'text-[#4A4A4A] hover:bg-[#F5F0E8]'
                 }`}
@@ -295,10 +296,10 @@ export default function CoordinatorAuditTrailPage() {
           <header className="bg-white border-b border-[#E8E3DB] px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <ScrollText className="w-5 h-5 text-[#2D5A45]" />
+                <MessageSquare className="w-5 h-5 text-[#2D5A45]" />
                 <div>
-                  <h1 className="text-xl font-semibold text-[#1A1A1A]">Audit Trail</h1>
-                  <p className="text-xs text-[#4A4A4A]">Activity on your submitted guests</p>
+                  <h1 className="text-xl font-semibold text-[#1A1A1A]">Messages &amp; Updates</h1>
+                  <p className="text-xs text-[#4A4A4A]">Comments and status changes on your guests</p>
                 </div>
                 {totalUnread > 0 && (
                   <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
@@ -360,7 +361,7 @@ export default function CoordinatorAuditTrailPage() {
             <div className="bg-white rounded-xl border border-[#E8E3DB] shadow-sm overflow-hidden">
               {guestRows.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 gap-3">
-                  <ScrollText className="w-10 h-10 text-gray-300" />
+                  <MessageSquare className="w-10 h-10 text-gray-300" />
                   <p className="text-sm font-medium text-[#1A1A1A]">
                     {myGuests.length === 0 ? 'No submitted guests yet.' : 'No guests match your search.'}
                   </p>
@@ -438,13 +439,13 @@ export default function CoordinatorAuditTrailPage() {
 
           {/* Filter chips */}
           <div className="px-6 py-3 border-b border-[#E8E3DB] flex gap-1.5 shrink-0 bg-[#F9F8F6]">
-            {(['all', 'comments', 'status_changes', 'edits'] as DialogFilter[]).map(f => (
+            {(['all', 'comments', 'status_changes'] as DialogFilter[]).map(f => (
               <button
                 key={f}
                 onClick={() => setDialogFilter(f)}
                 className={chipCls(dialogFilter === f)}
               >
-                {f === 'all' ? 'All' : f === 'comments' ? 'Comments' : f === 'status_changes' ? 'Status Changes' : 'Edits'}
+                {f === 'all' ? 'All' : f === 'comments' ? 'Comments' : 'Status Changes'}
               </button>
             ))}
             <span className="ml-auto text-xs text-[#4A4A4A]/50 self-center">{dialogEntries.length} entries</span>
@@ -454,7 +455,7 @@ export default function CoordinatorAuditTrailPage() {
           <div className="flex-1 overflow-y-auto px-6 py-4">
             {dialogEntries.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-3">
-                <ScrollText className="w-8 h-8 text-gray-300" />
+                <MessageSquare className="w-8 h-8 text-gray-300" />
                 <p className="text-sm text-gray-400">No activity matches the selected filter.</p>
               </div>
             ) : (

@@ -6,26 +6,35 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  LayoutDashboard, Users, Clock, ScrollText,
+  LayoutDashboard, Users, Clock, MessageSquare,
   ArrowLeft, Search, ChevronDown, LogOut,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
+import type { GuestStatus } from '@/types';
 
 const COORD_NAV = [
-  { icon: LayoutDashboard, label: 'Dashboard',       href: '/dashboard' },
-  { icon: Clock,           label: 'Pending Guests',  href: '/coordinator/pending' },
-  { icon: Users,           label: 'Submitted Guests',href: '/coordinator/submitted' },
-  { icon: ScrollText,      label: 'Audit Trail',     href: '/coordinator/audit-trail' },
+  { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
+  { icon: Clock,           label: 'Pending Guests',     href: '/coordinator/pending' },
+  { icon: Users,           label: 'Submitted Guests',   href: '/coordinator/submitted' },
+  { icon: MessageSquare,   label: 'Messages & Updates', href: '/coordinator/messages' },
+];
+
+const STATUS_CHIPS: { label: string; value: GuestStatus | 'all' }[] = [
+  { label: 'All',              value: 'all' },
+  { label: 'Awaiting Review',  value: 'Awaiting Review' },
+  { label: 'Needs Correction', value: 'Needs Correction' },
+  { label: 'Approved',         value: 'Approved' },
+  { label: 'Accommodated',     value: 'Accommodated' },
+  { label: 'Rejected',         value: 'Rejected' },
 ];
 
 function statusBadgeCls(status: string): string {
   switch (status) {
-    case 'pending-review':   return 'bg-amber-50 text-amber-700 border-amber-200';
-    case 'approved':         return 'bg-green-50 text-green-700 border-green-200';
-    case 'accommodated':     return 'bg-blue-50 text-blue-700 border-blue-200';
-    case 'needs-correction': return 'bg-orange-50 text-orange-700 border-orange-200';
-    case 'rejected':         return 'bg-red-50 text-red-700 border-red-200';
-    case 'checked-in':       return 'bg-teal-50 text-teal-700 border-teal-200';
+    case 'Awaiting Review':  return 'bg-amber-50 text-amber-700 border-amber-200';
+    case 'Approved':         return 'bg-green-50 text-green-700 border-green-200';
+    case 'Accommodated':     return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    case 'Needs Correction': return 'bg-orange-50 text-orange-700 border-orange-200';
+    case 'Rejected':         return 'bg-red-50 text-red-700 border-red-200';
     default:                 return 'bg-gray-50 text-gray-600 border-gray-200';
   }
 }
@@ -35,13 +44,22 @@ export default function CoordinatorSubmittedPage() {
   const { user, logout } = useAuth();
   const { guests } = useGuests();
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<GuestStatus | 'all'>('all');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   if (!user) return null;
 
-  // All submitted guests (excluding draft)
+  const needsCorrectionCount = guests.filter(
+    g => g.submittedBy === user.id && g.status === 'Needs Correction'
+  ).length;
+  const rejectedCount = guests.filter(
+    g => g.submittedBy === user.id && g.status === 'Rejected'
+  ).length;
+  const pendingCount = needsCorrectionCount + rejectedCount;
+
   const allSubmitted = [...guests]
-    .filter(g => g.status !== 'draft')
+    .filter(g => g.submittedBy === user.id)
+    .filter(g => statusFilter === 'all' || g.status === statusFilter)
     .filter(g =>
       search === '' ||
       g.fullName.toLowerCase().includes(search.toLowerCase()) ||
@@ -50,7 +68,10 @@ export default function CoordinatorSubmittedPage() {
     )
     .sort((a, b) => (b.submittedAt ?? '').localeCompare(a.submittedAt ?? ''));
 
-  const pendingCount = guests.filter(g => g.status === 'pending-review').length;
+  const chipCls = (active: boolean) =>
+    active
+      ? 'bg-[#2D5A45] text-white px-3 py-1 rounded-full text-xs font-medium cursor-pointer transition-all'
+      : 'bg-white text-[#4A4A4A] border border-[#D4CFC7] px-3 py-1 rounded-full text-xs font-medium cursor-pointer hover:bg-[#F5F0E8] transition-all';
 
   return (
     <div className="min-h-screen bg-[#F5F0E8]">
@@ -109,7 +130,7 @@ export default function CoordinatorSubmittedPage() {
                 <Users className="w-5 h-5 text-[#2D5A45]" />
                 <h1 className="text-xl font-semibold text-[#1A1A1A]">Submitted Guests</h1>
                 <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                  {allSubmitted.length} total
+                  {allSubmitted.length} shown
                 </Badge>
               </div>
               <div className="relative">
@@ -143,7 +164,7 @@ export default function CoordinatorSubmittedPage() {
 
           <div className="p-6 max-w-6xl mx-auto space-y-5">
             <Card className="shadow-sm">
-              <CardContent className="p-4">
+              <CardContent className="p-4 space-y-3">
                 <div className="relative max-w-md">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
                   <Input
@@ -153,6 +174,17 @@ export default function CoordinatorSubmittedPage() {
                     className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-10"
                   />
                 </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {STATUS_CHIPS.map(chip => (
+                    <button
+                      key={chip.value}
+                      onClick={() => setStatusFilter(chip.value)}
+                      className={chipCls(statusFilter === chip.value)}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
               </CardContent>
             </Card>
 
@@ -160,13 +192,15 @@ export default function CoordinatorSubmittedPage() {
               <CardHeader className="bg-[#F9F8F6]">
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Users className="w-5 h-5 text-[#2D5A45]" />
-                  All Submissions
+                  My Submissions
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 {allSubmitted.length === 0 ? (
                   <div className="py-12 text-center text-[#4A4A4A]/60 text-sm">
-                    {search ? `No guests match "${search}"` : 'No submitted guests found.'}
+                    {search || statusFilter !== 'all'
+                      ? 'No guests match the current filters.'
+                      : 'You have not submitted any guests yet.'}
                   </div>
                 ) : (
                   <div className="overflow-x-auto">

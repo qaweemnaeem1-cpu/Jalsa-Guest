@@ -22,6 +22,7 @@ import CoordinatorAuditTrailPage from '@/pages/CoordinatorAuditTrailPage';
 import GuestsToReviewPage from '@/pages/GuestsToReviewPage';
 import ApprovedGuestsPage from '@/pages/ApprovedGuestsPage';
 import DeskAuditTrailPage from '@/pages/DeskAuditTrailPage';
+import DeskProcessedPage from '@/pages/DeskProcessedPage';
 import AdminAuditTrailPage from '@/pages/AdminAuditTrailPage';
 
 function ProtectedRoute({ children, requiredRoles }: { children: React.ReactNode; requiredRoles?: string[] }) {
@@ -93,10 +94,13 @@ function AppRoutes() {
       />
       <Route path="/coordinator/pending" element={<ProtectedRoute requiredRoles={['super-admin','coordinator']}><CoordinatorPendingPage /></ProtectedRoute>} />
       <Route path="/coordinator/submitted" element={<ProtectedRoute requiredRoles={['super-admin','coordinator']}><CoordinatorSubmittedPage /></ProtectedRoute>} />
-      <Route path="/coordinator/audit-trail" element={<ProtectedRoute requiredRoles={['super-admin','coordinator']}><CoordinatorAuditTrailPage /></ProtectedRoute>} />
+      <Route path="/coordinator/audit-trail" element={<Navigate to="/coordinator/messages" replace />} />
+      <Route path="/coordinator/messages" element={<ProtectedRoute requiredRoles={['super-admin','coordinator']}><CoordinatorAuditTrailPage /></ProtectedRoute>} />
       <Route path="/desk/review" element={<ProtectedRoute requiredRoles={['desk-in-charge','super-admin']}><GuestsToReviewPage /></ProtectedRoute>} />
-      <Route path="/desk/approved" element={<ProtectedRoute requiredRoles={['desk-in-charge','super-admin']}><ApprovedGuestsPage /></ProtectedRoute>} />
-      <Route path="/desk/audit-trail" element={<ProtectedRoute requiredRoles={['desk-in-charge','super-admin']}><DeskAuditTrailPage /></ProtectedRoute>} />
+      <Route path="/desk/approved" element={<Navigate to="/desk/processed" replace />} />
+      <Route path="/desk/processed" element={<ProtectedRoute requiredRoles={['desk-in-charge','super-admin']}><DeskProcessedPage /></ProtectedRoute>} />
+      <Route path="/desk/audit-trail" element={<Navigate to="/desk/messages" replace />} />
+      <Route path="/desk/messages" element={<ProtectedRoute requiredRoles={['desk-in-charge','super-admin']}><DeskAuditTrailPage /></ProtectedRoute>} />
       <Route path="/admin/audit-trail" element={<ProtectedRoute requiredRoles={['super-admin']}><AdminAuditTrailPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
