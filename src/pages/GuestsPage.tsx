@@ -56,16 +56,16 @@ const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> 
     { icon: ScrollText,      label: 'Audit Trail',       href: '/admin/audit-trail' },
   ],
   'desk-in-charge': [
-    { icon: LayoutDashboard, label: 'Dashboard',         href: '/dashboard' },
-    { icon: ClipboardList,   label: 'Guests to Review',  href: '/desk/review' },
-    { icon: CheckSquare,     label: 'Approved Guests',   href: '/desk/approved' },
-    { icon: ScrollText,      label: 'Audit Trail',       href: '/desk/audit-trail' },
+    { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
+    { icon: ClipboardList,   label: 'Guests to Review',   href: '/desk/review' },
+    { icon: CheckSquare,     label: 'Processed Guests',   href: '/desk/processed' },
+    { icon: MessageSquare,   label: 'Messages & Updates', href: '/desk/messages' },
   ],
   'coordinator': [
-    { icon: LayoutDashboard, label: 'Dashboard',        href: '/dashboard' },
-    { icon: Clock,           label: 'Pending Guests',   href: '/coordinator/pending' },
-    { icon: Users,           label: 'Submitted Guests', href: '/coordinator/submitted' },
-    { icon: ScrollText,      label: 'Audit Trail',      href: '/coordinator/audit-trail' },
+    { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
+    { icon: Clock,           label: 'Pending Guests',     href: '/coordinator/pending' },
+    { icon: Users,           label: 'Submitted Guests',   href: '/coordinator/submitted' },
+    { icon: MessageSquare,   label: 'Messages & Updates', href: '/coordinator/messages' },
   ],
   'transport': [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
@@ -98,12 +98,12 @@ const formatTimeAgo = (dateString: string) => {
 // Get status badge styling
 const getStatusBadgeStyle = (status: string) => {
   switch (status) {
-    case 'Awaiting Review':  return 'bg-amber-100 text-amber-700 border-amber-200';
-    case 'Needs Correction': return 'bg-orange-100 text-orange-700 border-orange-200';
-    case 'Approved':         return 'bg-green-100 text-green-700 border-green-200';
-    case 'Accommodated':     return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-    case 'Rejected':         return 'bg-red-100 text-red-700 border-red-200';
-    default:                 return 'bg-gray-100 text-gray-600 border-gray-200';
+    case 'Awaiting Review':  return 'bg-amber-50 text-amber-700 border-amber-200';
+    case 'Needs Correction': return 'bg-orange-50 text-orange-700 border-orange-200';
+    case 'Approved':         return 'bg-green-50 text-green-700 border-green-200';
+    case 'Accommodated':     return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    case 'Rejected':         return 'bg-red-50 text-red-700 border-red-200';
+    default:                 return 'bg-gray-50 text-gray-600 border-gray-200';
   }
 };
 

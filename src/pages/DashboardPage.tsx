@@ -19,7 +19,6 @@ import {
   Briefcase,
   UserCheck,
   Plus,
-  Search,
   MessageSquare,
   ClipboardList,
   CheckSquare,
@@ -302,8 +301,8 @@ export default function DashboardPage() {
       case 'desk-in-charge':
         actions.push(
           { label: 'Review Pending Guests', href: '/desk/review', icon: ClipboardList },
-          { label: 'View Approved Guests', href: '/desk/approved', icon: CheckSquare },
-          { label: 'View Audit Trail', href: '/desk/audit-trail', icon: ScrollText },
+          { label: 'View Processed Guests', href: '/desk/processed', icon: CheckSquare },
+          { label: 'Messages & Updates', href: '/desk/messages', icon: MessageSquare },
         );
         break;
       default:
@@ -1097,11 +1096,12 @@ export default function DashboardPage() {
               <button
                 onClick={() => {
                   if (!adminOverturnGuestId) return;
+                  const gName = guests.find(x => x.id === adminOverturnGuestId)?.fullName ?? 'Guest';
                   updateGuest(adminOverturnGuestId, {
                     status: 'Awaiting Review',
                     appealStatus: 'overturned',
                   });
-                  toast.success('Rejection overturned — guest returned to review queue');
+                  toast.success(`Rejection overturned — ${gName} sent back to review`);
                   setAdminOverturnGuestId(null);
                 }}
                 className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"

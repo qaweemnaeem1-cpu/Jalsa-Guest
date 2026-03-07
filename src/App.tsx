@@ -20,7 +20,6 @@ import CoordinatorPendingPage from '@/pages/CoordinatorPendingPage';
 import CoordinatorSubmittedPage from '@/pages/CoordinatorSubmittedPage';
 import CoordinatorAuditTrailPage from '@/pages/CoordinatorAuditTrailPage';
 import GuestsToReviewPage from '@/pages/GuestsToReviewPage';
-import ApprovedGuestsPage from '@/pages/ApprovedGuestsPage';
 import DeskAuditTrailPage from '@/pages/DeskAuditTrailPage';
 import DeskProcessedPage from '@/pages/DeskProcessedPage';
 import AdminAuditTrailPage from '@/pages/AdminAuditTrailPage';

@@ -149,7 +149,7 @@ export function GuestEditModal({ guest, open, onClose, onSaveAndResubmit }: Gues
       resubmitCount: (guest.resubmitCount ?? 0) + 1,
       resubmittedAt: new Date().toISOString(),
     });
-    toast.success('Guest updated and re-submitted for review');
+    toast.success(`${guest.fullName} re-submitted for review`);
     onSaveAndResubmit?.();
     onClose();
   };

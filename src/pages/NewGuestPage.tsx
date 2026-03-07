@@ -309,7 +309,7 @@ export default function NewGuestPage() {
     try {
       const country = COUNTRIES.find(c => c.code === formData.country);
       
-      const newGuest = addGuest({
+      addGuest({
         fullName: formData.fullName,
         country: country?.name || formData.country,
         countryCode: formData.country,
@@ -338,7 +338,7 @@ export default function NewGuestPage() {
         submittedBy: user.id,
       });
 
-      toast.success(`Guest registered successfully! Reference: ${newGuest.referenceNumber}`);
+      toast.success('Guest registered — awaiting review');
       navigate('/guests');
     } catch (error) {
       toast.error('Failed to register guest. Please try again.');

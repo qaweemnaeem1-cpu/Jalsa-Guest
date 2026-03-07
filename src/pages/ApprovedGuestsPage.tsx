@@ -7,17 +7,17 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import {
-  LayoutDashboard, ClipboardList, CheckSquare, ScrollText,
-  Search, ChevronDown, LogOut, Eye, CheckCircle,
+  LayoutDashboard, ClipboardList, CheckSquare,
+  Search, ChevronDown, LogOut, Eye, CheckCircle, MessageSquare,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import type { Guest } from '@/types';
 
 const DESK_NAV = [
-  { icon: LayoutDashboard, label: 'Dashboard',        href: '/dashboard' },
-  { icon: ClipboardList,   label: 'Guests to Review', href: '/desk/review' },
-  { icon: CheckSquare,     label: 'Approved Guests',  href: '/desk/approved' },
-  { icon: ScrollText,      label: 'Audit Trail',      href: '/desk/audit-trail' },
+  { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
+  { icon: ClipboardList,   label: 'Guests to Review',   href: '/desk/review' },
+  { icon: CheckSquare,     label: 'Processed Guests',   href: '/desk/processed' },
+  { icon: MessageSquare,   label: 'Messages & Updates', href: '/desk/messages' },
 ];
 
 export default function ApprovedGuestsPage() {
@@ -115,7 +115,7 @@ export default function ApprovedGuestsPage() {
                 key={i}
                 onClick={() => navigate(item.href)}
                 className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                  item.href === '/desk/approved'
+                  item.href === '/desk/processed'
                     ? 'bg-[#2D5A45] text-white'
                     : 'text-[#4A4A4A] hover:bg-[#F5F0E8]'
                 }`}

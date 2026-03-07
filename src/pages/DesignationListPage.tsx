@@ -47,6 +47,7 @@ import {
   ScrollText,
   ClipboardList,
   CheckSquare,
+  MessageSquare,
 } from 'lucide-react';
 import { ROLE_LABELS } from '@/lib/constants';
 import type { UserRole } from '@/types';
@@ -67,16 +68,16 @@ const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> 
     { icon: ScrollText,      label: 'Audit Trail',       href: '/admin/audit-trail' },
   ],
   'desk-in-charge': [
-    { icon: LayoutDashboard, label: 'Dashboard',         href: '/dashboard' },
-    { icon: ClipboardList,   label: 'Guests to Review',  href: '/desk/review' },
-    { icon: CheckSquare,     label: 'Approved Guests',   href: '/desk/approved' },
-    { icon: ScrollText,      label: 'Audit Trail',       href: '/desk/audit-trail' },
+    { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
+    { icon: ClipboardList,   label: 'Guests to Review',   href: '/desk/review' },
+    { icon: CheckSquare,     label: 'Processed Guests',   href: '/desk/processed' },
+    { icon: MessageSquare,   label: 'Messages & Updates', href: '/desk/messages' },
   ],
   'coordinator': [
-    { icon: LayoutDashboard, label: 'Dashboard',        href: '/dashboard' },
-    { icon: Clock,           label: 'Pending Guests',   href: '/coordinator/pending' },
-    { icon: Users,           label: 'Submitted Guests', href: '/coordinator/submitted' },
-    { icon: ScrollText,      label: 'Audit Trail',      href: '/coordinator/audit-trail' },
+    { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
+    { icon: Clock,           label: 'Pending Guests',     href: '/coordinator/pending' },
+    { icon: Users,           label: 'Submitted Guests',   href: '/coordinator/submitted' },
+    { icon: MessageSquare,   label: 'Messages & Updates', href: '/coordinator/messages' },
   ],
   'transport': [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },

@@ -62,7 +62,7 @@ export default function CoordinatorPendingPage() {
       resubmittedAt: new Date().toISOString(),
     });
     setResubmitGuestId(null);
-    toast.success('Guest re-submitted for review');
+    toast.success(`${resubmitGuest.fullName} re-submitted for review`);
   };
 
   const handleAppeal = () => {
@@ -74,7 +74,7 @@ export default function CoordinatorPendingPage() {
     });
     setAppealGuestId(null);
     setAppealText('');
-    toast.success('Appeal submitted to admin');
+    toast.success('Appeal submitted to Super Admin');
   };
 
   return (

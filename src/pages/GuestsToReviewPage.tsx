@@ -136,7 +136,7 @@ export default function GuestsToReviewPage() {
         createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
       });
     }
-    toast.info(`Sent back for correction: ${guest.fullName}`);
+    toast.success(`Correction requested for ${guest.fullName}`);
     setCorrectionDialog({ open: false, guest: null, reason: '' });
   };
 
@@ -158,7 +158,7 @@ export default function GuestsToReviewPage() {
         createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
       });
     }
-    toast.error(`Guest rejected: ${guest.fullName}`);
+    toast.success(`${guest.fullName} rejected`);
     setRejectDialog({ open: false, guest: null, reason: '' });
   };
 
@@ -346,28 +346,28 @@ export default function GuestsToReviewPage() {
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-1.5">
                                   <button
-                                    onClick={() => setViewGuestId(g.id)}
+                                    onClick={e => { e.stopPropagation(); setViewGuestId(g.id); }}
                                     title="View details"
                                     className="p-1.5 rounded-md text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors"
                                   >
                                     <Eye className="w-4 h-4" />
                                   </button>
                                   <button
-                                    onClick={() => setApproveGuestId(g.id)}
+                                    onClick={e => { e.stopPropagation(); setApproveGuestId(g.id); }}
                                     title="Approve"
                                     className="p-1.5 rounded-md text-green-600 hover:bg-green-50 transition-colors"
                                   >
                                     <CheckCircle className="w-4 h-4" />
                                   </button>
                                   <button
-                                    onClick={() => setCorrectionDialog({ open: true, guest: g, reason: '' })}
+                                    onClick={e => { e.stopPropagation(); setCorrectionDialog({ open: true, guest: g, reason: '' }); }}
                                     title="Needs Correction"
                                     className="p-1.5 rounded-md text-orange-500 hover:bg-orange-50 transition-colors"
                                   >
                                     <AlertCircle className="w-4 h-4" />
                                   </button>
                                   <button
-                                    onClick={() => setRejectDialog({ open: true, guest: g, reason: '' })}
+                                    onClick={e => { e.stopPropagation(); setRejectDialog({ open: true, guest: g, reason: '' }); }}
                                     title="Reject"
                                     className="p-1.5 rounded-md text-red-500 hover:bg-red-50 transition-colors"
                                   >
