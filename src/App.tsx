@@ -23,6 +23,7 @@ import CoordinatorAuditTrailPage from '@/pages/CoordinatorAuditTrailPage';
 import GuestsToReviewPage from '@/pages/GuestsToReviewPage';
 import DeskAuditTrailPage from '@/pages/DeskAuditTrailPage';
 import DeskProcessedPage from '@/pages/DeskProcessedPage';
+import DeskRejectedPage from '@/pages/DeskRejectedPage';
 import AdminAuditTrailPage from '@/pages/AdminAuditTrailPage';
 
 function ProtectedRoute({ children, requiredRoles }: { children: React.ReactNode; requiredRoles?: string[] }) {
@@ -100,6 +101,7 @@ function AppRoutes() {
       <Route path="/desk/review" element={<ProtectedRoute requiredRoles={['desk-in-charge','super-admin']}><GuestsToReviewPage /></ProtectedRoute>} />
       <Route path="/desk/approved" element={<Navigate to="/desk/processed" replace />} />
       <Route path="/desk/processed" element={<ProtectedRoute requiredRoles={['desk-in-charge','super-admin']}><DeskProcessedPage /></ProtectedRoute>} />
+      <Route path="/desk/rejected" element={<ProtectedRoute requiredRoles={['desk-in-charge','super-admin']}><DeskRejectedPage /></ProtectedRoute>} />
       <Route path="/desk/audit-trail" element={<Navigate to="/desk/messages" replace />} />
       <Route path="/desk/messages" element={<ProtectedRoute requiredRoles={['desk-in-charge','super-admin']}><DeskAuditTrailPage /></ProtectedRoute>} />
       <Route path="/admin/audit-trail" element={<ProtectedRoute requiredRoles={['super-admin']}><AdminAuditTrailPage /></ProtectedRoute>} />

@@ -137,16 +137,19 @@ export default function CoordinatorAuditTrailPage() {
 
   if (!user) return null;
 
-  const myGuests = guests.filter(g => g.submittedBy === user.id);
-  const pendingCount = myGuests.filter(
-    g => g.status === 'Awaiting Review' || g.status === 'Needs Correction'
-  ).length;
-  const rejectedCount = myGuests.filter(g => g.status === 'Rejected').length;
-
   // Coordinator's own guests
   const myGuests = useMemo(
     () => guests.filter(g => g.submittedBy === user.id),
     [guests, user.id]
+  );
+
+  const pendingCount = useMemo(
+    () => myGuests.filter(g => g.status === 'Awaiting Review' || g.status === 'Needs Correction').length,
+    [myGuests]
+  );
+  const rejectedCount = useMemo(
+    () => myGuests.filter(g => g.status === 'Rejected').length,
+    [myGuests]
   );
 
   // Entries scoped to coordinator's own guests

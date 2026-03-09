@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import {
-  LayoutDashboard, ClipboardList, CheckSquare, MessageSquare,
+  LayoutDashboard, ClipboardList, CheckSquare, MessageSquare, XCircle,
   ChevronDown, LogOut, Search, Send,
   Clock, CheckCircle,
 } from 'lucide-react';
@@ -22,6 +22,7 @@ const DESK_NAV = [
   { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
   { icon: ClipboardList,   label: 'Guests to Review',   href: '/desk/review' },
   { icon: CheckSquare,     label: 'Processed Guests',   href: '/desk/processed' },
+  { icon: XCircle,         label: 'Rejected Guests',    href: '/desk/rejected' },
   { icon: MessageSquare,   label: 'Messages & Updates', href: '/desk/messages' },
 ];
 
@@ -170,6 +171,11 @@ export default function DeskAuditTrailPage() {
     [myGuests]
   );
 
+  const rejectedCount = useMemo(() =>
+    myGuests.filter(g => g.status === 'Rejected').length,
+    [myGuests]
+  );
+
   // Summary stats
   const totalUnreadCount = useMemo(() =>
     myEntries.filter(e => !e.readBy?.includes(user.id) && e.createdBy.id !== user.id).length,
@@ -309,6 +315,11 @@ export default function DeskAuditTrailPage() {
                 {item.href === '/desk/review' && reviewCount > 0 && (
                   <span className="bg-amber-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                     {reviewCount}
+                  </span>
+                )}
+                {item.href === '/desk/rejected' && rejectedCount > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {rejectedCount}
                   </span>
                 )}
               </button>

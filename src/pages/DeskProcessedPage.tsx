@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import {
-  LayoutDashboard, ClipboardList, CheckSquare, MessageSquare,
+  LayoutDashboard, ClipboardList, CheckSquare, MessageSquare, XCircle,
   Search, ChevronDown, LogOut, Eye,
   ChevronLeft, ChevronRight,
 } from 'lucide-react';
@@ -18,17 +18,16 @@ const DESK_NAV = [
   { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
   { icon: ClipboardList,   label: 'Guests to Review',   href: '/desk/review' },
   { icon: CheckSquare,     label: 'Processed Guests',   href: '/desk/processed' },
+  { icon: XCircle,         label: 'Rejected Guests',    href: '/desk/rejected' },
   { icon: MessageSquare,   label: 'Messages & Updates', href: '/desk/messages' },
 ];
 
-type StatusFilter = 'all' | 'Approved' | 'Accommodated' | 'Rejected' | 'Needs Correction';
+type StatusFilter = 'all' | 'Approved' | 'Accommodated';
 
 const STATUS_CHIPS: { label: string; value: StatusFilter }[] = [
-  { label: 'All',              value: 'all' },
-  { label: 'Approved',         value: 'Approved' },
-  { label: 'Accommodated',     value: 'Accommodated' },
-  { label: 'Rejected',         value: 'Rejected' },
-  { label: 'Needs Correction', value: 'Needs Correction' },
+  { label: 'All',          value: 'all' },
+  { label: 'Approved',     value: 'Approved' },
+  { label: 'Accommodated', value: 'Accommodated' },
 ];
 
 function statusBadgeCls(status: string): string {
@@ -66,11 +65,17 @@ export default function DeskProcessedPage() {
     [guests, assignedCountries]
   );
 
+  const rejectedCount = useMemo(() =>
+    guests.filter(g =>
+      assignedCountries.includes(g.country) && g.status === 'Rejected'
+    ).length,
+    [guests, assignedCountries]
+  );
+
   const processedGuests = useMemo(() =>
     guests.filter(g =>
       assignedCountries.includes(g.country) &&
-      (g.status === 'Approved' || g.status === 'Accommodated' ||
-       g.status === 'Rejected' || g.status === 'Needs Correction')
+      (g.status === 'Approved' || g.status === 'Accommodated')
     ),
     [guests, assignedCountries]
   );
@@ -139,6 +144,11 @@ export default function DeskProcessedPage() {
                 {item.href === '/desk/review' && reviewCount > 0 && (
                   <span className="bg-amber-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                     {reviewCount}
+                  </span>
+                )}
+                {item.href === '/desk/rejected' && rejectedCount > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {rejectedCount}
                   </span>
                 )}
               </button>

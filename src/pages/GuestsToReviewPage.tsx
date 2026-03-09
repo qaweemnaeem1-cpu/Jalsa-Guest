@@ -18,9 +18,9 @@ import {
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { toast } from 'sonner';
 import {
-  LayoutDashboard, ClipboardList, CheckSquare, MessageSquare,
+  LayoutDashboard, ClipboardList, CheckSquare, MessageSquare, XCircle,
   Search, ChevronDown, LogOut,
-  CheckCircle, AlertCircle, XCircle, Eye, ChevronLeft, ChevronRight,
+  CheckCircle, AlertCircle, Eye, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import { sanitizeComment } from '@/hooks/useAuditTrail';
@@ -30,6 +30,7 @@ const DESK_NAV = [
   { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
   { icon: ClipboardList,   label: 'Guests to Review',   href: '/desk/review' },
   { icon: CheckSquare,     label: 'Processed Guests',   href: '/desk/processed' },
+  { icon: XCircle,         label: 'Rejected Guests',    href: '/desk/rejected' },
   { icon: MessageSquare,   label: 'Messages & Updates', href: '/desk/messages' },
 ];
 
@@ -72,6 +73,13 @@ export default function GuestsToReviewPage() {
   );
 
   const reviewCount = reviewGuests.length;
+
+  const rejectedCount = useMemo(() =>
+    guests.filter(g =>
+      assignedCountries.includes(g.country) && g.status === 'Rejected'
+    ).length,
+    [guests, assignedCountries]
+  );
 
   const countriesWithGuests = useMemo(() => {
     const s = new Set(reviewGuests.map(g => g.country));
@@ -197,6 +205,11 @@ export default function GuestsToReviewPage() {
                 {item.href === '/desk/review' && reviewCount > 0 && (
                   <span className="bg-amber-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                     {reviewCount}
+                  </span>
+                )}
+                {item.href === '/desk/rejected' && rejectedCount > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {rejectedCount}
                   </span>
                 )}
               </button>
