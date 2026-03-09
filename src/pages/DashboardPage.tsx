@@ -405,6 +405,11 @@ export default function DashboardPage() {
     ).length;
   }, [entries, diGuests, user]);
 
+  const diRejectedCount = useMemo(() =>
+    diGuests.filter(g => g.status === 'Rejected').length,
+    [diGuests]
+  );
+
   // Country cards: one per assigned country with guest count, pending count, coordinator email
   const diCountryCards = useMemo(() => {
     if (user.role !== 'desk-in-charge') return [];
@@ -442,6 +447,7 @@ export default function DashboardPage() {
       { icon: FileText,      label: 'Dashboard',          href: '/dashboard' },
       { icon: ClipboardList, label: 'Guests to Review',   href: '/desk/review' },
       { icon: CheckSquare,   label: 'Processed Guests',   href: '/desk/processed' },
+      { icon: XCircle,       label: 'Rejected Guests',    href: '/desk/rejected' },
       { icon: MessageSquare, label: 'Messages & Updates', href: '/desk/messages' },
     ];
     return (
@@ -479,6 +485,11 @@ export default function DashboardPage() {
                   {item.href === '/desk/review' && diToReviewCount > 0 && (
                     <span className="bg-amber-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                       {diToReviewCount}
+                    </span>
+                  )}
+                  {item.href === '/desk/rejected' && diRejectedCount > 0 && (
+                    <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                      {diRejectedCount}
                     </span>
                   )}
                 </button>
@@ -537,10 +548,10 @@ export default function DashboardPage() {
                 {/* To Review — amber, clickable */}
                 <button
                   onClick={() => navigate('/desk/review')}
-                  className="bg-amber-50 border border-amber-200 rounded-xl p-5 flex items-center gap-4 text-left hover:bg-amber-100 transition-colors"
+                  className="bg-amber-50 border border-amber-200 rounded-xl p-5 flex items-center gap-4 text-left hover:bg-amber-100 transition-colors cursor-pointer hover:shadow-md"
                 >
                   <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shrink-0">
-                    <ClipboardList className="w-6 h-6 text-amber-500" />
+                    <Clock className="w-6 h-6 text-amber-500" />
                   </div>
                   <div>
                     <p className="text-3xl font-bold text-amber-700">{diToReviewCount}</p>
@@ -551,7 +562,7 @@ export default function DashboardPage() {
                 {/* Unread Messages — red, clickable */}
                 <button
                   onClick={() => navigate('/desk/messages')}
-                  className="bg-red-50 border border-red-200 rounded-xl p-5 flex items-center gap-4 text-left hover:bg-red-100 transition-colors"
+                  className="bg-red-50 border border-red-200 rounded-xl p-5 flex items-center gap-4 text-left hover:bg-red-100 transition-colors cursor-pointer hover:shadow-md"
                 >
                   <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shrink-0">
                     <MessageSquare className="w-6 h-6 text-red-500" />
