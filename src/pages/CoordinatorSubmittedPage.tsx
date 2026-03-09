@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   LayoutDashboard, Users, Clock, MessageSquare,
-  ArrowLeft, Search, ChevronDown, LogOut,
+  Search, ChevronDown, LogOut,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import type { GuestStatus } from '@/types';
@@ -112,15 +112,6 @@ export default function CoordinatorSubmittedPage() {
               </button>
             ))}
           </nav>
-          <div className="absolute bottom-4 left-4 right-4">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors border border-[#D4CFC7]"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Admin View
-            </button>
-          </div>
         </aside>
 
         <main className="flex-1 ml-64">

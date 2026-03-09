@@ -19,7 +19,7 @@ import { GuestViewModal } from '@/components/GuestViewModal';
 import { toast } from 'sonner';
 import {
   LayoutDashboard, ClipboardList, CheckSquare, MessageSquare,
-  ArrowLeft, Search, ChevronDown, LogOut,
+  Search, ChevronDown, LogOut,
   CheckCircle, AlertCircle, XCircle, Eye, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
@@ -202,15 +202,6 @@ export default function GuestsToReviewPage() {
               </button>
             ))}
           </nav>
-          <div className="absolute bottom-4 left-4 right-4">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors border border-[#D4CFC7]"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Admin View
-            </button>
-          </div>
         </aside>
 
         <main className="flex-1 ml-64">

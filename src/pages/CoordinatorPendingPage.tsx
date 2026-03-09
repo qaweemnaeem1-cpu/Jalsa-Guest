@@ -10,7 +10,7 @@ import { GuestEditModal } from '@/components/GuestEditModal';
 import { toast } from 'sonner';
 import {
   LayoutDashboard, Users, Clock, MessageSquare,
-  ArrowLeft, ChevronDown, LogOut,
+  ChevronDown, LogOut,
   CheckCircle, AlertCircle, XCircle, Edit,
 } from 'lucide-react';
 import { ROLE_LABELS } from '@/lib/constants';
@@ -118,15 +118,6 @@ export default function CoordinatorPendingPage() {
               </button>
             ))}
           </nav>
-          <div className="absolute bottom-4 left-4 right-4">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors border border-[#D4CFC7]"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Admin View
-            </button>
-          </div>
         </aside>
 
         <main className="flex-1 ml-64">
