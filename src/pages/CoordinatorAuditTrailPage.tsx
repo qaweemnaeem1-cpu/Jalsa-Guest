@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import {
-  LayoutDashboard, Clock, Users,
+  LayoutDashboard, Clock, Users, XCircle,
   ChevronDown, LogOut, Search, Send, MessageSquare,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
@@ -20,6 +20,7 @@ const COORD_NAV = [
   { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
   { icon: Clock,           label: 'Pending Guests',     href: '/coordinator/pending' },
   { icon: Users,           label: 'Submitted Guests',   href: '/coordinator/submitted' },
+  { icon: XCircle,         label: 'Rejected Guests',    href: '/coordinator/rejected' },
   { icon: MessageSquare,   label: 'Messages & Updates', href: '/coordinator/messages' },
 ];
 
@@ -136,9 +137,11 @@ export default function CoordinatorAuditTrailPage() {
 
   if (!user) return null;
 
-  const pendingCount = guests.filter(
-    g => g.submittedBy === user.id && (g.status === 'Needs Correction' || g.status === 'Rejected')
+  const myGuests = guests.filter(g => g.submittedBy === user.id);
+  const pendingCount = myGuests.filter(
+    g => g.status === 'Awaiting Review' || g.status === 'Needs Correction'
   ).length;
+  const rejectedCount = myGuests.filter(g => g.status === 'Rejected').length;
 
   // Coordinator's own guests
   const myGuests = useMemo(
@@ -275,6 +278,11 @@ export default function CoordinatorAuditTrailPage() {
                 {item.href === '/coordinator/pending' && pendingCount > 0 && (
                   <span className="bg-amber-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                     {pendingCount}
+                  </span>
+                )}
+                {item.href === '/coordinator/rejected' && rejectedCount > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {rejectedCount}
                   </span>
                 )}
               </button>

@@ -53,6 +53,7 @@ const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> 
     { icon: FileText,      label: 'Dashboard',          href: '/dashboard' },
     { icon: Clock,         label: 'Pending Guests',     href: '/coordinator/pending' },
     { icon: Users,         label: 'Submitted Guests',   href: '/coordinator/submitted' },
+    { icon: XCircle,       label: 'Rejected Guests',    href: '/coordinator/rejected' },
     { icon: MessageSquare, label: 'Messages & Updates', href: '/coordinator/messages' },
   ],
   'transport': [

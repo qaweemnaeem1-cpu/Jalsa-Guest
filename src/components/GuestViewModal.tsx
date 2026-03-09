@@ -13,6 +13,7 @@ import { Send, Pencil, Trash2, X, Plane } from 'lucide-react';
 import { AuditTimeline } from '@/components/AuditTimeline';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
+import { useAuditTrail } from '@/hooks/useAuditTrail';
 import {
   GUEST_STATUS_LABELS, ROLE_LABELS, VISA_STATUS_LABELS,
   DEFAULT_DESIGNATIONS, COUNTRIES,
@@ -97,12 +98,12 @@ const formatTimeAgo = (dateString: string): string => {
 
 const getStatusBadgeStyle = (status: string): string => {
   switch (status) {
-    case 'Awaiting Review':  return 'bg-amber-100 text-amber-700 border-amber-200';
-    case 'Needs Correction': return 'bg-orange-100 text-orange-700 border-orange-200';
-    case 'Approved':         return 'bg-green-100 text-green-700 border-green-200';
-    case 'Accommodated':     return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-    case 'Rejected':         return 'bg-red-100 text-red-700 border-red-200';
-    default:                 return 'bg-gray-100 text-gray-600 border-gray-200';
+    case 'Awaiting Review':  return 'bg-amber-50 text-amber-700 border-amber-200';
+    case 'Needs Correction': return 'bg-orange-50 text-orange-700 border-orange-200';
+    case 'Approved':         return 'bg-green-50 text-green-700 border-green-200';
+    case 'Accommodated':     return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    case 'Rejected':         return 'bg-red-50 text-red-700 border-red-200';
+    default:                 return 'bg-gray-50 text-gray-600 border-gray-200';
   }
 };
 
@@ -196,19 +197,25 @@ export function GuestViewModal({
 }: GuestViewModalProps) {
   const { user } = useAuth();
   const { updateGuest, addRemark } = useGuests();
+  const { getEntriesForGuest } = useAuditTrail();
 
   const [commentText, setCommentText] = useState('');
   const [roomInput, setRoomInput] = useState('');
 
-  const canComment   = user ? ['desk-in-charge', 'super-admin', 'coordinator'].includes(user.role) : false;
+  const canComment    = user ? ['desk-in-charge', 'super-admin', 'coordinator'].includes(user.role) : false;
   const canAssignRoom = user ? ['super-admin', 'accommodation'].includes(user.role) : false;
   const isSuperAdmin  = user?.role === 'super-admin';
+  const isCoordinator = user?.role === 'coordinator';
+  const isCoordinatorNeedsCorrection =
+    isCoordinator && guest?.status === 'Needs Correction' && guest?.submittedBy === user?.id;
 
   // ─── Form ──────────────────────────────────────────────────────────────────
 
   const {
     register,
     handleSubmit,
+    trigger,
+    getValues,
     reset,
     watch,
     formState: { errors },
@@ -255,38 +262,61 @@ export function GuestViewModal({
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
+  /** Extract sanitised field values from form data into an update patch. */
+  const buildPatch = (data: EditFormData, existingGuest: typeof guest) => {
+    const dob = stripHtml(data.dateOfBirth) || undefined;
+    return {
+      fullName:              stripHtml(data.fullName),
+      passportNumber:        stripHtml(data.passportNumber),
+      country:               stripHtml(data.country),
+      gender:                data.gender,
+      age:                   calcAge(dob) ?? existingGuest?.age,
+      dateOfBirth:           dob,
+      contactNumber:         stripHtml(data.contactNumber),
+      email:                 stripHtml(data.email) || undefined,
+      designation:           stripHtml(data.designation) || undefined,
+      guestType:             data.guestType,
+      wheelchairRequired:    data.wheelchairRequired,
+      specialNeeds:          stripHtml(data.specialNeeds) || undefined,
+      visaStatus:            data.visaStatus,
+      arrivalFlightNumber:   stripHtml(data.arrivalFlightNumber) || undefined,
+      arrivalAirport:        stripHtml(data.arrivalAirport) || undefined,
+      arrivalTerminal:       stripHtml(data.arrivalTerminal) || undefined,
+      arrivalTime:           stripHtml(data.arrivalTime) || undefined,
+      departureFlightNumber: stripHtml(data.departureFlightNumber) || undefined,
+      departureAirport:      stripHtml(data.departureAirport) || undefined,
+      departureTerminal:     stripHtml(data.departureTerminal) || undefined,
+      departureTime:         stripHtml(data.departureTime) || undefined,
+    };
+  };
+
   const onSave = (data: EditFormData) => {
     if (!guest || !user) return;
-    if (user.role !== 'super-admin' && user.role !== 'desk-in-charge') {
+    const allowed =
+      user.role === 'super-admin' ||
+      user.role === 'desk-in-charge' ||
+      (user.role === 'coordinator' && guest.status === 'Needs Correction' && guest.submittedBy === user.id);
+    if (!allowed) {
       toast.error('You do not have permission to edit guests');
       return;
     }
-    // Sanitise: strip any HTML/script tags before persisting.
-    const dob = stripHtml(data.dateOfBirth) || undefined;
-    updateGuest(guest.id, {
-      fullName:             stripHtml(data.fullName),
-      passportNumber:       stripHtml(data.passportNumber),
-      country:              stripHtml(data.country),
-      gender:               data.gender,
-      age:                  calcAge(dob) ?? guest.age,
-      dateOfBirth:          dob,
-      contactNumber:        stripHtml(data.contactNumber),
-      email:                stripHtml(data.email) || undefined,
-      designation:          stripHtml(data.designation) || undefined,
-      guestType:            data.guestType,
-      wheelchairRequired:   data.wheelchairRequired,
-      specialNeeds:         stripHtml(data.specialNeeds) || undefined,
-      visaStatus:           data.visaStatus,
-      arrivalFlightNumber:  stripHtml(data.arrivalFlightNumber) || undefined,
-      arrivalAirport:       stripHtml(data.arrivalAirport) || undefined,
-      arrivalTerminal:      stripHtml(data.arrivalTerminal) || undefined,
-      arrivalTime:          stripHtml(data.arrivalTime) || undefined,
-      departureFlightNumber: stripHtml(data.departureFlightNumber) || undefined,
-      departureAirport:     stripHtml(data.departureAirport) || undefined,
-      departureTerminal:    stripHtml(data.departureTerminal) || undefined,
-      departureTime:        stripHtml(data.departureTime) || undefined,
-    });
+    updateGuest(guest.id, buildPatch(data, guest));
     toast.success('Guest details updated successfully');
+    onClose();
+  };
+
+  const onSaveAndResubmit = async () => {
+    if (!guest || !user) return;
+    const valid = await trigger();
+    if (!valid) return;
+    const data = getValues();
+    updateGuest(guest.id, {
+      ...buildPatch(data, guest),
+      status:        'Awaiting Review',
+      resubmitCount: (guest.resubmitCount ?? 0) + 1,
+      resubmittedAt: new Date().toISOString(),
+    });
+    toast.success(`${guest.fullName} re-submitted for review`);
     onClose();
   };
 
@@ -398,7 +428,9 @@ export function GuestViewModal({
                   </span>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="history" className={tabTriggerCls}>Audit Trail</TabsTrigger>
+              <TabsTrigger value="history" className={tabTriggerCls}>
+                {isCoordinator ? 'Messages' : 'Audit Trail'}
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -786,14 +818,23 @@ export function GuestViewModal({
               </div>
             </TabsContent>
 
-            {/* ── Tab 5: Audit Trail ── */}
+            {/* ── Tab 5: Audit Trail / Messages ── */}
             <TabsContent value="history" className="mt-0 px-8 py-6">
-              <AuditTimeline
-                guestId={guest.id}
-                guestName={guest.fullName}
-                guestReference={guest.referenceNumber}
-                allowComment={true}
-              />
+              {(() => {
+                const allEntries = getEntriesForGuest(guest.id);
+                const filteredEntries = isCoordinator
+                  ? allEntries.filter(e => e.type === 'comment' || e.type === 'status_change')
+                  : undefined;
+                return (
+                  <AuditTimeline
+                    guestId={guest.id}
+                    guestName={guest.fullName}
+                    guestReference={guest.referenceNumber}
+                    allowComment={true}
+                    overrideEntries={filteredEntries}
+                  />
+                );
+              })()}
             </TabsContent>
 
           </div>{/* end scrollable body */}
@@ -811,6 +852,14 @@ export function GuestViewModal({
             >
               Save Changes
             </Button>
+            {isCoordinatorNeedsCorrection && (
+              <Button
+                onClick={onSaveAndResubmit}
+                className="bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                Save &amp; Re-Submit
+              </Button>
+            )}
           </div>
         )}
 

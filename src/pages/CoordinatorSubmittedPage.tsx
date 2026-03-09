@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  LayoutDashboard, Users, Clock, MessageSquare,
+  LayoutDashboard, Users, Clock, MessageSquare, XCircle,
   Search, ChevronDown, LogOut,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
@@ -16,16 +16,14 @@ const COORD_NAV = [
   { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
   { icon: Clock,           label: 'Pending Guests',     href: '/coordinator/pending' },
   { icon: Users,           label: 'Submitted Guests',   href: '/coordinator/submitted' },
+  { icon: XCircle,         label: 'Rejected Guests',    href: '/coordinator/rejected' },
   { icon: MessageSquare,   label: 'Messages & Updates', href: '/coordinator/messages' },
 ];
 
 const STATUS_CHIPS: { label: string; value: GuestStatus | 'all' }[] = [
-  { label: 'All',              value: 'all' },
-  { label: 'Awaiting Review',  value: 'Awaiting Review' },
-  { label: 'Needs Correction', value: 'Needs Correction' },
-  { label: 'Approved',         value: 'Approved' },
-  { label: 'Accommodated',     value: 'Accommodated' },
-  { label: 'Rejected',         value: 'Rejected' },
+  { label: 'All',          value: 'all' },
+  { label: 'Approved',     value: 'Approved' },
+  { label: 'Accommodated', value: 'Accommodated' },
 ];
 
 function statusBadgeCls(status: string): string {
@@ -49,16 +47,14 @@ export default function CoordinatorSubmittedPage() {
 
   if (!user) return null;
 
-  const needsCorrectionCount = guests.filter(
-    g => g.submittedBy === user.id && g.status === 'Needs Correction'
+  const myGuests = guests.filter(g => g.submittedBy === user.id);
+  const pendingCount = myGuests.filter(
+    g => g.status === 'Awaiting Review' || g.status === 'Needs Correction'
   ).length;
-  const rejectedCount = guests.filter(
-    g => g.submittedBy === user.id && g.status === 'Rejected'
-  ).length;
-  const pendingCount = needsCorrectionCount + rejectedCount;
+  const rejectedCount = myGuests.filter(g => g.status === 'Rejected').length;
 
-  const allSubmitted = [...guests]
-    .filter(g => g.submittedBy === user.id)
+  const allSubmitted = [...myGuests]
+    .filter(g => g.status === 'Approved' || g.status === 'Accommodated')
     .filter(g => statusFilter === 'all' || g.status === statusFilter)
     .filter(g =>
       search === '' ||
@@ -107,6 +103,11 @@ export default function CoordinatorSubmittedPage() {
                 {item.href === '/coordinator/pending' && pendingCount > 0 && (
                   <span className="bg-amber-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                     {pendingCount}
+                  </span>
+                )}
+                {item.href === '/coordinator/rejected' && rejectedCount > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {rejectedCount}
                   </span>
                 )}
               </button>

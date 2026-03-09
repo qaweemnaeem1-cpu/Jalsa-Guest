@@ -18,6 +18,7 @@ import DesignationListPage from '@/pages/DesignationListPage';
 import CountriesDepartmentsPage from '@/pages/CountriesDepartmentsPage';
 import CoordinatorPendingPage from '@/pages/CoordinatorPendingPage';
 import CoordinatorSubmittedPage from '@/pages/CoordinatorSubmittedPage';
+import CoordinatorRejectedPage from '@/pages/CoordinatorRejectedPage';
 import CoordinatorAuditTrailPage from '@/pages/CoordinatorAuditTrailPage';
 import GuestsToReviewPage from '@/pages/GuestsToReviewPage';
 import DeskAuditTrailPage from '@/pages/DeskAuditTrailPage';
@@ -93,6 +94,7 @@ function AppRoutes() {
       />
       <Route path="/coordinator/pending" element={<ProtectedRoute requiredRoles={['super-admin','coordinator']}><CoordinatorPendingPage /></ProtectedRoute>} />
       <Route path="/coordinator/submitted" element={<ProtectedRoute requiredRoles={['super-admin','coordinator']}><CoordinatorSubmittedPage /></ProtectedRoute>} />
+      <Route path="/coordinator/rejected" element={<ProtectedRoute requiredRoles={['super-admin','coordinator']}><CoordinatorRejectedPage /></ProtectedRoute>} />
       <Route path="/coordinator/audit-trail" element={<Navigate to="/coordinator/messages" replace />} />
       <Route path="/coordinator/messages" element={<ProtectedRoute requiredRoles={['super-admin','coordinator']}><CoordinatorAuditTrailPage /></ProtectedRoute>} />
       <Route path="/desk/review" element={<ProtectedRoute requiredRoles={['desk-in-charge','super-admin']}><GuestsToReviewPage /></ProtectedRoute>} />
