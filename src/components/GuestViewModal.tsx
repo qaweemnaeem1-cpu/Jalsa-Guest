@@ -429,7 +429,7 @@ export function GuestViewModal({
                 )}
               </TabsTrigger>
               <TabsTrigger value="history" className={tabTriggerCls}>
-                {isCoordinator ? 'Messages' : 'Audit Trail'}
+                {isCoordinator || user?.role === 'desk-in-charge' ? 'Messages' : 'Audit Trail'}
               </TabsTrigger>
             </TabsList>
           </div>

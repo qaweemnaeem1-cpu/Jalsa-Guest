@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 import {
   LayoutDashboard, ClipboardList, CheckSquare, MessageSquare, XCircle,
   Search, ChevronDown, LogOut,
-  CheckCircle, AlertCircle, Eye, ChevronLeft, ChevronRight,
+  CheckCircle, AlertCircle, Eye, Pencil, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import { sanitizeComment } from '@/hooks/useAuditTrail';
@@ -46,6 +46,7 @@ export default function GuestsToReviewPage() {
   const [countryFilter, setCountryFilter] = useState('all');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [viewGuestId, setViewGuestId] = useState<string | null>(null);
+  const [editGuestId, setEditGuestId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
   // Approve confirmation dialog
@@ -357,6 +358,13 @@ export default function GuestsToReviewPage() {
                                     <Eye className="w-4 h-4" />
                                   </button>
                                   <button
+                                    onClick={e => { e.stopPropagation(); setEditGuestId(g.id); }}
+                                    title="Edit guest"
+                                    className="p-1.5 rounded-md text-green-600 hover:bg-green-50 transition-colors"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                  <button
                                     onClick={e => { e.stopPropagation(); setApproveGuestId(g.id); }}
                                     title="Approve"
                                     className="p-1.5 rounded-md text-green-600 hover:bg-green-50 transition-colors"
@@ -423,6 +431,14 @@ export default function GuestsToReviewPage() {
         guest={guests.find(g => g.id === viewGuestId) ?? null}
         open={!!viewGuestId}
         onClose={() => setViewGuestId(null)}
+      />
+
+      {/* Guest Edit Modal */}
+      <GuestViewModal
+        guest={guests.find(g => g.id === editGuestId) ?? null}
+        open={!!editGuestId}
+        onClose={() => setEditGuestId(null)}
+        isEditMode={true}
       />
 
       {/* Approve Confirmation Dialog */}

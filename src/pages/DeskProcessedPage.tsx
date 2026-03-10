@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import {
   LayoutDashboard, ClipboardList, CheckSquare, MessageSquare, XCircle,
-  Search, ChevronDown, LogOut, Eye,
+  Search, ChevronDown, LogOut, Eye, Pencil,
   ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
@@ -52,6 +52,7 @@ export default function DeskProcessedPage() {
   const [countryFilter, setCountryFilter] = useState('all');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [viewGuestId, setViewGuestId] = useState<string | null>(null);
+  const [editGuestId, setEditGuestId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
   if (!user) return null;
@@ -267,7 +268,7 @@ export default function DeskProcessedPage() {
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Type</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Status</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Submitted</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">View</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#E8E3DB]">
@@ -288,13 +289,22 @@ export default function DeskProcessedPage() {
                               </td>
                               <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.submittedAt ?? '—'}</td>
                               <td className="px-4 py-3">
-                                <button
-                                  onClick={() => setViewGuestId(g.id)}
-                                  title="View details"
-                                  className="p-1.5 rounded-md text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors"
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </button>
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    onClick={e => { e.stopPropagation(); setViewGuestId(g.id); }}
+                                    title="View details"
+                                    className="p-1.5 rounded-md text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={e => { e.stopPropagation(); setEditGuestId(g.id); }}
+                                    title="Edit guest"
+                                    className="p-1.5 rounded-md text-green-600 hover:bg-green-50 transition-colors"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -339,6 +349,13 @@ export default function DeskProcessedPage() {
         guest={guests.find(g => g.id === viewGuestId) ?? null}
         open={!!viewGuestId}
         onClose={() => setViewGuestId(null)}
+      />
+
+      <GuestViewModal
+        guest={guests.find(g => g.id === editGuestId) ?? null}
+        open={!!editGuestId}
+        onClose={() => setEditGuestId(null)}
+        isEditMode={true}
       />
     </div>
   );
