@@ -297,7 +297,7 @@ export default function DashboardPage() {
       case 'coordinator':
         actions.push(
           { label: 'Register New Guest', href: '/guests/new', icon: Plus },
-          { label: 'View My Submissions', href: '/guests', icon: FileText },
+          { label: 'View My Submissions', href: '/coordinator/submitted', icon: FileText },
         );
         break;
       case 'desk-in-charge':

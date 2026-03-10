@@ -31,6 +31,8 @@ import {
   ScrollText,
   ClipboardList,
   CheckSquare,
+  XCircle,
+  MessageSquare,
 } from 'lucide-react';
 import { 
   COUNTRIES, 
@@ -63,7 +65,8 @@ const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> 
     { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
     { icon: Clock,           label: 'Pending Guests',     href: '/coordinator/pending' },
     { icon: Users,           label: 'Submitted Guests',   href: '/coordinator/submitted' },
-    { icon: ClipboardList,   label: 'Messages & Updates', href: '/coordinator/messages' },
+    { icon: XCircle,         label: 'Rejected Guests',    href: '/coordinator/rejected' },
+    { icon: MessageSquare,   label: 'Messages & Updates', href: '/coordinator/messages' },
   ],
   'transport': [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
@@ -339,7 +342,7 @@ export default function NewGuestPage() {
       });
 
       toast.success('Guest registered — awaiting review');
-      navigate('/guests');
+      navigate(user.role === 'coordinator' ? '/coordinator/pending' : '/guests');
     } catch (error) {
       toast.error('Failed to register guest. Please try again.');
     } finally {
@@ -384,7 +387,7 @@ export default function NewGuestPage() {
               <div className="flex items-center gap-4">
                 <Button
                   variant="outline"
-                  onClick={() => navigate('/guests')}
+                  onClick={() => navigate(user.role === 'coordinator' ? '/coordinator/pending' : '/guests')}
                   className="border-[#D4CFC7]"
                 >
                   <ArrowLeft className="w-4 h-4 mr-2" />

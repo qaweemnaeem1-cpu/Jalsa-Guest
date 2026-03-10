@@ -28,16 +28,22 @@ import AdminAuditTrailPage from '@/pages/AdminAuditTrailPage';
 
 function ProtectedRoute({ children, requiredRoles }: { children: React.ReactNode; requiredRoles?: string[] }) {
   const { isAuthenticated, user } = useAuth();
-  
+
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
-  
+
   if (requiredRoles && user && !requiredRoles.includes(user.role)) {
     return <Navigate to="/dashboard" replace />;
   }
-  
+
   return <>{children}</>;
+}
+
+function GuestsPageOrRedirect() {
+  const { user } = useAuth();
+  if (user?.role === 'coordinator') return <Navigate to="/coordinator/submitted" replace />;
+  return <GuestsPage />;
 }
 
 function AppRoutes() {
@@ -57,7 +63,7 @@ function AppRoutes() {
         path="/guests"
         element={
           <ProtectedRoute>
-            <GuestsPage />
+            <GuestsPageOrRedirect />
           </ProtectedRoute>
         }
       />
