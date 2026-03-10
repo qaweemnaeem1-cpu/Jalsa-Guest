@@ -32,6 +32,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { useMemo, useState } from 'react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
+import { SidebarUserFooter } from '@/components/SidebarUserFooter';
+import { getRoleDisplayLabel } from '@/components/ProfileDialog';
 import type { UserRole } from '@/types';
 
 const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> = {
@@ -454,7 +456,7 @@ export default function DashboardPage() {
       <div className="min-h-screen bg-[#F5F0E8]">
         <div className="flex">
           {/* Sidebar */}
-          <aside className="w-64 bg-white border-r border-[#E8E3DB] min-h-screen fixed left-0 top-0">
+          <aside className="w-64 bg-white border-r border-[#E8E3DB] min-h-screen fixed left-0 top-0 flex flex-col">
             <div className="p-4 border-b border-[#E8E3DB]">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-[#2D5A45] rounded-lg flex items-center justify-center">
@@ -495,6 +497,7 @@ export default function DashboardPage() {
                 </button>
               ))}
             </nav>
+            <SidebarUserFooter />
           </aside>
 
           <main className="flex-1 ml-64">
@@ -515,7 +518,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="text-left">
                       <p className="text-sm font-medium text-[#1A1A1A]">{user.name}</p>
-                      <p className="text-xs text-[#4A4A4A]">{ROLE_LABELS[user.role]}</p>
+                      <p className="text-xs text-[#4A4A4A]">{getRoleDisplayLabel(user)}</p>
                     </div>
                     <div className="w-4 h-4 text-[#4A4A4A]">
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -714,7 +717,7 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-[#F5F0E8]">
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-64 bg-white border-r border-[#E8E3DB] min-h-screen fixed left-0 top-0">
+        <aside className="w-64 bg-white border-r border-[#E8E3DB] min-h-screen fixed left-0 top-0 flex flex-col">
           <div className="p-4 border-b border-[#E8E3DB]">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-[#2D5A45] rounded-lg flex items-center justify-center">
@@ -722,7 +725,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <span className="font-semibold text-[#1A1A1A]">Jalsa Guest</span>
-                <p className="text-xs text-[#4A4A4A]">Jalsa Salana UK</p>
+                <p className="text-xs text-[#4A4A4A]">{user.role === 'coordinator' ? 'Coordinator View' : 'Jalsa Salana UK'}</p>
               </div>
             </div>
           </div>
@@ -764,6 +767,7 @@ export default function DashboardPage() {
               );
             })}
           </nav>
+          <SidebarUserFooter />
         </aside>
 
         {/* Main Content */}
@@ -785,7 +789,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="text-left">
                     <p className="text-sm font-medium text-[#1A1A1A]">{user.name}</p>
-                    <p className="text-xs text-[#4A4A4A]">{ROLE_LABELS[user.role]}</p>
+                    <p className="text-xs text-[#4A4A4A]">{getRoleDisplayLabel(user)}</p>
                   </div>
                   <div className="w-4 h-4 text-[#4A4A4A]">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
