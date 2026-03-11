@@ -55,6 +55,12 @@ const generateSampleGuests = (): Guest[] => {
       appealStatus: 'none',
       department: 'Guest Services',
       roomAssignment: 'A-101',
+      assignedDepartment: 'Reserve 1 (R1)',
+      assignedDepartmentAt: '2024-01-14T10:00:00',
+      assignedDepartmentBy: '1',
+      placedLocation: 'Jamia',
+      placedAt: '2024-01-14T11:00:00',
+      placedBy: 'dh-001',
       statusHistory: [
         {
           id: 'sh1',
@@ -117,6 +123,12 @@ const generateSampleGuests = (): Guest[] => {
       appealStatus: 'none',
       department: 'Guest Services',
       roomAssignment: 'A-102',
+      assignedDepartment: 'Reserve 1 (R1)',
+      assignedDepartmentAt: '2024-01-15T10:00:00',
+      assignedDepartmentBy: '1',
+      placedLocation: 'Hotels',
+      placedAt: '2024-01-15T13:00:00',
+      placedBy: 'dh-001',
       statusHistory: [
         {
           id: 'sh4',
@@ -185,6 +197,9 @@ const generateSampleGuests = (): Guest[] => {
       reviewedAt: '2024-01-13T15:00:00',
       department: 'VIP Services',
       roomAssignment: 'VIP-201',
+      assignedDepartment: 'Reserve 1 (R1)',
+      assignedDepartmentAt: '2024-01-14T12:00:00',
+      assignedDepartmentBy: '1',
       statusHistory: [
         {
           id: 'sh8',

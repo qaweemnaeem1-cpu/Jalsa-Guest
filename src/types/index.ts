@@ -1,4 +1,4 @@
-export type UserRole = 'super-admin' | 'desk-in-charge' | 'coordinator' | 'transport' | 'accommodation' | 'viewer';
+export type UserRole = 'super-admin' | 'desk-in-charge' | 'coordinator' | 'transport' | 'accommodation' | 'viewer' | 'department-head';
 
 export interface User {
   id: string;
@@ -8,6 +8,7 @@ export interface User {
   country?: string;
   countryCode?: string;
   assignedCountries?: string[];
+  department?: string;
 }
 
 export interface FamilyMember {
@@ -95,6 +96,12 @@ export interface Guest {
   appealedAt?: string;
   department?: string;
   roomAssignment?: string;
+  assignedDepartment?: string;
+  assignedDepartmentAt?: string;
+  assignedDepartmentBy?: string;
+  placedLocation?: string;
+  placedAt?: string;
+  placedBy?: string;
   remarks?: GuestRemark[];
   statusHistory?: GuestStatusEvent[];
 }

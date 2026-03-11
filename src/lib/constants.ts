@@ -161,6 +161,18 @@ export const ROLE_LABELS: Record<string, string> = {
   'viewer': 'Viewer',
 };
 
+export const DEPT_LOCATIONS: Record<string, string[]> = {
+  'Reserve 1 (R1)': ['Jamia', 'University', 'Hotels'],
+  'UK Jamaat': ['Bait Ul Futuh', 'Bait Ul Ehsan'],
+  'Central Guests': ['Bait Ul Futuh VIP', 'Islamabad Inside', 'Islamabad Suburbs'],
+};
+
+export const LOCATION_PILL_COLORS = [
+  'bg-blue-50 text-blue-700 border-blue-200',
+  'bg-purple-50 text-purple-700 border-purple-200',
+  'bg-teal-50 text-teal-700 border-teal-200',
+];
+
 export const VISA_STATUS_LABELS: Record<string, string> = {
   'not-required': 'Not Required',
   'pending': 'Pending',
