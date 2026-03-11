@@ -81,7 +81,14 @@ const TABS: { value: UserType; label: string }[] = [
   { value: 'coordinator', label: 'Coordinators' },
   { value: 'driver', label: 'Drivers' },
   { value: 'nizamat-in-charge', label: 'Nizamat In-Charge' },
+  { value: 'department-head', label: 'Departmental Users' },
 ];
+
+const DEPT_BADGE_CLS: Record<string, string> = {
+  'Reserve 1 (R1)': 'bg-blue-50 text-blue-700 border-blue-200',
+  'UK Jamaat':       'bg-purple-50 text-purple-700 border-purple-200',
+  'Central Guests':  'bg-teal-50 text-teal-700 border-teal-200',
+};
 
 interface UserFormData {
   name: string;
@@ -483,7 +490,7 @@ export default function UsersPage() {
                       <tr>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Name</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Email</th>
-                        {activeTab !== 'desk-in-charge' && (
+                        {activeTab !== 'desk-in-charge' && activeTab !== 'department-head' && (
                           <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Password</th>
                         )}
                         {activeTab === 'coordinator' && (
@@ -494,6 +501,12 @@ export default function UsersPage() {
                         )}
                         {activeTab === 'desk-in-charge' && (
                           <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Countries</th>
+                        )}
+                        {activeTab === 'department-head' && (
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Department</th>
+                        )}
+                        {activeTab === 'department-head' && (
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Locations</th>
                         )}
                         <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Phone</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Status</th>
@@ -569,6 +582,102 @@ export default function UsersPage() {
                                   </button>
                                   <button
                                     onClick={() => handleDeleteCoordinator(coord)}
+                                    className="p-2 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded-lg transition-colors"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )
+                      ) : activeTab === 'department-head' ? (
+                        // ── Department head rows ──────────────────────────────
+                        filteredUsers.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="px-4 py-8 text-center text-[#4A4A4A]">
+                              No departmental users found.
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredUsers.map((u) => (
+                            <tr key={u.id} className="hover:bg-[#FAFAFA]">
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium">
+                                    {u.name.charAt(0)}
+                                  </div>
+                                  <span className="font-medium text-[#1A1A1A]">{u.name}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-[#4A4A4A]">{u.email}</td>
+                              <td className="px-4 py-3">
+                                {u.department ? (
+                                  <Badge
+                                    variant="outline"
+                                    className={DEPT_BADGE_CLS[u.department] ?? 'bg-gray-50 text-gray-700 border-gray-200'}
+                                  >
+                                    {u.department}
+                                  </Badge>
+                                ) : '—'}
+                              </td>
+                              <td className="px-4 py-3">
+                                {(u.locations?.length ?? 0) > 0 ? (
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <button className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-[#D6E4D9] text-[#2D5A45] hover:bg-[#C5D9C9] transition-colors">
+                                        {u.locations!.length} location{u.locations!.length !== 1 ? 's' : ''}
+                                      </button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-64 p-3" align="start">
+                                      <p className="text-xs font-semibold text-[#2D5A45] uppercase tracking-wide mb-2">
+                                        Locations ({u.locations!.length})
+                                      </p>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {u.locations!.map((loc, i) => (
+                                          <span key={i} className="text-xs bg-[#E8F5EE] text-[#2D5A45] border border-[#D6E4D9] px-2 py-0.5 rounded-full">
+                                            {loc}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </PopoverContent>
+                                  </Popover>
+                                ) : '—'}
+                              </td>
+                              <td className="px-4 py-3 text-[#4A4A4A]">{u.phone || '—'}</td>
+                              <td className="px-4 py-3">
+                                <Badge
+                                  variant="outline"
+                                  className={u.isActive
+                                    ? 'bg-green-50 text-green-700 border-green-200'
+                                    : 'bg-gray-50 text-gray-600 border-gray-200'
+                                  }
+                                >
+                                  {u.isActive ? 'Active' : 'Inactive'}
+                                </Badge>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() => handleToggleStatus(u)}
+                                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                    title={u.isActive ? 'Deactivate' : 'Activate'}
+                                  >
+                                    {u.isActive
+                                      ? <ToggleRight className="w-5 h-5 text-green-600" />
+                                      : <ToggleLeft className="w-5 h-5 text-gray-400" />
+                                    }
+                                  </button>
+                                  <button
+                                    onClick={() => openEditModal(u)}
+                                    className="p-2 hover:bg-blue-50 text-[#4A4A4A] hover:text-blue-600 rounded-lg transition-colors"
+                                    title="Edit"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(u)}
                                     className="p-2 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded-lg transition-colors"
                                     title="Delete"
                                   >

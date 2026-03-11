@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 
-export type UserType = 'desk-in-charge' | 'coordinator' | 'driver' | 'nizamat-in-charge';
+export type UserType = 'desk-in-charge' | 'coordinator' | 'driver' | 'nizamat-in-charge' | 'department-head';
 
 export interface SystemUser {
   id: string;
@@ -12,6 +12,8 @@ export interface SystemUser {
   countryCode?: string;
   assignedCountries?: string[];   // For desk-in-charge
   assignedDepartments?: string[]; // For desk-in-charge
+  department?: string;            // For department-head
+  locations?: string[];           // For department-head
   phone?: string;
   isActive: boolean;
   createdAt: string;
@@ -56,6 +58,43 @@ const INITIAL_USERS: SystemUser[] = [
     isActive: true,
     createdAt: '2024-01-20',
     lastLogin: '2024-03-02',
+  },
+  // Department heads
+  {
+    id: 'dh-001',
+    name: 'R1 In-Charge',
+    email: 'r1.jalsa@tabshir.org',
+    password: 'R1Jalsa123',
+    userType: 'department-head',
+    phone: '+44 7000 000001',
+    department: 'Reserve 1 (R1)',
+    locations: ['Jamia', 'University', 'Hotels'],
+    isActive: true,
+    createdAt: '2024-01-01',
+  },
+  {
+    id: 'dh-002',
+    name: 'UK Jamaat In-Charge',
+    email: 'ukjamaat.jalsa@tabshir.org',
+    password: 'UKJamaat123',
+    userType: 'department-head',
+    phone: '+44 7000 000002',
+    department: 'UK Jamaat',
+    locations: ['Bait Ul Futuh', 'Bait Ul Ehsan'],
+    isActive: true,
+    createdAt: '2024-01-01',
+  },
+  {
+    id: 'dh-003',
+    name: 'Central Guests In-Charge',
+    email: 'centralguests.jalsa@tabshir.org',
+    password: 'CentralGuests123',
+    userType: 'department-head',
+    phone: '+44 7000 000003',
+    department: 'Central Guests',
+    locations: ['Bait Ul Futuh VIP', 'Islamabad Inside', 'Islamabad Suburbs'],
+    isActive: true,
+    createdAt: '2024-01-01',
   },
   // Real Jalsa Desk Incharges
   {
@@ -172,6 +211,7 @@ export const USER_TYPE_LABELS: Record<UserType, string> = {
   'coordinator': 'Coordinator',
   'driver': 'Driver',
   'nizamat-in-charge': 'Nizamat In-Charge',
+  'department-head': 'Departmental Users',
 };
 
 export function UsersProvider({ children }: { children: ReactNode }) {
