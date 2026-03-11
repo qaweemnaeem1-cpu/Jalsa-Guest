@@ -12,6 +12,7 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: 'super-admin', label: 'Super Admin' },
   { value: 'desk-in-charge', label: 'Desk In-Charge' },
   { value: 'coordinator', label: 'Coordinator' },
+  { value: 'department-head', label: 'Dept. Head' },
 ];
 
 export default function LoginPage() {
@@ -132,7 +133,7 @@ export default function LoginPage() {
 
             <div className="mt-6 pt-6 border-t border-[#E8E3DB]">
               <p className="text-xs text-[#4A4A4A] mb-3 uppercase tracking-wide">Quick Login (Demo)</p>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {ROLE_OPTIONS.map((role) => (
                   <Button
                     key={role.value}

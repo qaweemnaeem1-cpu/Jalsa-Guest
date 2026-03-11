@@ -17,6 +17,9 @@ export function getRoleDisplayLabel(user: User): string {
   if (user.role === 'coordinator' && user.countryCode) {
     return `(${user.countryCode}) Coordinator`;
   }
+  if (user.role === 'department-head' && user.department) {
+    return user.department;
+  }
   const labels: Record<string, string> = {
     'super-admin': 'Super Admin',
     'desk-in-charge': 'Desk In-Charge',
@@ -24,6 +27,7 @@ export function getRoleDisplayLabel(user: User): string {
     'transport': 'Transport',
     'accommodation': 'Accommodation',
     'viewer': 'Viewer',
+    'department-head': 'Department Head',
   };
   return labels[user.role] ?? user.role;
 }

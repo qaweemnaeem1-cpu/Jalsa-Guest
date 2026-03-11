@@ -25,6 +25,11 @@ import DeskAuditTrailPage from '@/pages/DeskAuditTrailPage';
 import DeskProcessedPage from '@/pages/DeskProcessedPage';
 import DeskRejectedPage from '@/pages/DeskRejectedPage';
 import AdminAuditTrailPage from '@/pages/AdminAuditTrailPage';
+import DeptDashboardPage from '@/pages/DeptDashboardPage';
+import DeptIncomingPage from '@/pages/DeptIncomingPage';
+import DeptPlacedPage from '@/pages/DeptPlacedPage';
+import DeptSubUsersPage from '@/pages/DeptSubUsersPage';
+import DeptLocationsPage from '@/pages/DeptLocationsPage';
 
 function ProtectedRoute({ children, requiredRoles }: { children: React.ReactNode; requiredRoles?: string[] }) {
   const { isAuthenticated, user } = useAuth();
@@ -46,6 +51,12 @@ function GuestsPageOrRedirect() {
   return <GuestsPage />;
 }
 
+function DashboardOrRedirect() {
+  const { user } = useAuth();
+  if (user?.role === 'department-head') return <Navigate to="/dept/dashboard" replace />;
+  return <DashboardPage />;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -55,7 +66,7 @@ function AppRoutes() {
         path="/dashboard"
         element={
           <ProtectedRoute>
-            <DashboardPage />
+            <DashboardOrRedirect />
           </ProtectedRoute>
         }
       />
@@ -111,6 +122,11 @@ function AppRoutes() {
       <Route path="/desk/audit-trail" element={<Navigate to="/desk/messages" replace />} />
       <Route path="/desk/messages" element={<ProtectedRoute requiredRoles={['desk-in-charge','super-admin']}><DeskAuditTrailPage /></ProtectedRoute>} />
       <Route path="/admin/audit-trail" element={<ProtectedRoute requiredRoles={['super-admin']}><AdminAuditTrailPage /></ProtectedRoute>} />
+      <Route path="/dept/dashboard" element={<ProtectedRoute requiredRoles={['department-head', 'super-admin']}><DeptDashboardPage /></ProtectedRoute>} />
+      <Route path="/dept/incoming" element={<ProtectedRoute requiredRoles={['department-head', 'super-admin']}><DeptIncomingPage /></ProtectedRoute>} />
+      <Route path="/dept/placed" element={<ProtectedRoute requiredRoles={['department-head', 'super-admin']}><DeptPlacedPage /></ProtectedRoute>} />
+      <Route path="/dept/sub-users" element={<ProtectedRoute requiredRoles={['department-head', 'super-admin']}><DeptSubUsersPage /></ProtectedRoute>} />
+      <Route path="/dept/locations" element={<ProtectedRoute requiredRoles={['department-head', 'super-admin']}><DeptLocationsPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
