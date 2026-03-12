@@ -99,9 +99,11 @@ export interface Guest {
   assignedDepartment?: string;
   assignedDepartmentAt?: string;
   assignedDepartmentBy?: string;
+  assignedDepartmentByName?: string;
   placedLocation?: string;
   placedAt?: string;
   placedBy?: string;
+  placedByName?: string;
   remarks?: GuestRemark[];
   statusHistory?: GuestStatusEvent[];
 }

@@ -9,14 +9,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Send, Pencil, Trash2, X, Plane } from 'lucide-react';
+import { Send, Pencil, Trash2, X, Plane, Building2 } from 'lucide-react';
 import { AuditTimeline } from '@/components/AuditTimeline';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { useAuditTrail } from '@/hooks/useAuditTrail';
 import {
   GUEST_STATUS_LABELS, ROLE_LABELS, VISA_STATUS_LABELS,
-  DEFAULT_DESIGNATIONS, COUNTRIES,
+  DEFAULT_DESIGNATIONS, COUNTRIES, DEPT_LOCATIONS,
 } from '@/lib/constants';
 import type { Guest, GuestStatus, UserRole } from '@/types';
 
@@ -127,6 +127,29 @@ const getRemarkBubbleStyle = (role: UserRole): string => {
   }
 };
 
+const DEPT_LIST = Object.keys(DEPT_LOCATIONS);
+
+const DEPT_PILL: Record<string, string> = {
+  'Reserve 1 (R1)': 'bg-blue-50 text-blue-700 border-blue-200',
+  'UK Jamaat':      'bg-purple-50 text-purple-700 border-purple-200',
+  'Central Guests': 'bg-teal-50 text-teal-700 border-teal-200',
+};
+
+function deptPillCls(dept: string) {
+  return DEPT_PILL[dept] ?? 'bg-gray-50 text-gray-700 border-gray-200';
+}
+
+const LOC_COLORS = [
+  'bg-blue-50 text-blue-700 border-blue-200',
+  'bg-purple-50 text-purple-700 border-purple-200',
+  'bg-teal-50 text-teal-700 border-teal-200',
+];
+
+function locPillCls(dept: string, loc: string) {
+  const idx = (DEPT_LOCATIONS[dept] ?? []).indexOf(loc);
+  return LOC_COLORS[idx] ?? 'bg-gray-50 text-gray-700 border-gray-200';
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function FieldCard({ label, value }: { label: string; value?: React.ReactNode }) {
@@ -197,15 +220,18 @@ export function GuestViewModal({
 }: GuestViewModalProps) {
   const { user } = useAuth();
   const { updateGuest, addRemark } = useGuests();
-  const { getEntriesForGuest } = useAuditTrail();
+  const { getEntriesForGuest, addEntry } = useAuditTrail();
 
   const [commentText, setCommentText] = useState('');
   const [roomInput, setRoomInput] = useState('');
+  const [deptEditValue, setDeptEditValue] = useState('');
+  const [locEditValue, setLocEditValue] = useState('');
 
   const canComment    = user ? ['desk-in-charge', 'super-admin', 'coordinator'].includes(user.role) : false;
   const canAssignRoom = user ? ['super-admin', 'accommodation'].includes(user.role) : false;
   const isSuperAdmin  = user?.role === 'super-admin';
   const isCoordinator = user?.role === 'coordinator';
+  const canEditDept   = isEditMode && user ? ['super-admin', 'desk-in-charge'].includes(user.role) : false;
   const isCoordinatorNeedsCorrection =
     isCoordinator && guest?.status === 'Needs Correction' && guest?.submittedBy === user?.id;
 
@@ -229,6 +255,8 @@ export function GuestViewModal({
     if (guest && open) {
       setRoomInput(guest.roomAssignment ?? '');
       setCommentText('');
+      setDeptEditValue(guest.assignedDepartment ?? '');
+      setLocEditValue(guest.placedLocation ?? '');
       reset({
         fullName:             guest.fullName,
         passportNumber:       guest.passportNumber,
@@ -331,6 +359,40 @@ export function GuestViewModal({
     setCommentText('');
   };
 
+  const handleSaveDept = () => {
+    if (!guest || !user) return;
+    const oldDept = guest.assignedDepartment ?? '';
+    const oldLoc  = guest.placedLocation ?? '';
+    if (deptEditValue === oldDept && locEditValue === oldLoc) {
+      toast.info('No changes made');
+      return;
+    }
+    const now = new Date().toISOString();
+    updateGuest(guest.id, {
+      assignedDepartment:       deptEditValue || undefined,
+      assignedDepartmentAt:     deptEditValue ? now : undefined,
+      assignedDepartmentBy:     deptEditValue ? user.id : undefined,
+      assignedDepartmentByName: deptEditValue ? user.name : undefined,
+      placedLocation:           locEditValue || undefined,
+      placedAt:                 locEditValue ? now : undefined,
+      placedByName:             locEditValue ? user.name : undefined,
+    });
+    const details: string[] = [];
+    if (deptEditValue !== oldDept) details.push(`Department: ${oldDept || 'None'} → ${deptEditValue || 'None'}`);
+    if (locEditValue  !== oldLoc)  details.push(`Location: ${oldLoc || 'None'} → ${locEditValue || 'None'}`);
+    addEntry({
+      guestId:        guest.id,
+      guestName:      guest.fullName,
+      guestReference: guest.referenceNumber,
+      type:           'assignment',
+      action:         'Department assignment updated',
+      details:        details.join('; '),
+      createdBy:      { id: user.id, name: user.name, role: user.role },
+      createdAt:      now,
+    });
+    toast.success('Department assignment saved');
+  };
+
   const handleAssignRoom = () => {
     if (!guest || !user || !canAssignRoom) return;
     updateGuest(guest.id, { roomAssignment: roomInput || undefined });
@@ -419,7 +481,7 @@ export function GuestViewModal({
             <TabsList className="h-auto p-0 bg-transparent gap-0 w-full justify-start rounded-none flex-wrap">
               <TabsTrigger value="personal" className={tabTriggerCls}>Personal Details</TabsTrigger>
               <TabsTrigger value="flight"   className={tabTriggerCls}>Flight &amp; Travel</TabsTrigger>
-              <TabsTrigger value="room"     className={tabTriggerCls}>Room</TabsTrigger>
+              <TabsTrigger value="room"     className={tabTriggerCls}>Department</TabsTrigger>
               <TabsTrigger value="remarks"  className={tabTriggerCls}>
                 Remarks
                 {(guest.remarks?.length ?? 0) > 0 && (
@@ -713,53 +775,112 @@ export function GuestViewModal({
               </div>
             </TabsContent>
 
-            {/* ── Tab 3: Room ── */}
+            {/* ── Tab 3: Department ── */}
             <TabsContent value="room" className="mt-0 px-8 py-6 space-y-5">
               <div className="grid grid-cols-2 gap-6">
-                <div className="bg-white rounded-xl border border-[#E8E3DB] p-5">
-                  <p className="text-xs text-[#4A4A4A] mb-2">Room Assignment</p>
-                  <p className={`text-2xl font-bold ${guest.roomAssignment ? 'text-[#2D5A45]' : 'text-[#D4CFC7]'}`}>
-                    {guest.roomAssignment || '—'}
-                  </p>
-                </div>
-                <div className="bg-white rounded-xl border border-[#E8E3DB] p-5">
-                  <p className="text-xs text-[#4A4A4A] mb-2">Department</p>
-                  <p className={`text-2xl font-bold ${guest.department ? 'text-[#2D5A45]' : 'text-[#D4CFC7]'}`}>
-                    {guest.department || '—'}
-                  </p>
-                </div>
-              </div>
-
-              {!guest.roomAssignment && (
-                <p className="text-sm text-[#4A4A4A] italic">No room assigned yet.</p>
-              )}
-
-              <div className="flex items-center gap-3">
-                <Badge variant="outline" className={getStatusBadgeStyle(guest.status)}>
-                  {GUEST_STATUS_LABELS[guest.status]}
-                </Badge>
-                <span className="text-sm text-[#4A4A4A]">Submitted: {guest.submittedAt}</span>
-              </div>
-
-              {canAssignRoom && (
-                <div className="pt-4 border-t border-[#E8E3DB]">
-                  <Label className="text-sm font-medium text-[#1A1A1A]">
-                    {guest.roomAssignment ? 'Update Room' : 'Assign Room'}
-                  </Label>
-                  <div className="flex gap-2 mt-2">
-                    <Input
-                      value={roomInput}
-                      onChange={(e) => setRoomInput(e.target.value)}
-                      placeholder="Enter room number…"
-                      className="flex-1 border-[#D4CFC7] bg-white"
-                    />
-                    <Button
-                      onClick={handleAssignRoom}
-                      className="bg-[#2D5A45] hover:bg-[#234839] text-white"
-                    >
-                      Save
-                    </Button>
+                {/* Department card */}
+                <div className="bg-white rounded-xl border border-[#E8E3DB] p-5 space-y-3">
+                  <SectionHeading>Department Assignment</SectionHeading>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-xs text-[#4A4A4A] mb-1.5">Assigned Department</p>
+                      {guest.assignedDepartment ? (
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium border ${deptPillCls(guest.assignedDepartment)}`}>
+                          <Building2 className="w-3.5 h-3.5 mr-1.5" />
+                          {guest.assignedDepartment}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-[#4A4A4A] italic">Not assigned</span>
+                      )}
+                    </div>
+                    {guest.assignedDepartmentByName && (
+                      <PlainField label="Assigned by" value={guest.assignedDepartmentByName} />
+                    )}
+                    {guest.assignedDepartmentAt && (
+                      <PlainField
+                        label="Assigned on"
+                        value={new Date(guest.assignedDepartmentAt).toLocaleString('en-GB', {
+                          day: 'numeric', month: 'short', year: 'numeric',
+                          hour: '2-digit', minute: '2-digit',
+                        })}
+                      />
+                    )}
                   </div>
+                </div>
+
+                {/* Location card */}
+                <div className="bg-white rounded-xl border border-[#E8E3DB] p-5 space-y-3">
+                  <SectionHeading>Location Placement</SectionHeading>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-xs text-[#4A4A4A] mb-1.5">Placed Location</p>
+                      {guest.placedLocation ? (
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium border ${locPillCls(guest.assignedDepartment ?? '', guest.placedLocation)}`}>
+                          {guest.placedLocation}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-[#4A4A4A] italic">Not placed</span>
+                      )}
+                    </div>
+                    {guest.placedByName && (
+                      <PlainField label="Placed by" value={guest.placedByName} />
+                    )}
+                    {guest.placedAt && (
+                      <PlainField
+                        label="Placed on"
+                        value={new Date(guest.placedAt).toLocaleString('en-GB', {
+                          day: 'numeric', month: 'short', year: 'numeric',
+                          hour: '2-digit', minute: '2-digit',
+                        })}
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Edit controls — super-admin + desk-in-charge in edit mode only */}
+              {canEditDept && (
+                <div className="bg-white rounded-xl border border-[#E8E3DB] p-5 space-y-4">
+                  <SectionHeading>Update Assignment</SectionHeading>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs font-medium text-[#4A4A4A] mb-1">Department</p>
+                      <select
+                        value={deptEditValue}
+                        onChange={e => {
+                          setDeptEditValue(e.target.value);
+                          setLocEditValue('');
+                        }}
+                        className={selectCls}
+                      >
+                        <option value="">None</option>
+                        {DEPT_LIST.map(d => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-[#4A4A4A] mb-1">Location</p>
+                      <select
+                        value={locEditValue}
+                        onChange={e => setLocEditValue(e.target.value)}
+                        disabled={!deptEditValue}
+                        className={`${selectCls} ${!deptEditValue ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <option value="">None</option>
+                        {(DEPT_LOCATIONS[deptEditValue] ?? []).map(loc => (
+                          <option key={loc} value={loc}>{loc}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={handleSaveDept}
+                    className="bg-[#2D5A45] hover:bg-[#234839] text-white"
+                  >
+                    <Building2 className="w-4 h-4 mr-1.5" />
+                    Save Assignment
+                  </Button>
                 </div>
               )}
             </TabsContent>

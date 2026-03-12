@@ -139,12 +139,13 @@ export default function DeskProcessedPage() {
       assignedDepartment: deptAssign.dept,
       assignedDepartmentAt: new Date().toISOString(),
       assignedDepartmentBy: user.id,
+      assignedDepartmentByName: user.name,
     });
     addEntry({
       guestId: g.id,
       guestName: g.fullName,
       guestReference: g.referenceNumber,
-      type: 'field_change',
+      type: 'assignment',
       action: 'Department assigned',
       details: `Assigned to ${deptAssign.dept}`,
       newValue: deptAssign.dept,

@@ -58,9 +58,11 @@ const generateSampleGuests = (): Guest[] => {
       assignedDepartment: 'Reserve 1 (R1)',
       assignedDepartmentAt: '2024-01-14T10:00:00',
       assignedDepartmentBy: '1',
+      assignedDepartmentByName: 'Ahmad Khan',
       placedLocation: 'Jamia',
       placedAt: '2024-01-14T11:00:00',
       placedBy: 'dh-001',
+      placedByName: 'R1 In-Charge',
       statusHistory: [
         {
           id: 'sh1',
@@ -126,9 +128,11 @@ const generateSampleGuests = (): Guest[] => {
       assignedDepartment: 'Reserve 1 (R1)',
       assignedDepartmentAt: '2024-01-15T10:00:00',
       assignedDepartmentBy: '1',
+      assignedDepartmentByName: 'Ahmad Khan',
       placedLocation: 'Hotels',
       placedAt: '2024-01-15T13:00:00',
       placedBy: 'dh-001',
+      placedByName: 'R1 In-Charge',
       statusHistory: [
         {
           id: 'sh4',
