@@ -12,8 +12,9 @@ export interface SystemUser {
   countryCode?: string;
   assignedCountries?: string[];   // For desk-in-charge
   assignedDepartments?: string[]; // For desk-in-charge
-  department?: string;            // For department-head
+  department?: string;            // For department-head or nizamat-in-charge
   locations?: string[];           // For department-head
+  location?: string;              // For nizamat-in-charge (single assigned location)
   phone?: string;
   isActive: boolean;
   createdAt: string;
@@ -59,6 +60,17 @@ const INITIAL_USERS: SystemUser[] = [
     createdAt: '2024-01-20',
     lastLogin: '2024-03-02',
   },
+  // Reserve 1 (R1) sub users
+  { id: 'su-r1-1', name: 'Jamia Manager',      email: 'jamia.r1@tabshir.org',       password: 'Jamia123',      userType: 'nizamat-in-charge', department: 'Reserve 1 (R1)', location: 'Jamia',               phone: '+44 7000 100001', isActive: true, createdAt: '2024-01-01' },
+  { id: 'su-r1-2', name: 'University Manager', email: 'university.r1@tabshir.org',  password: 'University123', userType: 'nizamat-in-charge', department: 'Reserve 1 (R1)', location: 'University',          phone: '+44 7000 100002', isActive: true, createdAt: '2024-01-01' },
+  { id: 'su-r1-3', name: 'Hotels Manager',     email: 'hotels.r1@tabshir.org',      password: 'Hotels123',     userType: 'nizamat-in-charge', department: 'Reserve 1 (R1)', location: 'Hotels',              phone: '+44 7000 100003', isActive: true, createdAt: '2024-01-01' },
+  // UK Jamaat sub users
+  { id: 'su-ukj-1', name: 'Bait Ul Futuh Manager', email: 'baitulfutuh.ukj@tabshir.org', password: 'BaitUlFutuh123', userType: 'nizamat-in-charge', department: 'UK Jamaat', location: 'Bait Ul Futuh', phone: '+44 7000 200001', isActive: true, createdAt: '2024-01-01' },
+  { id: 'su-ukj-2', name: 'Bait Ul Ehsan Manager', email: 'baitulehsan.ukj@tabshir.org', password: 'BaitUlEhsan123', userType: 'nizamat-in-charge', department: 'UK Jamaat', location: 'Bait Ul Ehsan', phone: '+44 7000 200002', isActive: true, createdAt: '2024-01-01' },
+  // Central Guests sub users
+  { id: 'su-cg-1', name: 'VIP Manager',               email: 'vip.central@tabshir.org',     password: 'VIP123',             userType: 'nizamat-in-charge', department: 'Central Guests', location: 'Bait Ul Futuh VIP',    phone: '+44 7000 300001', isActive: true, createdAt: '2024-01-01' },
+  { id: 'su-cg-2', name: 'Islamabad Inside Manager',  email: 'inside.central@tabshir.org',  password: 'Inside123',          userType: 'nizamat-in-charge', department: 'Central Guests', location: 'Islamabad Inside',     phone: '+44 7000 300002', isActive: true, createdAt: '2024-01-01' },
+  { id: 'su-cg-3', name: 'Islamabad Suburbs Manager', email: 'suburbs.central@tabshir.org', password: 'Suburbs123',         userType: 'nizamat-in-charge', department: 'Central Guests', location: 'Islamabad Suburbs',    phone: '+44 7000 300003', isActive: true, createdAt: '2024-01-01' },
   // Department heads
   {
     id: 'dh-001',
@@ -210,7 +222,7 @@ export const USER_TYPE_LABELS: Record<UserType, string> = {
   'desk-in-charge': 'Desk In-Charge',
   'coordinator': 'Coordinator',
   'driver': 'Driver',
-  'nizamat-in-charge': 'Nizamat In-Charge',
+  'nizamat-in-charge': 'Sub. Departmental Users',
   'department-head': 'Departmental Users',
 };
 

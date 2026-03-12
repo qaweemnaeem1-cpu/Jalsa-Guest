@@ -36,7 +36,7 @@ import {
   CheckSquare,
   MessageSquare,
 } from 'lucide-react';
-import { COUNTRIES, ROLE_LABELS } from '@/lib/constants';
+import { COUNTRIES, ROLE_LABELS, DEPT_LOCATIONS } from '@/lib/constants';
 import { CountryAssignmentPanel } from '@/components/CountryAssignmentPanel';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { UserRole } from '@/types';
@@ -80,7 +80,7 @@ const TABS: { value: UserType; label: string }[] = [
   { value: 'desk-in-charge', label: 'Desk In-Charge' },
   { value: 'coordinator', label: 'Coordinators' },
   { value: 'driver', label: 'Drivers' },
-  { value: 'nizamat-in-charge', label: 'Nizamat In-Charge' },
+  { value: 'nizamat-in-charge', label: 'Sub. Departmental Users' },
   { value: 'department-head', label: 'Departmental Users' },
 ];
 
@@ -89,6 +89,17 @@ const DEPT_BADGE_CLS: Record<string, string> = {
   'UK Jamaat':       'bg-purple-50 text-purple-700 border-purple-200',
   'Central Guests':  'bg-teal-50 text-teal-700 border-teal-200',
 };
+
+const LOC_PILL_COLORS = [
+  'bg-blue-50 text-blue-700 border-blue-200',
+  'bg-purple-50 text-purple-700 border-purple-200',
+  'bg-teal-50 text-teal-700 border-teal-200',
+];
+
+function locPillCls(dept: string, loc: string) {
+  const idx = (DEPT_LOCATIONS[dept] ?? []).indexOf(loc);
+  return LOC_PILL_COLORS[idx] ?? 'bg-gray-50 text-gray-700 border-gray-200';
+}
 
 interface UserFormData {
   name: string;
@@ -99,6 +110,8 @@ interface UserFormData {
   countryCode: string;
   isActive: boolean;
   assignedDeskInchargeId: string;
+  department: string;
+  location: string;
 }
 
 const COORD_PAGE_SIZE = 20;
@@ -112,6 +125,9 @@ export default function UsersPage() {
   const [activeTab, setActiveTab] = useState<UserType>('desk-in-charge');
   const [searchQuery, setSearchQuery] = useState('');
   const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
+
+  // Sub departmental users dept filter
+  const [subDeptFilter, setSubDeptFilter] = useState('');
 
   // Coordinator pagination
   const [coordPage, setCoordPage] = useState(1);
@@ -132,17 +148,25 @@ export default function UsersPage() {
     countryCode: '',
     isActive: true,
     assignedDeskInchargeId: '',
+    department: '',
+    location: '',
   });
 
   if (!user) return null;
 
   const navItems = NAV_ITEMS[user.role] || [];
 
-  // Non-coordinator users (desk-in-charge, driver, nizamat-in-charge)
-  const filteredUsers = getUsersByType(activeTab).filter(u =>
-    u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Non-coordinator users
+  const filteredUsers = getUsersByType(activeTab).filter(u => {
+    const q = searchQuery.toLowerCase();
+    const matchesSearch =
+      u.name.toLowerCase().includes(q) ||
+      u.email.toLowerCase().includes(q) ||
+      (activeTab === 'nizamat-in-charge' && (u.location ?? '').toLowerCase().includes(q));
+    const matchesDept =
+      activeTab !== 'nizamat-in-charge' || !subDeptFilter || u.department === subDeptFilter;
+    return matchesSearch && matchesDept;
+  });
 
   // Coordinator-specific filtering + pagination
   const filteredCoordinators = useMemo(() => {
@@ -176,6 +200,8 @@ export default function UsersPage() {
       countryCode: '',
       isActive: true,
       assignedDeskInchargeId: '',
+      department: '',
+      location: '',
     });
     setIsModalOpen(true);
   };
@@ -192,6 +218,8 @@ export default function UsersPage() {
       countryCode: userToEdit.countryCode || '',
       isActive: userToEdit.isActive,
       assignedDeskInchargeId: '',
+      department: userToEdit.department || '',
+      location: userToEdit.location || '',
     });
     setIsModalOpen(true);
   };
@@ -255,6 +283,10 @@ export default function UsersPage() {
       }
     } else {
       const country = COUNTRIES.find(c => c.code === formData.countryCode);
+      if (activeTab === 'nizamat-in-charge' && (!formData.department || !formData.location)) {
+        toast.error('Please select a department and location');
+        return;
+      }
       if (editingUser) {
         updateUser(editingUser.id, {
           ...formData,
@@ -417,6 +449,7 @@ export default function UsersPage() {
                     setActiveTab(tab.value);
                     setSearchQuery('');
                     setCoordPage(1);
+                    setSubDeptFilter('');
                   }}
                   className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
                     activeTab === tab.value
@@ -430,26 +463,73 @@ export default function UsersPage() {
             </div>
 
             {/* Stats */}
-            <div className="flex gap-4 mb-6">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                  {stats.total}
-                </Badge>
-                <span className="text-sm text-[#4A4A4A]">Total</span>
+            {activeTab === 'nizamat-in-charge' ? (() => {
+              const allSub = getUsersByType('nizamat-in-charge');
+              const r1Count  = allSub.filter(u => u.department === 'Reserve 1 (R1)').length;
+              const ukjCount = allSub.filter(u => u.department === 'UK Jamaat').length;
+              const cgCount  = allSub.filter(u => u.department === 'Central Guests').length;
+              return (
+                <div className="flex flex-wrap gap-4 mb-4">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">{allSub.length}</Badge>
+                    <span className="text-sm text-[#4A4A4A]">Total</span>
+                  </div>
+                  <span className="text-[#D4CFC7] self-center">|</span>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">{r1Count}</Badge>
+                    <span className="text-sm text-[#4A4A4A]">Reserve 1</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">{ukjCount}</Badge>
+                    <span className="text-sm text-[#4A4A4A]">UK Jamaat</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200">{cgCount}</Badge>
+                    <span className="text-sm text-[#4A4A4A]">Central Guests</span>
+                  </div>
+                </div>
+              );
+            })() : (
+              <div className="flex gap-4 mb-6">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                    {stats.total}
+                  </Badge>
+                  <span className="text-sm text-[#4A4A4A]">Total</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                    {stats.active}
+                  </Badge>
+                  <span className="text-sm text-[#4A4A4A]">Active</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">
+                    {stats.inactive}
+                  </Badge>
+                  <span className="text-sm text-[#4A4A4A]">Inactive</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                  {stats.active}
-                </Badge>
-                <span className="text-sm text-[#4A4A4A]">Active</span>
+            )}
+
+            {/* Dept filter chips — Sub. Departmental Users only */}
+            {activeTab === 'nizamat-in-charge' && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {['', 'Reserve 1 (R1)', 'UK Jamaat', 'Central Guests'].map(dept => (
+                  <button
+                    key={dept}
+                    onClick={() => setSubDeptFilter(dept)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                      subDeptFilter === dept
+                        ? 'bg-[#2D5A45] text-white'
+                        : 'bg-white text-[#4A4A4A] border border-[#D4CFC7] hover:bg-[#F5F0E8]'
+                    }`}
+                  >
+                    {dept || 'All'}
+                  </button>
+                ))}
               </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">
-                  {stats.inactive}
-                </Badge>
-                <span className="text-sm text-[#4A4A4A]">Inactive</span>
-              </div>
-            </div>
+            )}
 
             {/* Search and Add */}
             <Card className="shadow-sm mb-6">
@@ -490,8 +570,14 @@ export default function UsersPage() {
                       <tr>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Name</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Email</th>
-                        {activeTab !== 'desk-in-charge' && activeTab !== 'department-head' && (
+                        {activeTab !== 'desk-in-charge' && activeTab !== 'department-head' && activeTab !== 'nizamat-in-charge' && (
                           <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Password</th>
+                        )}
+                        {activeTab === 'nizamat-in-charge' && (
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Department</th>
+                        )}
+                        {activeTab === 'nizamat-in-charge' && (
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Location</th>
                         )}
                         {activeTab === 'coordinator' && (
                           <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Country</th>
@@ -681,6 +767,62 @@ export default function UsersPage() {
                                     className="p-2 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded-lg transition-colors"
                                     title="Delete"
                                   >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )
+                      ) : activeTab === 'nizamat-in-charge' ? (
+                        // ── Sub Departmental Users rows ───────────────────────
+                        filteredUsers.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="px-4 py-8 text-center text-[#4A4A4A]">
+                              No sub departmental users found.
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredUsers.map((u) => (
+                            <tr key={u.id} className="hover:bg-[#FAFAFA]">
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium">
+                                    {u.name.charAt(0)}
+                                  </div>
+                                  <span className="font-medium text-[#1A1A1A]">{u.name}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-[#4A4A4A] text-sm">{u.email}</td>
+                              <td className="px-4 py-3">
+                                {u.department ? (
+                                  <Badge variant="outline" className={DEPT_BADGE_CLS[u.department] ?? 'bg-gray-50 text-gray-700 border-gray-200'}>
+                                    {u.department}
+                                  </Badge>
+                                ) : '—'}
+                              </td>
+                              <td className="px-4 py-3">
+                                {u.location ? (
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${locPillCls(u.department ?? '', u.location)}`}>
+                                    {u.location}
+                                  </span>
+                                ) : '—'}
+                              </td>
+                              <td className="px-4 py-3 text-[#4A4A4A]">{u.phone || '—'}</td>
+                              <td className="px-4 py-3">
+                                <Badge variant="outline" className={u.isActive ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-600 border-gray-200'}>
+                                  {u.isActive ? 'Active' : 'Inactive'}
+                                </Badge>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button onClick={() => handleToggleStatus(u)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title={u.isActive ? 'Deactivate' : 'Activate'}>
+                                    {u.isActive ? <ToggleRight className="w-5 h-5 text-green-600" /> : <ToggleLeft className="w-5 h-5 text-gray-400" />}
+                                  </button>
+                                  <button onClick={() => openEditModal(u)} className="p-2 hover:bg-blue-50 text-[#4A4A4A] hover:text-blue-600 rounded-lg transition-colors" title="Edit">
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => handleDelete(u)} className="p-2 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded-lg transition-colors" title="Delete">
                                     <Trash2 className="w-4 h-4" />
                                   </button>
                                 </div>
@@ -972,6 +1114,38 @@ export default function UsersPage() {
                   />
                 </div>
               </div>
+
+              {activeTab === 'nizamat-in-charge' && (
+                <>
+                  <div className="space-y-2">
+                    <Label className="text-[#1A1A1A]">Department *</Label>
+                    <select
+                      value={formData.department}
+                      onChange={e => setFormData({ ...formData, department: e.target.value, location: '' })}
+                      className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] h-11"
+                    >
+                      <option value="">— Select department —</option>
+                      {Object.keys(DEPT_LOCATIONS).map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[#1A1A1A]">Location *</Label>
+                    <select
+                      value={formData.location}
+                      onChange={e => setFormData({ ...formData, location: e.target.value })}
+                      disabled={!formData.department}
+                      className={`w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] h-11 ${!formData.department ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <option value="">— Select location —</option>
+                      {(DEPT_LOCATIONS[formData.department] ?? []).map(loc => (
+                        <option key={loc} value={loc}>{loc}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
 
               {activeTab === 'coordinator' && (
                 <>
