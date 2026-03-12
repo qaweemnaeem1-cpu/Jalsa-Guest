@@ -3,7 +3,7 @@ import { Users, Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Eye, EyeOff } fro
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { DeptSidebar } from '@/components/DeptSidebar';
-import { DEPT_LOCATIONS, LOCATION_PILL_COLORS } from '@/lib/constants';
+import { useDepartments } from '@/hooks/useDepartments';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -55,16 +55,12 @@ let nextSubUserId = 200;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function getLocationPillColor(location: string, locations: string[]): string {
-  const idx = locations.indexOf(location);
-  return LOCATION_PILL_COLORS[idx] ?? 'bg-gray-50 text-gray-700 border-gray-200';
-}
-
 export default function DeptSubUsersPage() {
   const { user } = useAuth();
+  const { departments, getLocPillCls } = useDepartments();
 
   const dept = user?.department ?? '';
-  const locations = DEPT_LOCATIONS[dept] ?? [];
+  const locations = departments[dept] ?? [];
 
   const [subUsers, setSubUsers] = useState<SubUser[]>(() => SEED_USERS[dept] ?? []);
 
@@ -224,7 +220,7 @@ export default function DeptSubUsersPage() {
                         <td className="px-4 py-3 font-medium text-[#1A1A1A]">{su.name}</td>
                         <td className="px-4 py-3 text-[#4A4A4A]">{su.email}</td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getLocationPillColor(su.location, locations)}`}>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getLocPillCls(dept, su.location)}`}>
                             {su.location}
                           </span>
                         </td>

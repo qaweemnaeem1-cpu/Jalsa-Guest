@@ -3,18 +3,19 @@ import { CheckCircle, Eye } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { DeptSidebar } from '@/components/DeptSidebar';
-import { DEPT_LOCATIONS, LOCATION_PILL_COLORS } from '@/lib/constants';
+import { useDepartments } from '@/hooks/useDepartments';
 import { GuestViewModal } from '@/components/GuestViewModal';
 
 export default function DeptPlacedPage() {
   const { user } = useAuth();
   const { guests } = useGuests();
+  const { departments, getLocPillCls } = useDepartments();
 
   const [viewGuestId, setViewGuestId] = useState<string | null>(null);
   const [filterLocation, setFilterLocation] = useState<string>('');
 
   const dept = user?.department ?? '';
-  const locations = DEPT_LOCATIONS[dept] ?? [];
+  const locations = departments[dept] ?? [];
 
   const placedGuests = useMemo(
     () => guests.filter(g => g.assignedDepartment === dept && !!g.placedLocation),
@@ -31,10 +32,7 @@ export default function DeptPlacedPage() {
     [guests, viewGuestId],
   );
 
-  const getLocationPill = (loc: string) => {
-    const idx = locations.indexOf(loc);
-    return LOCATION_PILL_COLORS[idx] ?? 'bg-gray-50 text-gray-700 border-gray-200';
-  };
+  const getLocationPill = (loc: string) => getLocPillCls(dept, loc);
 
   if (!user) return null;
 

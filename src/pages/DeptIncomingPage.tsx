@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { DeptSidebar } from '@/components/DeptSidebar';
-import { DEPT_LOCATIONS } from '@/lib/constants';
+import { useDepartments } from '@/hooks/useDepartments';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import {
   AlertDialog,
@@ -20,13 +20,14 @@ import {
 export default function DeptIncomingPage() {
   const { user } = useAuth();
   const { guests, updateGuest } = useGuests();
+  const { departments } = useDepartments();
 
   const [viewGuestId, setViewGuestId] = useState<string | null>(null);
   const [pendingPlacement, setPendingPlacement] = useState<{ guestId: string; location: string } | null>(null);
   const [selectedLocations, setSelectedLocations] = useState<Record<string, string>>({});
 
   const dept = user?.department ?? '';
-  const locations = DEPT_LOCATIONS[dept] ?? [];
+  const locations = departments[dept] ?? [];
 
   const incomingGuests = useMemo(
     () => guests.filter(g => g.assignedDepartment === dept && !g.placedLocation),

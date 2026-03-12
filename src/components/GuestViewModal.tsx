@@ -16,8 +16,9 @@ import { useGuests } from '@/hooks/useGuests';
 import { useAuditTrail } from '@/hooks/useAuditTrail';
 import {
   GUEST_STATUS_LABELS, ROLE_LABELS, VISA_STATUS_LABELS,
-  DEFAULT_DESIGNATIONS, COUNTRIES, DEPT_LOCATIONS,
+  DEFAULT_DESIGNATIONS, COUNTRIES,
 } from '@/lib/constants';
+import { useDepartments } from '@/hooks/useDepartments';
 import type { Guest, GuestStatus, UserRole } from '@/types';
 
 // ─── Security helper ──────────────────────────────────────────────────────────
@@ -127,28 +128,6 @@ const getRemarkBubbleStyle = (role: UserRole): string => {
   }
 };
 
-const DEPT_LIST = Object.keys(DEPT_LOCATIONS);
-
-const DEPT_PILL: Record<string, string> = {
-  'Reserve 1 (R1)': 'bg-blue-50 text-blue-700 border-blue-200',
-  'UK Jamaat':      'bg-purple-50 text-purple-700 border-purple-200',
-  'Central Guests': 'bg-teal-50 text-teal-700 border-teal-200',
-};
-
-function deptPillCls(dept: string) {
-  return DEPT_PILL[dept] ?? 'bg-gray-50 text-gray-700 border-gray-200';
-}
-
-const LOC_COLORS = [
-  'bg-blue-50 text-blue-700 border-blue-200',
-  'bg-purple-50 text-purple-700 border-purple-200',
-  'bg-teal-50 text-teal-700 border-teal-200',
-];
-
-function locPillCls(dept: string, loc: string) {
-  const idx = (DEPT_LOCATIONS[dept] ?? []).indexOf(loc);
-  return LOC_COLORS[idx] ?? 'bg-gray-50 text-gray-700 border-gray-200';
-}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -221,6 +200,7 @@ export function GuestViewModal({
   const { user } = useAuth();
   const { updateGuest, addRemark } = useGuests();
   const { getEntriesForGuest, addEntry } = useAuditTrail();
+  const { departmentList, departments, getDeptBadgeCls, getLocPillCls } = useDepartments();
 
   const [commentText, setCommentText] = useState('');
   const [roomInput, setRoomInput] = useState('');
@@ -785,7 +765,7 @@ export function GuestViewModal({
                     <div>
                       <p className="text-xs text-[#4A4A4A] mb-1.5">Assigned Department</p>
                       {guest.assignedDepartment ? (
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium border ${deptPillCls(guest.assignedDepartment)}`}>
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium border ${getDeptBadgeCls(guest.assignedDepartment)}`}>
                           <Building2 className="w-3.5 h-3.5 mr-1.5" />
                           {guest.assignedDepartment}
                         </span>
@@ -815,7 +795,7 @@ export function GuestViewModal({
                     <div>
                       <p className="text-xs text-[#4A4A4A] mb-1.5">Placed Location</p>
                       {guest.placedLocation ? (
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium border ${locPillCls(guest.assignedDepartment ?? '', guest.placedLocation)}`}>
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium border ${getLocPillCls(guest.assignedDepartment ?? '', guest.placedLocation)}`}>
                           {guest.placedLocation}
                         </span>
                       ) : (
@@ -854,7 +834,7 @@ export function GuestViewModal({
                         className={selectCls}
                       >
                         <option value="">None</option>
-                        {DEPT_LIST.map(d => (
+                        {departmentList.map(d => (
                           <option key={d} value={d}>{d}</option>
                         ))}
                       </select>
@@ -868,7 +848,7 @@ export function GuestViewModal({
                         className={`${selectCls} ${!deptEditValue ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         <option value="">None</option>
-                        {(DEPT_LOCATIONS[deptEditValue] ?? []).map(loc => (
+                        {(departments[deptEditValue] ?? []).map(loc => (
                           <option key={loc} value={loc}>{loc}</option>
                         ))}
                       </select>

@@ -6,6 +6,7 @@ import { UsersProvider } from '@/hooks/useUsers';
 import { AssignableItemsProvider } from '@/hooks/useAssignableItems';
 import { CoordinatorsProvider } from '@/hooks/useCoordinators';
 import { AuditTrailProvider } from '@/hooks/useAuditTrail';
+import { DepartmentsProvider } from '@/hooks/useDepartments';
 import { Toaster } from 'sonner';
 
 import LandingPage from '@/pages/LandingPage';
@@ -136,6 +137,7 @@ function App() {
   return (
     <AuthProvider>
       <UsersProvider>
+        <DepartmentsProvider>
         <CoordinatorsProvider>
         <AssignableItemsProvider>
         <DesignationsProvider>
@@ -150,6 +152,7 @@ function App() {
         </DesignationsProvider>
         </AssignableItemsProvider>
         </CoordinatorsProvider>
+        </DepartmentsProvider>
       </UsersProvider>
     </AuthProvider>
   );

@@ -35,8 +35,13 @@ import {
   ClipboardList,
   CheckSquare,
   MessageSquare,
+  Settings2,
+  X,
+  Building2,
+  Pencil,
 } from 'lucide-react';
-import { COUNTRIES, ROLE_LABELS, DEPT_LOCATIONS } from '@/lib/constants';
+import { COUNTRIES, ROLE_LABELS } from '@/lib/constants';
+import { useDepartments } from '@/hooks/useDepartments';
 import { CountryAssignmentPanel } from '@/components/CountryAssignmentPanel';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { UserRole } from '@/types';
@@ -84,22 +89,6 @@ const TABS: { value: UserType; label: string }[] = [
   { value: 'department-head', label: 'Departmental Users' },
 ];
 
-const DEPT_BADGE_CLS: Record<string, string> = {
-  'Reserve 1 (R1)': 'bg-blue-50 text-blue-700 border-blue-200',
-  'UK Jamaat':       'bg-purple-50 text-purple-700 border-purple-200',
-  'Central Guests':  'bg-teal-50 text-teal-700 border-teal-200',
-};
-
-const LOC_PILL_COLORS = [
-  'bg-blue-50 text-blue-700 border-blue-200',
-  'bg-purple-50 text-purple-700 border-purple-200',
-  'bg-teal-50 text-teal-700 border-teal-200',
-];
-
-function locPillCls(dept: string, loc: string) {
-  const idx = (DEPT_LOCATIONS[dept] ?? []).indexOf(loc);
-  return LOC_PILL_COLORS[idx] ?? 'bg-gray-50 text-gray-700 border-gray-200';
-}
 
 interface UserFormData {
   name: string;
@@ -121,6 +110,12 @@ export default function UsersPage() {
   const { user, logout } = useAuth();
   const { addUser, updateUser, deleteUser, toggleUserStatus, assignItems, getUsersByType } = useUsers();
   const { coordinators, addCoordinator, updateCoordinator, deleteCoordinator, toggleCoordinatorActive } = useCoordinators();
+  const {
+    departments, departmentList,
+    addDepartment, renameDepartment, deleteDepartment,
+    addLocation, deleteLocation,
+    getDeptBadgeCls, getLocPillCls,
+  } = useDepartments();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<UserType>('desk-in-charge');
   const [searchQuery, setSearchQuery] = useState('');
@@ -128,6 +123,15 @@ export default function UsersPage() {
 
   // Sub departmental users dept filter
   const [subDeptFilter, setSubDeptFilter] = useState('');
+
+  // Department management
+  const [showManageDepts, setShowManageDepts] = useState(false);
+  const [addDeptDialogOpen, setAddDeptDialogOpen] = useState(false);
+  const [newDeptName, setNewDeptName] = useState('');
+  const [renamingDept, setRenamingDept] = useState<string | null>(null);
+  const [renameDeptValue, setRenameDeptValue] = useState('');
+  const [managingLocsDept, setManagingLocsDept] = useState<string | null>(null);
+  const [newLocValue, setNewLocValue] = useState('');
 
   // Coordinator pagination
   const [coordPage, setCoordPage] = useState(1);
@@ -465,9 +469,6 @@ export default function UsersPage() {
             {/* Stats */}
             {activeTab === 'nizamat-in-charge' ? (() => {
               const allSub = getUsersByType('nizamat-in-charge');
-              const r1Count  = allSub.filter(u => u.department === 'Reserve 1 (R1)').length;
-              const ukjCount = allSub.filter(u => u.department === 'UK Jamaat').length;
-              const cgCount  = allSub.filter(u => u.department === 'Central Guests').length;
               return (
                 <div className="flex flex-wrap gap-4 mb-4">
                   <div className="flex items-center gap-2">
@@ -475,18 +476,14 @@ export default function UsersPage() {
                     <span className="text-sm text-[#4A4A4A]">Total</span>
                   </div>
                   <span className="text-[#D4CFC7] self-center">|</span>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">{r1Count}</Badge>
-                    <span className="text-sm text-[#4A4A4A]">Reserve 1</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">{ukjCount}</Badge>
-                    <span className="text-sm text-[#4A4A4A]">UK Jamaat</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200">{cgCount}</Badge>
-                    <span className="text-sm text-[#4A4A4A]">Central Guests</span>
-                  </div>
+                  {departmentList.map(dept => (
+                    <div key={dept} className="flex items-center gap-2">
+                      <Badge variant="outline" className={getDeptBadgeCls(dept)}>
+                        {allSub.filter(u => u.department === dept).length}
+                      </Badge>
+                      <span className="text-sm text-[#4A4A4A]">{dept}</span>
+                    </div>
+                  ))}
                 </div>
               );
             })() : (
@@ -515,7 +512,7 @@ export default function UsersPage() {
             {/* Dept filter chips — Sub. Departmental Users only */}
             {activeTab === 'nizamat-in-charge' && (
               <div className="flex flex-wrap gap-2 mb-4">
-                {['', 'Reserve 1 (R1)', 'UK Jamaat', 'Central Guests'].map(dept => (
+                {['', ...departmentList].map(dept => (
                   <button
                     key={dept}
                     onClick={() => setSubDeptFilter(dept)}
@@ -544,6 +541,26 @@ export default function UsersPage() {
                       className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-11"
                     />
                   </div>
+                  {activeTab === 'nizamat-in-charge' && (
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowManageDepts(v => !v)}
+                        className="border-[#D4CFC7] h-11 px-4 text-[#4A4A4A]"
+                      >
+                        <Settings2 className="w-4 h-4 mr-2" />
+                        Manage Departments
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => { setNewDeptName(''); setAddDeptDialogOpen(true); }}
+                        className="border-[#2D5A45] text-[#2D5A45] hover:bg-[#F5F0E8] h-11 px-4"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Department
+                      </Button>
+                    </>
+                  )}
                   <Button
                     onClick={openAddModal}
                     className="bg-[#2D5A45] hover:bg-[#234839] text-white h-11 px-6"
@@ -552,8 +569,163 @@ export default function UsersPage() {
                     Add {USER_TYPE_LABELS[activeTab]}
                   </Button>
                 </div>
+
+                {/* Manage Departments panel */}
+                {activeTab === 'nizamat-in-charge' && showManageDepts && (
+                  <div className="mt-4 pt-4 border-t border-[#E8E3DB] space-y-3">
+                    <p className="text-sm font-semibold text-[#1A1A1A]">Departments & Locations</p>
+                    {departmentList.map(dept => (
+                      <div key={dept} className="bg-[#F9F8F6] rounded-lg border border-[#E8E3DB] p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          {renamingDept === dept ? (
+                            <div className="flex items-center gap-2 flex-1">
+                              <input
+                                autoFocus
+                                value={renameDeptValue}
+                                onChange={e => setRenameDeptValue(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    if (renameDeptValue.trim()) renameDepartment(dept, renameDeptValue.trim());
+                                    setRenamingDept(null);
+                                  }
+                                  if (e.key === 'Escape') setRenamingDept(null);
+                                }}
+                                className="flex-1 px-2 py-1 border border-[#2D5A45] rounded text-sm focus:outline-none"
+                              />
+                              <button
+                                onClick={() => {
+                                  if (renameDeptValue.trim()) renameDepartment(dept, renameDeptValue.trim());
+                                  setRenamingDept(null);
+                                }}
+                                className="text-xs text-[#2D5A45] font-medium px-2 py-1 hover:bg-[#E8F5EE] rounded"
+                              >Save</button>
+                              <button onClick={() => setRenamingDept(null)} className="text-xs text-[#4A4A4A] px-2 py-1 hover:bg-gray-100 rounded">Cancel</button>
+                            </div>
+                          ) : (
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${getDeptBadgeCls(dept)}`}>
+                              <Building2 className="w-3 h-3 mr-1" />{dept}
+                            </span>
+                          )}
+                          <div className="flex items-center gap-1 ml-2">
+                            <button
+                              onClick={() => { setRenamingDept(dept); setRenameDeptValue(dept); }}
+                              className="p-1.5 hover:bg-blue-50 text-[#4A4A4A] hover:text-blue-600 rounded transition-colors"
+                              title="Rename"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                const usersInDept = getUsersByType('nizamat-in-charge').filter(u => u.department === dept).length;
+                                if (usersInDept > 0) {
+                                  toast.error(`Cannot delete "${dept}" — ${usersInDept} user${usersInDept > 1 ? 's' : ''} assigned`);
+                                  return;
+                                }
+                                if (confirm(`Delete department "${dept}"?`)) deleteDepartment(dept);
+                              }}
+                              className="p-1.5 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Locations */}
+                        <div className="pl-1 space-y-1.5">
+                          <div className="flex flex-wrap gap-1.5">
+                            {(departments[dept] ?? []).map(loc => (
+                              <span key={loc} className={`inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-xs font-medium border ${getLocPillCls(dept, loc)}`}>
+                                {loc}
+                                <button
+                                  onClick={() => deleteLocation(dept, loc)}
+                                  className="w-3.5 h-3.5 rounded-full flex items-center justify-center hover:bg-black/10 transition-colors"
+                                  title="Remove location"
+                                >
+                                  <X className="w-2.5 h-2.5" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                          {/* Add location inline */}
+                          {managingLocsDept === dept ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                autoFocus
+                                value={newLocValue}
+                                onChange={e => setNewLocValue(e.target.value)}
+                                placeholder="Location name..."
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    if (newLocValue.trim()) { addLocation(dept, newLocValue.trim()); setNewLocValue(''); }
+                                    setManagingLocsDept(null);
+                                  }
+                                  if (e.key === 'Escape') { setManagingLocsDept(null); setNewLocValue(''); }
+                                }}
+                                className="flex-1 px-2 py-1 border border-[#D4CFC7] rounded text-xs focus:outline-none focus:border-[#2D5A45]"
+                              />
+                              <button
+                                onClick={() => {
+                                  if (newLocValue.trim()) { addLocation(dept, newLocValue.trim()); setNewLocValue(''); }
+                                  setManagingLocsDept(null);
+                                }}
+                                className="text-xs text-[#2D5A45] font-medium px-2 py-1 hover:bg-[#E8F5EE] rounded"
+                              >Add</button>
+                              <button onClick={() => { setManagingLocsDept(null); setNewLocValue(''); }} className="text-xs text-[#4A4A4A] px-2 py-1 hover:bg-gray-100 rounded">Cancel</button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setManagingLocsDept(dept); setNewLocValue(''); }}
+                              className="text-xs text-[#2D5A45] hover:underline flex items-center gap-0.5"
+                            >
+                              <Plus className="w-3 h-3" /> Add location
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
+
+            {/* Add Department Dialog */}
+            {addDeptDialogOpen && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+                  <h2 className="text-lg font-semibold text-[#1A1A1A]">Add New Department</h2>
+                  <div className="space-y-2">
+                    <Label className="text-[#1A1A1A]">Department Name *</Label>
+                    <Input
+                      autoFocus
+                      value={newDeptName}
+                      onChange={e => setNewDeptName(e.target.value)}
+                      placeholder="e.g. Finance"
+                      className="border-[#D4CFC7] focus:border-[#2D5A45] h-11"
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          if (newDeptName.trim()) { addDepartment(newDeptName.trim()); setAddDeptDialogOpen(false); toast.success('Department added'); }
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-3 pt-2">
+                    <Button variant="outline" onClick={() => setAddDeptDialogOpen(false)} className="border-[#D4CFC7] h-10">Cancel</Button>
+                    <Button
+                      onClick={() => {
+                        if (!newDeptName.trim()) { toast.error('Name required'); return; }
+                        addDepartment(newDeptName.trim());
+                        setAddDeptDialogOpen(false);
+                        toast.success(`Department "${newDeptName.trim()}" added`);
+                      }}
+                      className="bg-[#2D5A45] hover:bg-[#234839] text-white h-10"
+                    >
+                      Add Department
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Users List */}
             <Card className="shadow-sm">
@@ -702,7 +874,7 @@ export default function UsersPage() {
                                 {u.department ? (
                                   <Badge
                                     variant="outline"
-                                    className={DEPT_BADGE_CLS[u.department] ?? 'bg-gray-50 text-gray-700 border-gray-200'}
+                                    className={getDeptBadgeCls(u.department ?? '')}
                                   >
                                     {u.department}
                                   </Badge>
@@ -796,14 +968,14 @@ export default function UsersPage() {
                               <td className="px-4 py-3 text-[#4A4A4A] text-sm">{u.email}</td>
                               <td className="px-4 py-3">
                                 {u.department ? (
-                                  <Badge variant="outline" className={DEPT_BADGE_CLS[u.department] ?? 'bg-gray-50 text-gray-700 border-gray-200'}>
+                                  <Badge variant="outline" className={getDeptBadgeCls(u.department ?? '')}>
                                     {u.department}
                                   </Badge>
                                 ) : '—'}
                               </td>
                               <td className="px-4 py-3">
                                 {u.location ? (
-                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${locPillCls(u.department ?? '', u.location)}`}>
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getLocPillCls(u.department ?? '', u.location)}`}>
                                     {u.location}
                                   </span>
                                 ) : '—'}
@@ -1125,7 +1297,7 @@ export default function UsersPage() {
                       className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] h-11"
                     >
                       <option value="">— Select department —</option>
-                      {Object.keys(DEPT_LOCATIONS).map(d => (
+                      {departmentList.map(d => (
                         <option key={d} value={d}>{d}</option>
                       ))}
                     </select>
@@ -1139,7 +1311,7 @@ export default function UsersPage() {
                       className={`w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] h-11 ${!formData.department ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <option value="">— Select location —</option>
-                      {(DEPT_LOCATIONS[formData.department] ?? []).map(loc => (
+                      {(departments[formData.department] ?? []).map(loc => (
                         <option key={loc} value={loc}>{loc}</option>
                       ))}
                     </select>

@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { DeptSidebar } from '@/components/DeptSidebar';
-import { DEPT_LOCATIONS } from '@/lib/constants';
+import { useDepartments } from '@/hooks/useDepartments';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,8 +36,8 @@ interface DeptLocation {
 
 let nextLocationId = 100;
 
-function seedLocations(dept: string): DeptLocation[] {
-  return (DEPT_LOCATIONS[dept] ?? []).map((name, i) => ({
+function seedLocations(dept: string, deptMap: Record<string, string[]>): DeptLocation[] {
+  return (deptMap[dept] ?? []).map((name, i) => ({
     id: `loc-seed-${i}`,
     name,
     description: '',
@@ -48,10 +48,11 @@ function seedLocations(dept: string): DeptLocation[] {
 export default function DeptLocationsPage() {
   const { user } = useAuth();
   const { guests } = useGuests();
+  const { departments } = useDepartments();
 
   const dept = user?.department ?? '';
 
-  const [locations, setLocations] = useState<DeptLocation[]>(() => seedLocations(dept));
+  const [locations, setLocations] = useState<DeptLocation[]>(() => seedLocations(dept, departments));
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);

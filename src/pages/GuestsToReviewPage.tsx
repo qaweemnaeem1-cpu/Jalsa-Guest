@@ -23,20 +23,11 @@ import {
   CheckCircle, AlertCircle, Eye, Pencil, ChevronLeft, ChevronRight, Building2,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
+import { useDepartments } from '@/hooks/useDepartments';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { getRoleDisplayLabel } from '@/components/ProfileDialog';
 import { sanitizeComment } from '@/hooks/useAuditTrail';
 import type { Guest } from '@/types';
-
-const DEPARTMENTS = [
-  { name: 'Reserve 1 (R1)',  cls: 'bg-blue-50 text-blue-700 border-blue-200' },
-  { name: 'UK Jamaat',       cls: 'bg-purple-50 text-purple-700 border-purple-200' },
-  { name: 'Central Guests',  cls: 'bg-teal-50 text-teal-700 border-teal-200' },
-];
-
-function deptBadgeCls(dept: string) {
-  return DEPARTMENTS.find(d => d.name === dept)?.cls ?? 'bg-gray-50 text-gray-700 border-gray-200';
-}
 
 const DESK_NAV = [
   { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
@@ -53,6 +44,7 @@ export default function GuestsToReviewPage() {
   const { user, logout } = useAuth();
   const { guests, updateGuest } = useGuests();
   const { addEntry, addComment } = useAuditTrail();
+  const { departmentList, getDeptBadgeCls } = useDepartments();
 
   const [search, setSearch] = useState('');
   const [countryFilter, setCountryFilter] = useState('all');
@@ -446,7 +438,7 @@ export default function GuestsToReviewPage() {
                               </td>
                               <td className="px-4 py-3">
                                 {g.assignedDepartment ? (
-                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${deptBadgeCls(g.assignedDepartment)}`}>
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getDeptBadgeCls(g.assignedDepartment)}`}>
                                     {g.assignedDepartment}
                                   </span>
                                 ) : (
@@ -457,8 +449,8 @@ export default function GuestsToReviewPage() {
                                     className="px-2 py-1 border border-[#D4CFC7] rounded-md text-xs bg-white focus:border-[#2D5A45] focus:outline-none"
                                   >
                                     <option value="">Select...</option>
-                                    {DEPARTMENTS.map(d => (
-                                      <option key={d.name} value={d.name}>{d.name}</option>
+                                    {departmentList.map(d => (
+                                      <option key={d} value={d}>{d}</option>
                                     ))}
                                   </select>
                                 )}
@@ -528,7 +520,7 @@ export default function GuestsToReviewPage() {
           </DialogHeader>
           <p className="text-sm text-[#4A4A4A] py-2">
             Assign <span className="font-semibold">{guests.find(g => g.id === deptAssign?.guestId)?.fullName}</span> to{' '}
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${deptBadgeCls(deptAssign?.dept ?? '')}`}>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getDeptBadgeCls(deptAssign?.dept ?? '')}`}>
               {deptAssign?.dept}
             </span>?
           </p>
@@ -594,8 +586,8 @@ export default function GuestsToReviewPage() {
               className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
             >
               <option value="">Select department...</option>
-              {DEPARTMENTS.map(d => (
-                <option key={d.name} value={d.name}>{d.name}</option>
+              {departmentList.map(d => (
+                <option key={d} value={d}>{d}</option>
               ))}
             </select>
           </div>

@@ -4,15 +4,17 @@ import { LayoutDashboard, Inbox, CheckCircle, Users, MapPin, Clock } from 'lucid
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { DeptSidebar } from '@/components/DeptSidebar';
-import { DEPT_LOCATIONS, getStatusBadgeClass } from '@/lib/constants';
+import { getStatusBadgeClass } from '@/lib/constants';
+import { useDepartments } from '@/hooks/useDepartments';
 
 export default function DeptDashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { guests } = useGuests();
+  const { departments } = useDepartments();
 
   const dept = user?.department ?? '';
-  const locations = DEPT_LOCATIONS[dept] ?? [];
+  const locations = departments[dept] ?? [];
 
   const deptGuests = useMemo(
     () => guests.filter(g => g.assignedDepartment === dept),
