@@ -20,13 +20,23 @@ import { toast } from 'sonner';
 import {
   LayoutDashboard, ClipboardList, CheckSquare, MessageSquare, XCircle,
   Search, ChevronDown, LogOut,
-  CheckCircle, AlertCircle, Eye, Pencil, ChevronLeft, ChevronRight,
+  CheckCircle, AlertCircle, Eye, Pencil, ChevronLeft, ChevronRight, Building2,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { getRoleDisplayLabel } from '@/components/ProfileDialog';
 import { sanitizeComment } from '@/hooks/useAuditTrail';
 import type { Guest } from '@/types';
+
+const DEPARTMENTS = [
+  { name: 'Reserve 1 (R1)',  cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+  { name: 'UK Jamaat',       cls: 'bg-purple-50 text-purple-700 border-purple-200' },
+  { name: 'Central Guests',  cls: 'bg-teal-50 text-teal-700 border-teal-200' },
+];
+
+function deptBadgeCls(dept: string) {
+  return DEPARTMENTS.find(d => d.name === dept)?.cls ?? 'bg-gray-50 text-gray-700 border-gray-200';
+}
 
 const DESK_NAV = [
   { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
@@ -61,6 +71,12 @@ export default function GuestsToReviewPage() {
   const [rejectDialog, setRejectDialog] = useState<{ open: boolean; guest: Guest | null; reason: string }>({
     open: false, guest: null, reason: '',
   });
+
+  // Department assignment
+  const [deptAssign, setDeptAssign] = useState<{ guestId: string; dept: string } | null>(null);
+  const [deptWarningGuestId, setDeptWarningGuestId] = useState<string | null>(null);
+  const [deptSelectGuestId, setDeptSelectGuestId] = useState<string | null>(null);
+  const [deptSelectValue, setDeptSelectValue] = useState('');
 
   if (!user) return null;
 
@@ -120,6 +136,42 @@ export default function GuestsToReviewPage() {
       createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
       createdAt: new Date().toISOString(),
     });
+  };
+
+  const handleDeptAssignById = (guestId: string, dept: string) => {
+    const g = guests.find(x => x.id === guestId);
+    if (!g) return;
+    updateGuest(guestId, {
+      assignedDepartment: dept,
+      assignedDepartmentAt: new Date().toISOString(),
+      assignedDepartmentBy: user.id,
+    });
+    addEntry({
+      guestId: g.id,
+      guestName: g.fullName,
+      guestReference: g.referenceNumber,
+      type: 'field_change',
+      action: 'Department assigned',
+      details: `Assigned to ${dept}`,
+      newValue: dept,
+      createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
+      createdAt: new Date().toISOString(),
+    });
+    toast.success(`${g.fullName} assigned to ${dept}`);
+  };
+
+  const handleDeptAssign = () => {
+    if (!deptAssign) return;
+    handleDeptAssignById(deptAssign.guestId, deptAssign.dept);
+    setDeptAssign(null);
+  };
+
+  const handleApproveClick = (g: Guest) => {
+    if (!g.assignedDepartment) {
+      setDeptWarningGuestId(g.id);
+    } else {
+      setApproveGuestId(g.id);
+    }
   };
 
   const approveGuest = guests.find(g => g.id === approveGuestId) ?? null;
@@ -323,6 +375,7 @@ export default function GuestsToReviewPage() {
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Submitted</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Status</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Department</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#E8E3DB]">
@@ -368,7 +421,7 @@ export default function GuestsToReviewPage() {
                                     <Pencil className="w-4 h-4" />
                                   </button>
                                   <button
-                                    onClick={e => { e.stopPropagation(); setApproveGuestId(g.id); }}
+                                    onClick={e => { e.stopPropagation(); handleApproveClick(g); }}
                                     title="Approve"
                                     className="p-1.5 rounded-md text-green-600 hover:bg-green-50 transition-colors"
                                   >
@@ -389,6 +442,25 @@ export default function GuestsToReviewPage() {
                                     <XCircle className="w-4 h-4" />
                                   </button>
                                 </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                {g.assignedDepartment ? (
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${deptBadgeCls(g.assignedDepartment)}`}>
+                                    {g.assignedDepartment}
+                                  </span>
+                                ) : (
+                                  <select
+                                    value=""
+                                    onChange={e => { e.stopPropagation(); if (e.target.value) setDeptAssign({ guestId: g.id, dept: e.target.value }); }}
+                                    onClick={e => e.stopPropagation()}
+                                    className="px-2 py-1 border border-[#D4CFC7] rounded-md text-xs bg-white focus:border-[#2D5A45] focus:outline-none"
+                                  >
+                                    <option value="">Select...</option>
+                                    {DEPARTMENTS.map(d => (
+                                      <option key={d.name} value={d.name}>{d.name}</option>
+                                    ))}
+                                  </select>
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -443,6 +515,108 @@ export default function GuestsToReviewPage() {
         onClose={() => setEditGuestId(null)}
         isEditMode={true}
       />
+
+      {/* Dept Assign Confirmation */}
+      <Dialog open={!!deptAssign} onOpenChange={open => { if (!open) setDeptAssign(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-[#2D5A45]" />
+              Assign Department
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-[#4A4A4A] py-2">
+            Assign <span className="font-semibold">{guests.find(g => g.id === deptAssign?.guestId)?.fullName}</span> to{' '}
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${deptBadgeCls(deptAssign?.dept ?? '')}`}>
+              {deptAssign?.dept}
+            </span>?
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeptAssign(null)}>Cancel</Button>
+            <Button onClick={handleDeptAssign} className="bg-[#2D5A45] hover:bg-[#234839] text-white">
+              <Building2 className="w-4 h-4 mr-1.5" />
+              Confirm Assignment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Approve without dept warning */}
+      <Dialog open={!!deptWarningGuestId} onOpenChange={open => { if (!open) setDeptWarningGuestId(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-amber-500" />
+              Approve without assigning department?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-[#4A4A4A] py-2">
+            You haven't assigned a department yet. You can assign later from Processed Guests.
+          </p>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => {
+              const id = deptWarningGuestId;
+              setDeptWarningGuestId(null);
+              setDeptSelectGuestId(id);
+              setDeptSelectValue('');
+            }}>
+              Assign Now
+            </Button>
+            <Button onClick={() => {
+              const id = deptWarningGuestId;
+              setDeptWarningGuestId(null);
+              setApproveGuestId(id);
+            }} className="bg-green-600 hover:bg-green-700 text-white">
+              <CheckCircle className="w-4 h-4 mr-1.5" />
+              Approve Anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Now dept picker */}
+      <Dialog open={!!deptSelectGuestId} onOpenChange={open => { if (!open) { setDeptSelectGuestId(null); setDeptSelectValue(''); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-[#2D5A45]" />
+              Assign Department
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            <p className="text-sm text-[#4A4A4A]">
+              Select a department for <span className="font-semibold">{guests.find(g => g.id === deptSelectGuestId)?.fullName}</span>:
+            </p>
+            <select
+              value={deptSelectValue}
+              onChange={e => setDeptSelectValue(e.target.value)}
+              className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
+            >
+              <option value="">Select department...</option>
+              {DEPARTMENTS.map(d => (
+                <option key={d.name} value={d.name}>{d.name}</option>
+              ))}
+            </select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDeptSelectGuestId(null); setDeptSelectValue(''); }}>Cancel</Button>
+            <Button
+              disabled={!deptSelectValue}
+              onClick={() => {
+                if (deptSelectGuestId && deptSelectValue) {
+                  handleDeptAssignById(deptSelectGuestId, deptSelectValue);
+                  setDeptSelectGuestId(null);
+                  setDeptSelectValue('');
+                }
+              }}
+              className="bg-[#2D5A45] hover:bg-[#234839] text-white"
+            >
+              <Building2 className="w-4 h-4 mr-1.5" />
+              Assign
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Approve Confirmation Dialog */}
       <Dialog open={!!approveGuestId} onOpenChange={open => { if (!open) setApproveGuestId(null); }}>

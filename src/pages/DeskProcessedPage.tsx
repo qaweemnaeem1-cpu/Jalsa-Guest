@@ -2,14 +2,24 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
+import { useAuditTrail } from '@/hooks/useAuditTrail';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { GuestViewModal } from '@/components/GuestViewModal';
+import { toast } from 'sonner';
 import {
   LayoutDashboard, ClipboardList, CheckSquare, MessageSquare, XCircle,
   Search, ChevronDown, LogOut, Eye, Pencil,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Building2,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
@@ -23,6 +33,16 @@ const DESK_NAV = [
   { icon: XCircle,         label: 'Rejected Guests',    href: '/desk/rejected' },
   { icon: MessageSquare,   label: 'Messages & Updates', href: '/desk/messages' },
 ];
+
+const DEPARTMENTS = [
+  { name: 'Reserve 1 (R1)',  cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+  { name: 'UK Jamaat',       cls: 'bg-purple-50 text-purple-700 border-purple-200' },
+  { name: 'Central Guests',  cls: 'bg-teal-50 text-teal-700 border-teal-200' },
+];
+
+function deptBadgeCls(dept: string) {
+  return DEPARTMENTS.find(d => d.name === dept)?.cls ?? 'bg-gray-50 text-gray-700 border-gray-200';
+}
 
 type StatusFilter = 'all' | 'Approved' | 'Accommodated';
 
@@ -47,7 +67,8 @@ const PAGE_SIZE = 15;
 export default function DeskProcessedPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { guests } = useGuests();
+  const { guests, updateGuest } = useGuests();
+  const { addEntry } = useAuditTrail();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -56,6 +77,9 @@ export default function DeskProcessedPage() {
   const [viewGuestId, setViewGuestId] = useState<string | null>(null);
   const [editGuestId, setEditGuestId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+
+  // Department assignment
+  const [deptAssign, setDeptAssign] = useState<{ guestId: string; dept: string } | null>(null);
 
   if (!user) return null;
 
@@ -106,6 +130,30 @@ export default function DeskProcessedPage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const handleDeptAssign = () => {
+    if (!deptAssign || !user) return;
+    const g = guests.find(x => x.id === deptAssign.guestId);
+    if (!g) return;
+    updateGuest(deptAssign.guestId, {
+      assignedDepartment: deptAssign.dept,
+      assignedDepartmentAt: new Date().toISOString(),
+      assignedDepartmentBy: user.id,
+    });
+    addEntry({
+      guestId: g.id,
+      guestName: g.fullName,
+      guestReference: g.referenceNumber,
+      type: 'field_change',
+      action: 'Department assigned',
+      details: `Assigned to ${deptAssign.dept}`,
+      newValue: deptAssign.dept,
+      createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
+      createdAt: new Date().toISOString(),
+    });
+    toast.success(`${g.fullName} assigned to ${deptAssign.dept}`);
+    setDeptAssign(null);
+  };
 
   const chipCls = (active: boolean) =>
     active
@@ -272,6 +320,7 @@ export default function DeskProcessedPage() {
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Status</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Submitted</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Department</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#E8E3DB]">
@@ -308,6 +357,25 @@ export default function DeskProcessedPage() {
                                     <Pencil className="w-4 h-4" />
                                   </button>
                                 </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                {g.assignedDepartment ? (
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${deptBadgeCls(g.assignedDepartment)}`}>
+                                    {g.assignedDepartment}
+                                  </span>
+                                ) : (
+                                  <select
+                                    value=""
+                                    onChange={e => { e.stopPropagation(); if (e.target.value) setDeptAssign({ guestId: g.id, dept: e.target.value }); }}
+                                    onClick={e => e.stopPropagation()}
+                                    className="px-2 py-1 border border-[#D4CFC7] rounded-md text-xs bg-white focus:border-[#2D5A45] focus:outline-none"
+                                  >
+                                    <option value="">Select...</option>
+                                    {DEPARTMENTS.map(d => (
+                                      <option key={d.name} value={d.name}>{d.name}</option>
+                                    ))}
+                                  </select>
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -347,6 +415,31 @@ export default function DeskProcessedPage() {
           </div>
         </main>
       </div>
+
+      {/* Dept Assign Confirmation */}
+      <Dialog open={!!deptAssign} onOpenChange={open => { if (!open) setDeptAssign(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-[#2D5A45]" />
+              Assign Department
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-[#4A4A4A] py-2">
+            Assign <span className="font-semibold">{guests.find(g => g.id === deptAssign?.guestId)?.fullName}</span> to{' '}
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${deptBadgeCls(deptAssign?.dept ?? '')}`}>
+              {deptAssign?.dept}
+            </span>?
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeptAssign(null)}>Cancel</Button>
+            <Button onClick={handleDeptAssign} className="bg-[#2D5A45] hover:bg-[#234839] text-white">
+              <Building2 className="w-4 h-4 mr-1.5" />
+              Confirm Assignment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <GuestViewModal
         guest={guests.find(g => g.id === viewGuestId) ?? null}
