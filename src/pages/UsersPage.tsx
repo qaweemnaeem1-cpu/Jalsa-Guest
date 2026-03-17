@@ -79,14 +79,16 @@ const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> 
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
     { icon: Users, label: 'Guests', href: '/guests' },
   ],
+  'department-head': [
+    { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
+  ],
 };
 
 const TABS: { value: UserType; label: string }[] = [
   { value: 'desk-in-charge', label: 'Desk In-Charge' },
   { value: 'coordinator', label: 'Coordinators' },
-  { value: 'driver', label: 'Drivers' },
-  { value: 'nizamat-in-charge', label: 'Sub. Departmental Users' },
   { value: 'department-head', label: 'Departmental Users' },
+  { value: 'driver', label: 'Drivers' },
 ];
 
 
@@ -118,6 +120,7 @@ export default function UsersPage() {
   } = useDepartments();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<UserType>('desk-in-charge');
+  const [modalUserType, setModalUserType] = useState<UserType>('department-head');
   const [searchQuery, setSearchQuery] = useState('');
   const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
 
@@ -160,15 +163,26 @@ export default function UsersPage() {
 
   const navItems = NAV_ITEMS[user.role] || [];
 
-  // Non-coordinator users
+  // Non-coordinator users (for desk-in-charge, driver tabs)
   const filteredUsers = getUsersByType(activeTab).filter(u => {
+    const q = searchQuery.toLowerCase();
+    return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+  });
+
+  // Department Heads (for combined Departmental Users tab)
+  const filteredDeptHeads = getUsersByType('department-head').filter(u => {
+    const q = searchQuery.toLowerCase();
+    return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+  });
+
+  // Location Managers / nizamat-in-charge (for combined Departmental Users tab)
+  const filteredLocManagers = getUsersByType('nizamat-in-charge').filter(u => {
     const q = searchQuery.toLowerCase();
     const matchesSearch =
       u.name.toLowerCase().includes(q) ||
       u.email.toLowerCase().includes(q) ||
-      (activeTab === 'nizamat-in-charge' && (u.location ?? '').toLowerCase().includes(q));
-    const matchesDept =
-      activeTab !== 'nizamat-in-charge' || !subDeptFilter || u.department === subDeptFilter;
+      (u.location ?? '').toLowerCase().includes(q);
+    const matchesDept = !subDeptFilter || u.department === subDeptFilter;
     return matchesSearch && matchesDept;
   });
 
@@ -192,9 +206,11 @@ export default function UsersPage() {
     setShowPasswordMap(prev => ({ ...prev, [userId]: !prev[userId] }));
   };
 
-  const openAddModal = () => {
+  const openAddModal = (userType?: UserType) => {
     setEditingUser(null);
     setEditingCoordinator(null);
+    if (userType) setModalUserType(userType);
+    else setModalUserType(activeTab);
     setFormData({
       name: '',
       email: '',
@@ -213,6 +229,7 @@ export default function UsersPage() {
   const openEditModal = (userToEdit: SystemUser) => {
     setEditingUser(userToEdit);
     setEditingCoordinator(null);
+    setModalUserType(userToEdit.userType);
     setFormData({
       name: userToEdit.name,
       email: userToEdit.email,
@@ -258,7 +275,7 @@ export default function UsersPage() {
       return;
     }
 
-    if (activeTab === 'coordinator') {
+    if (modalUserType === 'coordinator') {
       const diUser = getUsersByType('desk-in-charge').find(d => d.id === formData.assignedDeskInchargeId);
       if (editingCoordinator) {
         updateCoordinator(editingCoordinator.id, {
@@ -287,7 +304,7 @@ export default function UsersPage() {
       }
     } else {
       const country = COUNTRIES.find(c => c.code === formData.countryCode);
-      if (activeTab === 'nizamat-in-charge' && (!formData.department || !formData.location)) {
+      if (modalUserType === 'nizamat-in-charge' && (!formData.department || !formData.location)) {
         toast.error('Please select a department and location');
         return;
       }
@@ -300,7 +317,7 @@ export default function UsersPage() {
       } else {
         addUser({
           ...formData,
-          userType: activeTab,
+          userType: modalUserType,
           country: country?.name || formData.country,
         });
         toast.success('User added successfully');
@@ -467,26 +484,37 @@ export default function UsersPage() {
             </div>
 
             {/* Stats */}
-            {activeTab === 'nizamat-in-charge' ? (() => {
-              const allSub = getUsersByType('nizamat-in-charge');
-              return (
-                <div className="flex flex-wrap gap-4 mb-4">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">{allSub.length}</Badge>
-                    <span className="text-sm text-[#4A4A4A]">Total</span>
-                  </div>
-                  <span className="text-[#D4CFC7] self-center">|</span>
-                  {departmentList.map(dept => (
-                    <div key={dept} className="flex items-center gap-2">
-                      <Badge variant="outline" className={getDeptBadgeCls(dept)}>
-                        {allSub.filter(u => u.department === dept).length}
-                      </Badge>
-                      <span className="text-sm text-[#4A4A4A]">{dept}</span>
-                    </div>
-                  ))}
+            {activeTab === 'department-head' ? (
+              <div className="flex flex-wrap gap-3 mb-6 text-sm">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                    {getUsersByType('department-head').length}
+                  </Badge>
+                  <span className="text-[#4A4A4A]">Department Heads</span>
                 </div>
-              );
-            })() : (
+                <span className="text-[#D4CFC7] self-center">|</span>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                    {getUsersByType('nizamat-in-charge').length}
+                  </Badge>
+                  <span className="text-[#4A4A4A]">Location Managers</span>
+                </div>
+                <span className="text-[#D4CFC7] self-center">|</span>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200">
+                    {departmentList.length}
+                  </Badge>
+                  <span className="text-[#4A4A4A]">Departments</span>
+                </div>
+                <span className="text-[#D4CFC7] self-center">|</span>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                    {departmentList.reduce((sum, d) => sum + (departments[d]?.length ?? 0), 0)}
+                  </Badge>
+                  <span className="text-[#4A4A4A]">Locations</span>
+                </div>
+              </div>
+            ) : (
               <div className="flex gap-4 mb-6">
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
@@ -509,185 +537,31 @@ export default function UsersPage() {
               </div>
             )}
 
-            {/* Dept filter chips — Sub. Departmental Users only */}
-            {activeTab === 'nizamat-in-charge' && (
-              <div className="flex flex-wrap gap-2 mb-4">
-                {['', ...departmentList].map(dept => (
-                  <button
-                    key={dept}
-                    onClick={() => setSubDeptFilter(dept)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                      subDeptFilter === dept
-                        ? 'bg-[#2D5A45] text-white'
-                        : 'bg-white text-[#4A4A4A] border border-[#D4CFC7] hover:bg-[#F5F0E8]'
-                    }`}
-                  >
-                    {dept || 'All'}
-                  </button>
-                ))}
-              </div>
+            {/* Search and Add — non-department-head tabs only */}
+            {activeTab !== 'department-head' && (
+              <Card className="shadow-sm mb-6">
+                <CardContent className="p-4">
+                  <div className="flex flex-col md:flex-row gap-4">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
+                      <Input
+                        placeholder={`Search ${USER_TYPE_LABELS[activeTab].toLowerCase()}...`}
+                        value={searchQuery}
+                        onChange={(e) => { setSearchQuery(e.target.value); setCoordPage(1); }}
+                        className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-11"
+                      />
+                    </div>
+                    <Button
+                      onClick={() => openAddModal()}
+                      className="bg-[#2D5A45] hover:bg-[#234839] text-white h-11 px-6"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add {USER_TYPE_LABELS[activeTab]}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             )}
-
-            {/* Search and Add */}
-            <Card className="shadow-sm mb-6">
-              <CardContent className="p-4">
-                <div className="flex flex-col md:flex-row gap-4">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
-                    <Input
-                      placeholder={`Search ${USER_TYPE_LABELS[activeTab].toLowerCase()}...`}
-                      value={searchQuery}
-                      onChange={(e) => { setSearchQuery(e.target.value); setCoordPage(1); }}
-                      className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-11"
-                    />
-                  </div>
-                  {activeTab === 'nizamat-in-charge' && (
-                    <>
-                      <Button
-                        variant="outline"
-                        onClick={() => setShowManageDepts(v => !v)}
-                        className="border-[#D4CFC7] h-11 px-4 text-[#4A4A4A]"
-                      >
-                        <Settings2 className="w-4 h-4 mr-2" />
-                        Manage Departments
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => { setNewDeptName(''); setAddDeptDialogOpen(true); }}
-                        className="border-[#2D5A45] text-[#2D5A45] hover:bg-[#F5F0E8] h-11 px-4"
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add Department
-                      </Button>
-                    </>
-                  )}
-                  <Button
-                    onClick={openAddModal}
-                    className="bg-[#2D5A45] hover:bg-[#234839] text-white h-11 px-6"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add {USER_TYPE_LABELS[activeTab]}
-                  </Button>
-                </div>
-
-                {/* Manage Departments panel */}
-                {activeTab === 'nizamat-in-charge' && showManageDepts && (
-                  <div className="mt-4 pt-4 border-t border-[#E8E3DB] space-y-3">
-                    <p className="text-sm font-semibold text-[#1A1A1A]">Departments & Locations</p>
-                    {departmentList.map(dept => (
-                      <div key={dept} className="bg-[#F9F8F6] rounded-lg border border-[#E8E3DB] p-3 space-y-2">
-                        <div className="flex items-center justify-between">
-                          {renamingDept === dept ? (
-                            <div className="flex items-center gap-2 flex-1">
-                              <input
-                                autoFocus
-                                value={renameDeptValue}
-                                onChange={e => setRenameDeptValue(e.target.value)}
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter') {
-                                    if (renameDeptValue.trim()) renameDepartment(dept, renameDeptValue.trim());
-                                    setRenamingDept(null);
-                                  }
-                                  if (e.key === 'Escape') setRenamingDept(null);
-                                }}
-                                className="flex-1 px-2 py-1 border border-[#2D5A45] rounded text-sm focus:outline-none"
-                              />
-                              <button
-                                onClick={() => {
-                                  if (renameDeptValue.trim()) renameDepartment(dept, renameDeptValue.trim());
-                                  setRenamingDept(null);
-                                }}
-                                className="text-xs text-[#2D5A45] font-medium px-2 py-1 hover:bg-[#E8F5EE] rounded"
-                              >Save</button>
-                              <button onClick={() => setRenamingDept(null)} className="text-xs text-[#4A4A4A] px-2 py-1 hover:bg-gray-100 rounded">Cancel</button>
-                            </div>
-                          ) : (
-                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${getDeptBadgeCls(dept)}`}>
-                              <Building2 className="w-3 h-3 mr-1" />{dept}
-                            </span>
-                          )}
-                          <div className="flex items-center gap-1 ml-2">
-                            <button
-                              onClick={() => { setRenamingDept(dept); setRenameDeptValue(dept); }}
-                              className="p-1.5 hover:bg-blue-50 text-[#4A4A4A] hover:text-blue-600 rounded transition-colors"
-                              title="Rename"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                const usersInDept = getUsersByType('nizamat-in-charge').filter(u => u.department === dept).length;
-                                if (usersInDept > 0) {
-                                  toast.error(`Cannot delete "${dept}" — ${usersInDept} user${usersInDept > 1 ? 's' : ''} assigned`);
-                                  return;
-                                }
-                                if (confirm(`Delete department "${dept}"?`)) deleteDepartment(dept);
-                              }}
-                              className="p-1.5 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Locations */}
-                        <div className="pl-1 space-y-1.5">
-                          <div className="flex flex-wrap gap-1.5">
-                            {(departments[dept] ?? []).map(loc => (
-                              <span key={loc} className={`inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-xs font-medium border ${getLocPillCls(dept, loc)}`}>
-                                {loc}
-                                <button
-                                  onClick={() => deleteLocation(dept, loc)}
-                                  className="w-3.5 h-3.5 rounded-full flex items-center justify-center hover:bg-black/10 transition-colors"
-                                  title="Remove location"
-                                >
-                                  <X className="w-2.5 h-2.5" />
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                          {/* Add location inline */}
-                          {managingLocsDept === dept ? (
-                            <div className="flex items-center gap-2">
-                              <input
-                                autoFocus
-                                value={newLocValue}
-                                onChange={e => setNewLocValue(e.target.value)}
-                                placeholder="Location name..."
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter') {
-                                    if (newLocValue.trim()) { addLocation(dept, newLocValue.trim()); setNewLocValue(''); }
-                                    setManagingLocsDept(null);
-                                  }
-                                  if (e.key === 'Escape') { setManagingLocsDept(null); setNewLocValue(''); }
-                                }}
-                                className="flex-1 px-2 py-1 border border-[#D4CFC7] rounded text-xs focus:outline-none focus:border-[#2D5A45]"
-                              />
-                              <button
-                                onClick={() => {
-                                  if (newLocValue.trim()) { addLocation(dept, newLocValue.trim()); setNewLocValue(''); }
-                                  setManagingLocsDept(null);
-                                }}
-                                className="text-xs text-[#2D5A45] font-medium px-2 py-1 hover:bg-[#E8F5EE] rounded"
-                              >Add</button>
-                              <button onClick={() => { setManagingLocsDept(null); setNewLocValue(''); }} className="text-xs text-[#4A4A4A] px-2 py-1 hover:bg-gray-100 rounded">Cancel</button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => { setManagingLocsDept(dept); setNewLocValue(''); }}
-                              className="text-xs text-[#2D5A45] hover:underline flex items-center gap-0.5"
-                            >
-                              <Plus className="w-3 h-3" /> Add location
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
 
             {/* Add Department Dialog */}
             {addDeptDialogOpen && (
@@ -728,134 +602,500 @@ export default function UsersPage() {
             )}
 
             {/* Users List */}
-            <Card className="shadow-sm">
-              <CardHeader className="bg-[#F9F8F6]">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <User className="w-5 h-5 text-[#2D5A45]" />
-                  {USER_TYPE_LABELS[activeTab]} List
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-[#F9F8F6]">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Name</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Email</th>
-                        {activeTab !== 'desk-in-charge' && activeTab !== 'department-head' && activeTab !== 'nizamat-in-charge' && (
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Password</th>
-                        )}
-                        {activeTab === 'nizamat-in-charge' && (
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Department</th>
-                        )}
-                        {activeTab === 'nizamat-in-charge' && (
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Location</th>
-                        )}
-                        {activeTab === 'coordinator' && (
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Country</th>
-                        )}
-                        {activeTab === 'coordinator' && (
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Desk Incharge</th>
-                        )}
-                        {activeTab === 'desk-in-charge' && (
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Countries</th>
-                        )}
-                        {activeTab === 'department-head' && (
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Department</th>
-                        )}
-                        {activeTab === 'department-head' && (
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Locations</th>
-                        )}
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Phone</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Status</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-[#1A1A1A]">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#E8E3DB]">
-                      {activeTab === 'coordinator' ? (
-                        // ── Coordinator rows ──────────────────────────────────
-                        filteredCoordinators.length === 0 ? (
+            {activeTab === 'department-head' ? (
+              <div className="space-y-0">
+                {/* ── SECTION A: Department Heads ── */}
+                <Card className="shadow-sm mb-0">
+                  <CardHeader className="bg-[#F9F8F6] py-3 px-5">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Users className="w-4 h-4 text-[#2D5A45]" />
+                        Department Heads
+                        <Badge variant="outline" className="ml-1 text-xs bg-blue-50 text-blue-700 border-blue-200">
+                          {getUsersByType('department-head').length}
+                        </Badge>
+                      </CardTitle>
+                      <Button
+                        onClick={() => openAddModal('department-head')}
+                        className="bg-[#2D5A45] hover:bg-[#234839] text-white h-8 px-3 text-xs"
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1.5" />
+                        Add Department Head
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {/* Department Heads table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-[#F9F8F6]">
                           <tr>
-                            <td colSpan={8} className="px-4 py-8 text-center text-[#4A4A4A]">
-                              No coordinators found.
-                            </td>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Name</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Email</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Department</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Locations</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Phone</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Status</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-[#1A1A1A]">Actions</th>
                           </tr>
-                        ) : (
-                          pagedCoordinators.map((coord) => (
-                            <tr key={coord.id} className="hover:bg-[#FAFAFA]">
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium">
-                                    {coord.name.charAt(0)}
-                                  </div>
-                                  <span className="font-medium text-[#1A1A1A]">{coord.name}</span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-[#4A4A4A]">{coord.email}</td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[#4A4A4A] font-mono">
-                                    {showPasswordMap[coord.id] ? coord.password : '••••••••'}
-                                  </span>
-                                  <button
-                                    onClick={() => togglePasswordVisibility(coord.id)}
-                                    className="p-1 hover:bg-gray-100 rounded text-[#4A4A4A]"
-                                  >
-                                    {showPasswordMap[coord.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                  </button>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-[#4A4A4A]">{coord.country}</td>
-                              <td className="px-4 py-3 text-sm text-gray-600">{coord.assignedDeskInchargeName || '—'}</td>
-                              <td className="px-4 py-3 text-[#4A4A4A]">{coord.phone || '—'}</td>
-                              <td className="px-4 py-3">
-                                <Badge
-                                  variant="outline"
-                                  className={coord.isActive
-                                    ? 'bg-green-50 text-green-700 border-green-200'
-                                    : 'bg-gray-50 text-gray-600 border-gray-200'
-                                  }
-                                >
-                                  {coord.isActive ? 'Active' : 'Inactive'}
-                                </Badge>
-                              </td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center justify-end gap-2">
-                                  <button
-                                    onClick={() => handleToggleCoordinator(coord)}
-                                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                    title={coord.isActive ? 'Deactivate' : 'Activate'}
-                                  >
-                                    {coord.isActive
-                                      ? <ToggleRight className="w-5 h-5 text-green-600" />
-                                      : <ToggleLeft className="w-5 h-5 text-gray-400" />
-                                    }
-                                  </button>
-                                  <button
-                                    onClick={() => openEditCoordinator(coord)}
-                                    className="p-2 hover:bg-blue-50 text-[#4A4A4A] hover:text-blue-600 rounded-lg transition-colors"
-                                    title="Edit"
-                                  >
-                                    <Edit2 className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteCoordinator(coord)}
-                                    className="p-2 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded-lg transition-colors"
-                                    title="Delete"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
+                        </thead>
+                        <tbody className="divide-y divide-[#E8E3DB]">
+                          {filteredDeptHeads.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="px-4 py-8 text-center text-[#4A4A4A]">
+                                No department heads found.
                               </td>
                             </tr>
-                          ))
-                        )
-                      ) : activeTab === 'department-head' ? (
-                        // ── Department head rows ──────────────────────────────
-                        filteredUsers.length === 0 ? (
+                          ) : (
+                            filteredDeptHeads.map((u) => (
+                              <tr key={u.id} className="hover:bg-[#FAFAFA]">
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium">
+                                      {u.name.charAt(0)}
+                                    </div>
+                                    <span className="font-medium text-[#1A1A1A]">{u.name}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-[#4A4A4A]">{u.email}</td>
+                                <td className="px-4 py-3">
+                                  {u.department ? (
+                                    <Badge variant="outline" className={getDeptBadgeCls(u.department ?? '')}>
+                                      {u.department}
+                                    </Badge>
+                                  ) : '—'}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {(u.locations?.length ?? 0) > 0 ? (
+                                    <Popover>
+                                      <PopoverTrigger asChild>
+                                        <button className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-[#D6E4D9] text-[#2D5A45] hover:bg-[#C5D9C9] transition-colors">
+                                          {u.locations!.length} location{u.locations!.length !== 1 ? 's' : ''}
+                                        </button>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="w-64 p-3" align="start">
+                                        <p className="text-xs font-semibold text-[#2D5A45] uppercase tracking-wide mb-2">
+                                          Locations ({u.locations!.length})
+                                        </p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {u.locations!.map((loc, i) => (
+                                            <span key={i} className="text-xs bg-[#E8F5EE] text-[#2D5A45] border border-[#D6E4D9] px-2 py-0.5 rounded-full">
+                                              {loc}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </PopoverContent>
+                                    </Popover>
+                                  ) : '—'}
+                                </td>
+                                <td className="px-4 py-3 text-[#4A4A4A]">{u.phone || '—'}</td>
+                                <td className="px-4 py-3">
+                                  <Badge variant="outline" className={u.isActive ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-600 border-gray-200'}>
+                                    {u.isActive ? 'Active' : 'Inactive'}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button onClick={() => handleToggleStatus(u)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title={u.isActive ? 'Deactivate' : 'Activate'}>
+                                      {u.isActive ? <ToggleRight className="w-5 h-5 text-green-600" /> : <ToggleLeft className="w-5 h-5 text-gray-400" />}
+                                    </button>
+                                    <button onClick={() => openEditModal(u)} className="p-2 hover:bg-blue-50 text-[#4A4A4A] hover:text-blue-600 rounded-lg transition-colors" title="Edit">
+                                      <Edit2 className="w-4 h-4" />
+                                    </button>
+                                    <button onClick={() => handleDelete(u)} className="p-2 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded-lg transition-colors" title="Delete">
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Manage Departments expandable panel — below table */}
+                    <div className="border-t border-[#E8E3DB]">
+                      <button
+                        onClick={() => setShowManageDepts(v => !v)}
+                        className="w-full flex items-center justify-between px-5 py-3 text-sm text-[#4A4A4A] hover:bg-[#F9F8F6] transition-colors"
+                      >
+                        <span className="flex items-center gap-2 font-medium">
+                          <Settings2 className="w-4 h-4 text-[#2D5A45]" />
+                          Manage Departments
+                        </span>
+                        <ChevronDown className={`w-4 h-4 transition-transform ${showManageDepts ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showManageDepts && (
+                        <div className="px-5 pb-4 space-y-3 bg-[#FAFAFA] border-t border-[#E8E3DB]">
+                          <div className="flex items-center justify-between pt-3">
+                            <p className="text-sm font-semibold text-[#1A1A1A]">Departments & Locations</p>
+                            <Button
+                              variant="outline"
+                              onClick={() => { setNewDeptName(''); setAddDeptDialogOpen(true); }}
+                              className="border-[#2D5A45] text-[#2D5A45] hover:bg-[#F5F0E8] h-7 px-3 text-xs"
+                            >
+                              <Plus className="w-3 h-3 mr-1" />
+                              Add Department
+                            </Button>
+                          </div>
+                          {departmentList.map(dept => (
+                            <div key={dept} className="bg-[#F9F8F6] rounded-lg border border-[#E8E3DB] p-3 space-y-2">
+                              <div className="flex items-center justify-between">
+                                {renamingDept === dept ? (
+                                  <div className="flex items-center gap-2 flex-1">
+                                    <input
+                                      autoFocus
+                                      value={renameDeptValue}
+                                      onChange={e => setRenameDeptValue(e.target.value)}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                          if (renameDeptValue.trim()) renameDepartment(dept, renameDeptValue.trim());
+                                          setRenamingDept(null);
+                                        }
+                                        if (e.key === 'Escape') setRenamingDept(null);
+                                      }}
+                                      className="flex-1 px-2 py-1 border border-[#2D5A45] rounded text-sm focus:outline-none"
+                                    />
+                                    <button
+                                      onClick={() => {
+                                        if (renameDeptValue.trim()) renameDepartment(dept, renameDeptValue.trim());
+                                        setRenamingDept(null);
+                                      }}
+                                      className="text-xs text-[#2D5A45] font-medium px-2 py-1 hover:bg-[#E8F5EE] rounded"
+                                    >Save</button>
+                                    <button onClick={() => setRenamingDept(null)} className="text-xs text-[#4A4A4A] px-2 py-1 hover:bg-gray-100 rounded">Cancel</button>
+                                  </div>
+                                ) : (
+                                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${getDeptBadgeCls(dept)}`}>
+                                    <Building2 className="w-3 h-3 mr-1" />{dept}
+                                  </span>
+                                )}
+                                <div className="flex items-center gap-1 ml-2">
+                                  <button
+                                    onClick={() => { setRenamingDept(dept); setRenameDeptValue(dept); }}
+                                    className="p-1.5 hover:bg-blue-50 text-[#4A4A4A] hover:text-blue-600 rounded transition-colors"
+                                    title="Rename"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const usersInDept = getUsersByType('nizamat-in-charge').filter(u => u.department === dept).length;
+                                      if (usersInDept > 0) {
+                                        toast.error(`Cannot delete "${dept}" — ${usersInDept} user${usersInDept > 1 ? 's' : ''} assigned`);
+                                        return;
+                                      }
+                                      if (confirm(`Delete department "${dept}"?`)) deleteDepartment(dept);
+                                    }}
+                                    className="p-1.5 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded transition-colors"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                              {/* Locations */}
+                              <div className="pl-1 space-y-1.5">
+                                <div className="flex flex-wrap gap-1.5">
+                                  {(departments[dept] ?? []).map(loc => (
+                                    <span key={loc} className={`inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-xs font-medium border ${getLocPillCls(dept, loc)}`}>
+                                      {loc}
+                                      <button
+                                        onClick={() => deleteLocation(dept, loc)}
+                                        className="w-3.5 h-3.5 rounded-full flex items-center justify-center hover:bg-black/10 transition-colors"
+                                        title="Remove location"
+                                      >
+                                        <X className="w-2.5 h-2.5" />
+                                      </button>
+                                    </span>
+                                  ))}
+                                </div>
+                                {managingLocsDept === dept ? (
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      autoFocus
+                                      value={newLocValue}
+                                      onChange={e => setNewLocValue(e.target.value)}
+                                      placeholder="Location name..."
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                          if (newLocValue.trim()) { addLocation(dept, newLocValue.trim()); setNewLocValue(''); }
+                                          setManagingLocsDept(null);
+                                        }
+                                        if (e.key === 'Escape') { setManagingLocsDept(null); setNewLocValue(''); }
+                                      }}
+                                      className="flex-1 px-2 py-1 border border-[#D4CFC7] rounded text-xs focus:outline-none focus:border-[#2D5A45]"
+                                    />
+                                    <button
+                                      onClick={() => {
+                                        if (newLocValue.trim()) { addLocation(dept, newLocValue.trim()); setNewLocValue(''); }
+                                        setManagingLocsDept(null);
+                                      }}
+                                      className="text-xs text-[#2D5A45] font-medium px-2 py-1 hover:bg-[#E8F5EE] rounded"
+                                    >Add</button>
+                                    <button onClick={() => { setManagingLocsDept(null); setNewLocValue(''); }} className="text-xs text-[#4A4A4A] px-2 py-1 hover:bg-gray-100 rounded">Cancel</button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => { setManagingLocsDept(dept); setNewLocValue(''); }}
+                                    className="text-xs text-[#2D5A45] hover:underline flex items-center gap-0.5"
+                                  >
+                                    <Plus className="w-3 h-3" /> Add location
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* ── DIVIDER ── */}
+                <div className="py-6 px-1">
+                  <div className="border-t border-gray-200" />
+                </div>
+
+                {/* ── SECTION B: Location Managers ── */}
+                <Card className="shadow-sm">
+                  <CardHeader className="bg-[#F9F8F6] py-3 px-5">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <MapPin className="w-4 h-4 text-[#2D5A45]" />
+                        Location Managers
+                        <Badge variant="outline" className="ml-1 text-xs bg-purple-50 text-purple-700 border-purple-200">
+                          {getUsersByType('nizamat-in-charge').length}
+                        </Badge>
+                      </CardTitle>
+                      <Button
+                        onClick={() => openAddModal('nizamat-in-charge')}
+                        className="bg-[#2D5A45] hover:bg-[#234839] text-white h-8 px-3 text-xs"
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1.5" />
+                        Add Location Manager
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {/* Search + Dept filter chips */}
+                    <div className="px-4 py-3 border-b border-[#E8E3DB] flex flex-wrap items-center gap-3">
+                      <div className="relative flex-1 min-w-[180px]">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
+                        <Input
+                          placeholder="Search location managers..."
+                          value={searchQuery}
+                          onChange={e => setSearchQuery(e.target.value)}
+                          className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm"
+                        />
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {['', ...departmentList].map(dept => (
+                          <button
+                            key={dept}
+                            onClick={() => setSubDeptFilter(dept)}
+                            className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                              subDeptFilter === dept
+                                ? 'bg-[#2D5A45] text-white'
+                                : 'bg-white text-[#4A4A4A] border border-[#D4CFC7] hover:bg-[#F5F0E8]'
+                            }`}
+                          >
+                            {dept || 'All'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Location Managers table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-[#F9F8F6]">
                           <tr>
-                            <td colSpan={7} className="px-4 py-8 text-center text-[#4A4A4A]">
-                              No departmental users found.
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Name</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Email</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Department</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Location</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Phone</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Status</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-[#1A1A1A]">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#E8E3DB]">
+                          {filteredLocManagers.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="px-4 py-8 text-center text-[#4A4A4A]">
+                                No location managers found.
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredLocManagers.map((u) => (
+                              <tr key={u.id} className="hover:bg-[#FAFAFA]">
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium">
+                                      {u.name.charAt(0)}
+                                    </div>
+                                    <span className="font-medium text-[#1A1A1A]">{u.name}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-[#4A4A4A] text-sm">{u.email}</td>
+                                <td className="px-4 py-3">
+                                  {u.department ? (
+                                    <Badge variant="outline" className={getDeptBadgeCls(u.department ?? '')}>
+                                      {u.department}
+                                    </Badge>
+                                  ) : '—'}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {u.location ? (
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getLocPillCls(u.department ?? '', u.location)}`}>
+                                      {u.location}
+                                    </span>
+                                  ) : '—'}
+                                </td>
+                                <td className="px-4 py-3 text-[#4A4A4A]">{u.phone || '—'}</td>
+                                <td className="px-4 py-3">
+                                  <Badge variant="outline" className={u.isActive ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-600 border-gray-200'}>
+                                    {u.isActive ? 'Active' : 'Inactive'}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button onClick={() => handleToggleStatus(u)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title={u.isActive ? 'Deactivate' : 'Activate'}>
+                                      {u.isActive ? <ToggleRight className="w-5 h-5 text-green-600" /> : <ToggleLeft className="w-5 h-5 text-gray-400" />}
+                                    </button>
+                                    <button onClick={() => openEditModal(u)} className="p-2 hover:bg-blue-50 text-[#4A4A4A] hover:text-blue-600 rounded-lg transition-colors" title="Edit">
+                                      <Edit2 className="w-4 h-4" />
+                                    </button>
+                                    <button onClick={() => handleDelete(u)} className="p-2 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded-lg transition-colors" title="Delete">
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              <Card className="shadow-sm">
+                <CardHeader className="bg-[#F9F8F6]">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <User className="w-5 h-5 text-[#2D5A45]" />
+                    {USER_TYPE_LABELS[activeTab]} List
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-[#F9F8F6]">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Name</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Email</th>
+                          {activeTab !== 'desk-in-charge' && (
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Password</th>
+                          )}
+                          {activeTab === 'coordinator' && (
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Country</th>
+                          )}
+                          {activeTab === 'coordinator' && (
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Desk Incharge</th>
+                          )}
+                          {activeTab === 'desk-in-charge' && (
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Countries</th>
+                          )}
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Phone</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Status</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-[#1A1A1A]">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E8E3DB]">
+                        {activeTab === 'coordinator' ? (
+                          // ── Coordinator rows ──────────────────────────────────
+                          filteredCoordinators.length === 0 ? (
+                            <tr>
+                              <td colSpan={8} className="px-4 py-8 text-center text-[#4A4A4A]">
+                                No coordinators found.
+                              </td>
+                            </tr>
+                          ) : (
+                            pagedCoordinators.map((coord) => (
+                              <tr key={coord.id} className="hover:bg-[#FAFAFA]">
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium">
+                                      {coord.name.charAt(0)}
+                                    </div>
+                                    <span className="font-medium text-[#1A1A1A]">{coord.name}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-[#4A4A4A]">{coord.email}</td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[#4A4A4A] font-mono">
+                                      {showPasswordMap[coord.id] ? coord.password : '••••••••'}
+                                    </span>
+                                    <button
+                                      onClick={() => togglePasswordVisibility(coord.id)}
+                                      className="p-1 hover:bg-gray-100 rounded text-[#4A4A4A]"
+                                    >
+                                      {showPasswordMap[coord.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-[#4A4A4A]">{coord.country}</td>
+                                <td className="px-4 py-3 text-sm text-gray-600">{coord.assignedDeskInchargeName || '—'}</td>
+                                <td className="px-4 py-3 text-[#4A4A4A]">{coord.phone || '—'}</td>
+                                <td className="px-4 py-3">
+                                  <Badge
+                                    variant="outline"
+                                    className={coord.isActive
+                                      ? 'bg-green-50 text-green-700 border-green-200'
+                                      : 'bg-gray-50 text-gray-600 border-gray-200'
+                                    }
+                                  >
+                                    {coord.isActive ? 'Active' : 'Inactive'}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      onClick={() => handleToggleCoordinator(coord)}
+                                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                      title={coord.isActive ? 'Deactivate' : 'Activate'}
+                                    >
+                                      {coord.isActive
+                                        ? <ToggleRight className="w-5 h-5 text-green-600" />
+                                        : <ToggleLeft className="w-5 h-5 text-gray-400" />
+                                      }
+                                    </button>
+                                    <button
+                                      onClick={() => openEditCoordinator(coord)}
+                                      className="p-2 hover:bg-blue-50 text-[#4A4A4A] hover:text-blue-600 rounded-lg transition-colors"
+                                      title="Edit"
+                                    >
+                                      <Edit2 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteCoordinator(coord)}
+                                      className="p-2 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded-lg transition-colors"
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )
+                        ) : filteredUsers.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-8 text-center text-[#4A4A4A]">
+                              No {USER_TYPE_LABELS[activeTab].toLowerCase()} found. Click "Add" to create one.
                             </td>
                           </tr>
                         ) : (
@@ -870,40 +1110,76 @@ export default function UsersPage() {
                                 </div>
                               </td>
                               <td className="px-4 py-3 text-[#4A4A4A]">{u.email}</td>
-                              <td className="px-4 py-3">
-                                {u.department ? (
-                                  <Badge
-                                    variant="outline"
-                                    className={getDeptBadgeCls(u.department ?? '')}
-                                  >
-                                    {u.department}
-                                  </Badge>
-                                ) : '—'}
-                              </td>
-                              <td className="px-4 py-3">
-                                {(u.locations?.length ?? 0) > 0 ? (
-                                  <Popover>
-                                    <PopoverTrigger asChild>
-                                      <button className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-[#D6E4D9] text-[#2D5A45] hover:bg-[#C5D9C9] transition-colors">
-                                        {u.locations!.length} location{u.locations!.length !== 1 ? 's' : ''}
-                                      </button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-64 p-3" align="start">
-                                      <p className="text-xs font-semibold text-[#2D5A45] uppercase tracking-wide mb-2">
-                                        Locations ({u.locations!.length})
-                                      </p>
-                                      <div className="flex flex-wrap gap-1.5">
-                                        {u.locations!.map((loc, i) => (
-                                          <span key={i} className="text-xs bg-[#E8F5EE] text-[#2D5A45] border border-[#D6E4D9] px-2 py-0.5 rounded-full">
-                                            {loc}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    </PopoverContent>
-                                  </Popover>
-                                ) : '—'}
-                              </td>
-                              <td className="px-4 py-3 text-[#4A4A4A]">{u.phone || '—'}</td>
+                              {activeTab !== 'desk-in-charge' && (
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[#4A4A4A] font-mono">
+                                      {showPasswordMap[u.id] ? u.password : '••••••••'}
+                                    </span>
+                                    <button
+                                      onClick={() => togglePasswordVisibility(u.id)}
+                                      className="p-1 hover:bg-gray-100 rounded text-[#4A4A4A]"
+                                    >
+                                      {showPasswordMap[u.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                  </div>
+                                </td>
+                              )}
+                              {activeTab === 'desk-in-charge' && (
+                                <td className="px-4 py-3">
+                                  {((u.assignedCountries?.length ?? 0) > 0 || (u.assignedDepartments?.length ?? 0) > 0) ? (
+                                    <Popover>
+                                      <PopoverTrigger asChild>
+                                        <div className="flex items-center gap-1.5 cursor-pointer">
+                                          {(u.assignedCountries?.length ?? 0) > 0 && (
+                                            <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-[#D6E4D9] text-[#2D5A45] hover:bg-[#C5D9C9] transition-colors">
+                                              {u.assignedCountries!.length} countries
+                                            </span>
+                                          )}
+                                          {(u.assignedDepartments?.length ?? 0) > 0 && (
+                                            <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition-colors">
+                                              {u.assignedDepartments!.length} dept{u.assignedDepartments!.length > 1 ? 's' : ''}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="w-80 p-3" align="start">
+                                        {(u.assignedDepartments?.length ?? 0) > 0 && (
+                                          <div className="mb-3">
+                                            <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide mb-2">
+                                              Departments ({u.assignedDepartments!.length})
+                                            </p>
+                                            <div className="flex flex-wrap gap-1.5">
+                                              {u.assignedDepartments!.map((dept, i) => (
+                                                <span key={i} className="text-xs bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full">
+                                                  {dept}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                        {(u.assignedCountries?.length ?? 0) > 0 && (
+                                          <>
+                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                                              Countries ({u.assignedCountries!.length})
+                                            </p>
+                                            <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
+                                              {u.assignedCountries!.map((entry, i) => (
+                                                <span key={i} className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
+                                                  {entry}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </>
+                                        )}
+                                      </PopoverContent>
+                                    </Popover>
+                                  ) : (
+                                    <span className="text-[#4A4A4A]/50 text-sm">No items assigned</span>
+                                  )}
+                                </td>
+                              )}
+                              <td className="px-4 py-3 text-[#4A4A4A]">{u.phone || '-'}</td>
                               <td className="px-4 py-3">
                                 <Badge
                                   variant="outline"
@@ -917,15 +1193,27 @@ export default function UsersPage() {
                               </td>
                               <td className="px-4 py-3">
                                 <div className="flex items-center justify-end gap-2">
+                                  {activeTab === 'desk-in-charge' && (
+                                    <button
+                                      onClick={() => {
+                                        setAssigningUserId(prev => prev === u.id ? null : u.id);
+                                      }}
+                                      className="p-2 hover:bg-green-50 text-[#4A4A4A] hover:text-[#2D5A45] rounded-lg transition-colors"
+                                      title="Assign Countries"
+                                    >
+                                      <MapPin className="w-4 h-4" />
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => handleToggleStatus(u)}
                                     className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                                     title={u.isActive ? 'Deactivate' : 'Activate'}
                                   >
-                                    {u.isActive
-                                      ? <ToggleRight className="w-5 h-5 text-green-600" />
-                                      : <ToggleLeft className="w-5 h-5 text-gray-400" />
-                                    }
+                                    {u.isActive ? (
+                                      <ToggleRight className="w-5 h-5 text-green-600" />
+                                    ) : (
+                                      <ToggleLeft className="w-5 h-5 text-gray-400" />
+                                    )}
                                   </button>
                                   <button
                                     onClick={() => openEditModal(u)}
@@ -945,264 +1233,62 @@ export default function UsersPage() {
                               </td>
                             </tr>
                           ))
-                        )
-                      ) : activeTab === 'nizamat-in-charge' ? (
-                        // ── Sub Departmental Users rows ───────────────────────
-                        filteredUsers.length === 0 ? (
-                          <tr>
-                            <td colSpan={7} className="px-4 py-8 text-center text-[#4A4A4A]">
-                              No sub departmental users found.
-                            </td>
-                          </tr>
-                        ) : (
-                          filteredUsers.map((u) => (
-                            <tr key={u.id} className="hover:bg-[#FAFAFA]">
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium">
-                                    {u.name.charAt(0)}
-                                  </div>
-                                  <span className="font-medium text-[#1A1A1A]">{u.name}</span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-[#4A4A4A] text-sm">{u.email}</td>
-                              <td className="px-4 py-3">
-                                {u.department ? (
-                                  <Badge variant="outline" className={getDeptBadgeCls(u.department ?? '')}>
-                                    {u.department}
-                                  </Badge>
-                                ) : '—'}
-                              </td>
-                              <td className="px-4 py-3">
-                                {u.location ? (
-                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getLocPillCls(u.department ?? '', u.location)}`}>
-                                    {u.location}
-                                  </span>
-                                ) : '—'}
-                              </td>
-                              <td className="px-4 py-3 text-[#4A4A4A]">{u.phone || '—'}</td>
-                              <td className="px-4 py-3">
-                                <Badge variant="outline" className={u.isActive ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-600 border-gray-200'}>
-                                  {u.isActive ? 'Active' : 'Inactive'}
-                                </Badge>
-                              </td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center justify-end gap-2">
-                                  <button onClick={() => handleToggleStatus(u)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title={u.isActive ? 'Deactivate' : 'Activate'}>
-                                    {u.isActive ? <ToggleRight className="w-5 h-5 text-green-600" /> : <ToggleLeft className="w-5 h-5 text-gray-400" />}
-                                  </button>
-                                  <button onClick={() => openEditModal(u)} className="p-2 hover:bg-blue-50 text-[#4A4A4A] hover:text-blue-600 rounded-lg transition-colors" title="Edit">
-                                    <Edit2 className="w-4 h-4" />
-                                  </button>
-                                  <button onClick={() => handleDelete(u)} className="p-2 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded-lg transition-colors" title="Delete">
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        )
-                      ) : filteredUsers.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="px-4 py-8 text-center text-[#4A4A4A]">
-                            No {USER_TYPE_LABELS[activeTab].toLowerCase()} found. Click "Add" to create one.
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredUsers.map((u) => (
-                          <tr key={u.id} className="hover:bg-[#FAFAFA]">
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium">
-                                  {u.name.charAt(0)}
-                                </div>
-                                <span className="font-medium text-[#1A1A1A]">{u.name}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-[#4A4A4A]">{u.email}</td>
-                            {activeTab !== 'desk-in-charge' && (
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[#4A4A4A] font-mono">
-                                    {showPasswordMap[u.id] ? u.password : '••••••••'}
-                                  </span>
-                                  <button
-                                    onClick={() => togglePasswordVisibility(u.id)}
-                                    className="p-1 hover:bg-gray-100 rounded text-[#4A4A4A]"
-                                  >
-                                    {showPasswordMap[u.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                  </button>
-                                </div>
-                              </td>
-                            )}
-                            {activeTab === 'coordinator' && (
-                              <td className="px-4 py-3 text-[#4A4A4A]">
-                                {u.country || '-'}
-                              </td>
-                            )}
-                            {activeTab === 'desk-in-charge' && (
-                              <td className="px-4 py-3">
-                                {((u.assignedCountries?.length ?? 0) > 0 || (u.assignedDepartments?.length ?? 0) > 0) ? (
-                                  <Popover>
-                                    <PopoverTrigger asChild>
-                                      <div className="flex items-center gap-1.5 cursor-pointer">
-                                        {(u.assignedCountries?.length ?? 0) > 0 && (
-                                          <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-[#D6E4D9] text-[#2D5A45] hover:bg-[#C5D9C9] transition-colors">
-                                            {u.assignedCountries!.length} countries
-                                          </span>
-                                        )}
-                                        {(u.assignedDepartments?.length ?? 0) > 0 && (
-                                          <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition-colors">
-                                            {u.assignedDepartments!.length} dept{u.assignedDepartments!.length > 1 ? 's' : ''}
-                                          </span>
-                                        )}
-                                      </div>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-80 p-3" align="start">
-                                      {(u.assignedDepartments?.length ?? 0) > 0 && (
-                                        <div className="mb-3">
-                                          <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide mb-2">
-                                            Departments ({u.assignedDepartments!.length})
-                                          </p>
-                                          <div className="flex flex-wrap gap-1.5">
-                                            {u.assignedDepartments!.map((dept, i) => (
-                                              <span key={i} className="text-xs bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full">
-                                                {dept}
-                                              </span>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-                                      {(u.assignedCountries?.length ?? 0) > 0 && (
-                                        <>
-                                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                                            Countries ({u.assignedCountries!.length})
-                                          </p>
-                                          <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
-                                            {u.assignedCountries!.map((entry, i) => (
-                                              <span key={i} className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
-                                                {entry}
-                                              </span>
-                                            ))}
-                                          </div>
-                                        </>
-                                      )}
-                                    </PopoverContent>
-                                  </Popover>
-                                ) : (
-                                  <span className="text-[#4A4A4A]/50 text-sm">No items assigned</span>
-                                )}
-                              </td>
-                            )}
-                            <td className="px-4 py-3 text-[#4A4A4A]">{u.phone || '-'}</td>
-                            <td className="px-4 py-3">
-                              <Badge 
-                                variant="outline" 
-                                className={u.isActive 
-                                  ? 'bg-green-50 text-green-700 border-green-200' 
-                                  : 'bg-gray-50 text-gray-600 border-gray-200'
-                                }
-                              >
-                                {u.isActive ? 'Active' : 'Inactive'}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center justify-end gap-2">
-                                {activeTab === 'desk-in-charge' && (
-                                  <button
-                                    onClick={() => {
-                                      setAssigningUserId(prev => prev === u.id ? null : u.id);
-                                    }}
-                                    className="p-2 hover:bg-green-50 text-[#4A4A4A] hover:text-[#2D5A45] rounded-lg transition-colors"
-                                    title="Assign Countries"
-                                  >
-                                    <MapPin className="w-4 h-4" />
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => handleToggleStatus(u)}
-                                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                  title={u.isActive ? 'Deactivate' : 'Activate'}
-                                >
-                                  {u.isActive ? (
-                                    <ToggleRight className="w-5 h-5 text-green-600" />
-                                  ) : (
-                                    <ToggleLeft className="w-5 h-5 text-gray-400" />
-                                  )}
-                                </button>
-                                <button
-                                  onClick={() => openEditModal(u)}
-                                  className="p-2 hover:bg-blue-50 text-[#4A4A4A] hover:text-blue-600 rounded-lg transition-colors"
-                                  title="Edit"
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(u)}
-                                  className="p-2 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded-lg transition-colors"
-                                  title="Delete"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Coordinator pagination */}
-                {activeTab === 'coordinator' && coordTotalPages > 1 && (
-                  <div className="flex items-center justify-between px-4 py-3 border-t border-[#E8E3DB]">
-                    <p className="text-sm text-[#4A4A4A]">
-                      Showing {Math.min((coordPage - 1) * COORD_PAGE_SIZE + 1, filteredCoordinators.length)}–{Math.min(coordPage * COORD_PAGE_SIZE, filteredCoordinators.length)} of {filteredCoordinators.length} coordinators
-                    </p>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setCoordPage(p => Math.max(1, p - 1))}
-                        disabled={coordPage === 1}
-                        className="px-3 py-1.5 text-sm border border-[#D4CFC7] rounded-lg hover:bg-[#F5F0E8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                      >
-                        Previous
-                      </button>
-                      {Array.from({ length: coordTotalPages }, (_, i) => i + 1)
-                        .filter(p => p === 1 || p === coordTotalPages || Math.abs(p - coordPage) <= 1)
-                        .reduce<(number | '...')[]>((acc, p, idx, arr) => {
-                          if (idx > 0 && (arr[idx - 1] as number) < p - 1) acc.push('...');
-                          acc.push(p);
-                          return acc;
-                        }, [])
-                        .map((p, i) =>
-                          p === '...' ? (
-                            <span key={`e${i}`} className="px-2 text-[#4A4A4A]">…</span>
-                          ) : (
-                            <button
-                              key={p}
-                              onClick={() => setCoordPage(p as number)}
-                              className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
-                                coordPage === p
-                                  ? 'bg-[#2D5A45] text-white'
-                                  : 'border border-[#D4CFC7] text-[#4A4A4A] hover:bg-[#F5F0E8]'
-                              }`}
-                            >
-                              {p}
-                            </button>
-                          )
                         )}
-                      <button
-                        onClick={() => setCoordPage(p => Math.min(coordTotalPages, p + 1))}
-                        disabled={coordPage === coordTotalPages}
-                        className="px-3 py-1.5 text-sm border border-[#D4CFC7] rounded-lg hover:bg-[#F5F0E8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                      >
-                        Next
-                      </button>
-                    </div>
+                      </tbody>
+                    </table>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+
+                  {/* Coordinator pagination */}
+                  {activeTab === 'coordinator' && coordTotalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-[#E8E3DB]">
+                      <p className="text-sm text-[#4A4A4A]">
+                        Showing {Math.min((coordPage - 1) * COORD_PAGE_SIZE + 1, filteredCoordinators.length)}–{Math.min(coordPage * COORD_PAGE_SIZE, filteredCoordinators.length)} of {filteredCoordinators.length} coordinators
+                      </p>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setCoordPage(p => Math.max(1, p - 1))}
+                          disabled={coordPage === 1}
+                          className="px-3 py-1.5 text-sm border border-[#D4CFC7] rounded-lg hover:bg-[#F5F0E8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Previous
+                        </button>
+                        {Array.from({ length: coordTotalPages }, (_, i) => i + 1)
+                          .filter(p => p === 1 || p === coordTotalPages || Math.abs(p - coordPage) <= 1)
+                          .reduce<(number | '...')[]>((acc, p, idx, arr) => {
+                            if (idx > 0 && (arr[idx - 1] as number) < p - 1) acc.push('...');
+                            acc.push(p);
+                            return acc;
+                          }, [])
+                          .map((p, i) =>
+                            p === '...' ? (
+                              <span key={`e${i}`} className="px-2 text-[#4A4A4A]">…</span>
+                            ) : (
+                              <button
+                                key={p}
+                                onClick={() => setCoordPage(p as number)}
+                                className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
+                                  coordPage === p
+                                    ? 'bg-[#2D5A45] text-white'
+                                    : 'border border-[#D4CFC7] text-[#4A4A4A] hover:bg-[#F5F0E8]'
+                                }`}
+                              >
+                                {p}
+                              </button>
+                            )
+                          )}
+                        <button
+                          onClick={() => setCoordPage(p => Math.min(coordTotalPages, p + 1))}
+                          disabled={coordPage === coordTotalPages}
+                          className="px-3 py-1.5 text-sm border border-[#D4CFC7] rounded-lg hover:bg-[#F5F0E8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Assign Countries Panel */}
             {(() => {
@@ -1229,7 +1315,7 @@ export default function UsersPage() {
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-[#E8E3DB]">
               <h2 className="text-xl font-semibold text-[#1A1A1A]">
-                {editingUser ? 'Edit' : 'Add'} {USER_TYPE_LABELS[activeTab]}
+                {editingUser ? 'Edit' : 'Add'} {USER_TYPE_LABELS[modalUserType]}
               </h2>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
@@ -1287,7 +1373,7 @@ export default function UsersPage() {
                 </div>
               </div>
 
-              {activeTab === 'nizamat-in-charge' && (
+              {modalUserType === 'nizamat-in-charge' && (
                 <>
                   <div className="space-y-2">
                     <Label className="text-[#1A1A1A]">Department *</Label>
@@ -1319,7 +1405,7 @@ export default function UsersPage() {
                 </>
               )}
 
-              {activeTab === 'coordinator' && (
+              {modalUserType === 'coordinator' && (
                 <>
                   <div className="space-y-2">
                     <Label className="text-[#1A1A1A]">Country</Label>

@@ -16,6 +16,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { GuestViewModal } from '@/components/GuestViewModal';
+import { DepartmentSelect } from '@/components/DepartmentSelect';
 import { toast } from 'sonner';
 import {
   LayoutDashboard, ClipboardList, CheckSquare, MessageSquare, XCircle,
@@ -44,7 +45,7 @@ export default function GuestsToReviewPage() {
   const { user, logout } = useAuth();
   const { guests, updateGuest } = useGuests();
   const { addEntry, addComment } = useAuditTrail();
-  const { departmentList, getDeptBadgeCls } = useDepartments();
+  const { getDeptBadgeCls } = useDepartments();
 
   const [search, setSearch] = useState('');
   const [countryFilter, setCountryFilter] = useState('all');
@@ -442,17 +443,13 @@ export default function GuestsToReviewPage() {
                                     {g.assignedDepartment}
                                   </span>
                                 ) : (
-                                  <select
+                                  <DepartmentSelect
                                     value=""
-                                    onChange={e => { e.stopPropagation(); if (e.target.value) setDeptAssign({ guestId: g.id, dept: e.target.value }); }}
-                                    onClick={e => e.stopPropagation()}
-                                    className="px-2 py-1 border border-[#D4CFC7] rounded-md text-xs bg-white focus:border-[#2D5A45] focus:outline-none"
-                                  >
-                                    <option value="">Select...</option>
-                                    {departmentList.map(d => (
-                                      <option key={d} value={d}>{d}</option>
-                                    ))}
-                                  </select>
+                                    onValueChange={v => { if (v) setDeptAssign({ guestId: g.id, dept: v }); }}
+                                    placeholder="Select..."
+                                    stopPropagation
+                                    className="text-xs min-w-[130px]"
+                                  />
                                 )}
                               </td>
                             </tr>
@@ -580,16 +577,11 @@ export default function GuestsToReviewPage() {
             <p className="text-sm text-[#4A4A4A]">
               Select a department for <span className="font-semibold">{guests.find(g => g.id === deptSelectGuestId)?.fullName}</span>:
             </p>
-            <select
+            <DepartmentSelect
               value={deptSelectValue}
-              onChange={e => setDeptSelectValue(e.target.value)}
-              className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
-            >
-              <option value="">Select department...</option>
-              {departmentList.map(d => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
+              onValueChange={setDeptSelectValue}
+              className="w-full"
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setDeptSelectGuestId(null); setDeptSelectValue(''); }}>Cancel</Button>

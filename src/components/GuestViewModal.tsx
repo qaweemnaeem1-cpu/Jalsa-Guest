@@ -19,6 +19,7 @@ import {
   DEFAULT_DESIGNATIONS, COUNTRIES,
 } from '@/lib/constants';
 import { useDepartments } from '@/hooks/useDepartments';
+import { DepartmentSelect } from '@/components/DepartmentSelect';
 import type { Guest, GuestStatus, UserRole } from '@/types';
 
 // ─── Security helper ──────────────────────────────────────────────────────────
@@ -200,7 +201,7 @@ export function GuestViewModal({
   const { user } = useAuth();
   const { updateGuest, addRemark } = useGuests();
   const { getEntriesForGuest, addEntry } = useAuditTrail();
-  const { departmentList, departments, getDeptBadgeCls, getLocPillCls } = useDepartments();
+  const { departments, getDeptBadgeCls, getLocPillCls } = useDepartments();
 
   const [commentText, setCommentText] = useState('');
   const [roomInput, setRoomInput] = useState('');
@@ -825,19 +826,15 @@ export function GuestViewModal({
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-xs font-medium text-[#4A4A4A] mb-1">Department</p>
-                      <select
+                      <DepartmentSelect
                         value={deptEditValue}
-                        onChange={e => {
-                          setDeptEditValue(e.target.value);
+                        onValueChange={v => {
+                          setDeptEditValue(v === '__none__' ? '' : v);
                           setLocEditValue('');
                         }}
-                        className={selectCls}
-                      >
-                        <option value="">None</option>
-                        {departmentList.map(d => (
-                          <option key={d} value={d}>{d}</option>
-                        ))}
-                      </select>
+                        includeNone
+                        className="w-full"
+                      />
                     </div>
                     <div>
                       <p className="text-xs font-medium text-[#4A4A4A] mb-1">Location</p>
