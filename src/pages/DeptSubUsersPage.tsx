@@ -217,7 +217,14 @@ export default function DeptSubUsersPage() {
                     {subUsers.map((su, idx) => (
                       <tr key={su.id} className="hover:bg-[#F9F8F6]">
                         <td className="px-4 py-3 text-[#4A4A4A]">{idx + 1}</td>
-                        <td className="px-4 py-3 font-medium text-[#1A1A1A]">{su.name}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium shrink-0">
+                              {su.name.charAt(0)}
+                            </div>
+                            <span className="font-medium text-[#1A1A1A]">{su.name}</span>
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-[#4A4A4A]">{su.email}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getLocPillCls(dept, su.location)}`}>
@@ -228,22 +235,25 @@ export default function DeptSubUsersPage() {
                         <td className="px-4 py-3">
                           <button
                             onClick={() => handleToggleActive(su.id)}
-                            className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${
-                              su.isActive ? 'text-green-600' : 'text-[#4A4A4A]'
-                            }`}
                             title="Toggle active status"
                           >
-                            {su.isActive
-                              ? <ToggleRight className="w-5 h-5" />
-                              : <ToggleLeft className="w-5 h-5" />}
-                            {su.isActive ? 'Active' : 'Inactive'}
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                              su.isActive
+                                ? 'bg-green-50 text-green-700 border-green-200'
+                                : 'bg-gray-50 text-gray-600 border-gray-200'
+                            }`}>
+                              {su.isActive
+                                ? <ToggleRight className="w-3.5 h-3.5" />
+                                : <ToggleLeft className="w-3.5 h-3.5" />}
+                              {su.isActive ? 'Active' : 'Inactive'}
+                            </span>
                           </button>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => openEdit(su)}
-                              className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors"
+                              className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-blue-50 hover:text-blue-600 transition-colors"
                               title="Edit sub user"
                             >
                               <Pencil className="w-4 h-4" />

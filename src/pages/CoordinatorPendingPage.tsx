@@ -217,21 +217,52 @@ export default function CoordinatorPendingPage() {
                     const latestRemark = g.remarks?.sort(
                       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
                     )[0];
+
+                    // For family guests — find which individual members need correction
+                    const membersNeedingCorrection = g.guestType === 'family'
+                      ? [
+                          ...(g.status === 'Needs Correction' && g.familyMembers.some(m => m.status !== undefined && m.status !== 'Needs Correction')
+                            ? [] // head is fine if at least one member has a different explicit status
+                            : g.familyMembers.filter(m => (m.status ?? g.status) === 'Needs Correction').length === 0
+                              ? [] // none explicitly flagged — don't highlight individuals
+                              : []),
+                          ...g.familyMembers.filter(m => (m.status ?? g.status) === 'Needs Correction'),
+                        ]
+                      : [];
+
+                    const isFamily = g.guestType === 'family';
+
                     return (
-                      <div key={g.id} className="flex items-center gap-4 px-5 py-4 border-b border-[#E8E3DB] last:border-b-0">
+                      <div
+                        key={g.id}
+                        className={`flex items-start gap-4 px-5 py-4 border-b border-[#E8E3DB] last:border-b-0 ${
+                          isFamily ? 'border-l-4 border-l-orange-400' : ''
+                        }`}
+                      >
                         {/* Avatar */}
-                        <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center text-orange-700 font-bold text-sm shrink-0">
+                        <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center text-orange-700 font-bold text-sm shrink-0 mt-0.5">
                           {getInitials(g.fullName)}
                         </div>
                         {/* Info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-[#1A1A1A]">{g.fullName}</span>
+                            {isFamily && (
+                              <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200 text-[10px]">
+                                Family · {g.familyMembers.length + 1} members
+                              </Badge>
+                            )}
                             <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-[10px]">
                               Needs Correction
                             </Badge>
                           </div>
                           <p className="text-xs text-[#4A4A4A] mt-0.5 font-mono">{g.referenceNumber}</p>
+                          {/* Per-member correction hints */}
+                          {membersNeedingCorrection.map(m => (
+                            <p key={m.id} className="text-xs text-orange-600 mt-0.5">
+                              {m.name} needs correction
+                            </p>
+                          ))}
                           {latestRemark && (
                             <p className="text-xs text-[#4A4A4A]/70 mt-1 truncate max-w-md">
                               {latestRemark.message.slice(0, 80)}{latestRemark.message.length > 80 ? '…' : ''}
@@ -239,7 +270,7 @@ export default function CoordinatorPendingPage() {
                           )}
                         </div>
                         {/* Actions */}
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-2 shrink-0 mt-0.5">
                           <Button
                             size="sm"
                             variant="outline"

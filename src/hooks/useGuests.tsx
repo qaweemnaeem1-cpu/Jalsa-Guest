@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import type { Guest, GuestStatus, GuestRemark, GuestStatusEvent } from '@/types';
+import type { Guest, GuestStatus, GuestRemark, GuestStatusEvent, FamilyMember, FamilyMemberStatus } from '@/types';
 import { useAuth } from './useAuth';
 
 interface GuestsContextType {
@@ -16,6 +16,10 @@ interface GuestsContextType {
   getMySubmittedGuests: () => Guest[];
   getNeedsCorrectionCount: () => number;
   generateReferenceNumber: () => string;
+  updateFamilyMemberStatus: (guestId: string, memberId: string, newStatus: FamilyMemberStatus) => void;
+  assignFamilyMemberDepartment: (guestId: string, memberId: string, department: string) => void;
+  placeFamilyMember: (guestId: string, memberId: string, location: string) => void;
+  getFamilyStatusSummary: (guest: Guest) => { approved: number; awaiting: number; total: number };
 }
 
 const GuestsContext = createContext<GuestsContextType | undefined>(undefined);
@@ -104,8 +108,28 @@ const generateSampleGuests = (): Guest[] => {
       visaStatus: 'not-required',
       guestType: 'family',
       familyMembers: [
-        { id: 'f1', name: 'Helga Schmidt', age: 40, relationship: 'spouse', gender: 'female' },
-        { id: 'f2', name: 'Max Schmidt', age: 14, relationship: 'son', gender: 'male' },
+        {
+          id: 'f1',
+          name: 'Helga Schmidt',
+          age: 40,
+          relationship: 'spouse',
+          gender: 'female',
+          status: 'Accommodated',
+          assignedDepartment: 'Reserve 1 (R1)',
+          assignedDepartmentAt: '2024-01-15T10:00:00',
+          placedLocation: 'Hotels',
+          placedAt: '2024-01-15T13:00:00',
+        },
+        {
+          id: 'f2',
+          name: 'Max Schmidt',
+          age: 14,
+          relationship: 'son',
+          gender: 'male',
+          status: 'Approved',
+          assignedDepartment: 'Reserve 1 (R1)',
+          assignedDepartmentAt: '2024-01-15T10:00:00',
+        },
       ],
       designation: 'Local Missionary',
       arrivalFlightNumber: 'LH902',
@@ -320,7 +344,14 @@ const generateSampleGuests = (): Guest[] => {
       visaStatus: 'not-required',
       guestType: 'family',
       familyMembers: [
-        { id: 'f3', name: 'Erik Wagner', age: 45, relationship: 'spouse', gender: 'male' },
+        {
+          id: 'f3',
+          name: 'Erik Wagner',
+          age: 45,
+          relationship: 'spouse',
+          gender: 'male',
+          status: 'Awaiting Review',
+        },
       ],
       designation: 'Jamaat Member',
       arrivalFlightNumber: 'LH910',
@@ -438,6 +469,49 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
     ).length;
   }, [guests, user]);
 
+  const updateFamilyMember = useCallback((guestId: string, memberId: string, updates: Partial<FamilyMember>) => {
+    setGuests(prev =>
+      prev.map(guest =>
+        guest.id === guestId
+          ? {
+              ...guest,
+              familyMembers: guest.familyMembers.map(m =>
+                m.id === memberId ? { ...m, ...updates } : m
+              ),
+            }
+          : guest
+      )
+    );
+  }, []);
+
+  const updateFamilyMemberStatus = useCallback((guestId: string, memberId: string, newStatus: FamilyMemberStatus) => {
+    updateFamilyMember(guestId, memberId, { status: newStatus });
+  }, [updateFamilyMember]);
+
+  const assignFamilyMemberDepartment = useCallback((guestId: string, memberId: string, department: string) => {
+    updateFamilyMember(guestId, memberId, {
+      assignedDepartment: department,
+      assignedDepartmentAt: new Date().toISOString(),
+    });
+  }, [updateFamilyMember]);
+
+  const placeFamilyMember = useCallback((guestId: string, memberId: string, location: string) => {
+    updateFamilyMember(guestId, memberId, {
+      placedLocation: location,
+      placedAt: new Date().toISOString(),
+    });
+  }, [updateFamilyMember]);
+
+  const getFamilyStatusSummary = useCallback((guest: Guest) => {
+    const all = [
+      { status: guest.status as string },
+      ...guest.familyMembers.map(m => ({ status: (m.status ?? guest.status) as string })),
+    ];
+    const approved = all.filter(m => m.status === 'Approved' || m.status === 'Accommodated').length;
+    const awaiting = all.filter(m => m.status === 'Awaiting Review').length;
+    return { approved, awaiting, total: all.length };
+  }, []);
+
   return (
     <GuestsContext.Provider
       value={{
@@ -454,6 +528,10 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
         getMySubmittedGuests,
         getNeedsCorrectionCount,
         generateReferenceNumber,
+        updateFamilyMemberStatus,
+        assignFamilyMemberDepartment,
+        placeFamilyMember,
+        getFamilyStatusSummary,
       }}
     >
       {children}

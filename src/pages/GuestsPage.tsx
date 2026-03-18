@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { GUEST_STATUS_LABELS, ROLE_LABELS } from '@/lib/constants';
 import { GuestViewModal } from '@/components/GuestViewModal';
+import { FamilyStatusCell } from '@/components/FamilyStatusCell';
 import type { UserRole, Guest } from '@/types';
 
 const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> = {
@@ -643,12 +644,7 @@ export default function GuestsPage() {
                               )}
                             </td>
                             <td className="px-4 py-3">
-                              <Badge
-                                variant="outline"
-                                className={getStatusBadgeStyle(guest.status)}
-                              >
-                                {GUEST_STATUS_LABELS[guest.status]}
-                              </Badge>
+                              <FamilyStatusCell guest={guest} />
                             </td>
                             <td className="px-4 py-3 text-[#4A4A4A]">{guest.submittedAt}</td>
                             <td className="px-4 py-3">

@@ -216,22 +216,25 @@ export default function DeptLocationsPage() {
                           <td className="px-4 py-3">
                             <button
                               onClick={() => handleToggleActive(loc.id)}
-                              className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${
-                                loc.isActive ? 'text-green-600' : 'text-[#4A4A4A]'
-                              }`}
                               title="Toggle active status"
                             >
-                              {loc.isActive
-                                ? <ToggleRight className="w-5 h-5" />
-                                : <ToggleLeft className="w-5 h-5" />}
-                              {loc.isActive ? 'Active' : 'Inactive'}
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                                loc.isActive
+                                  ? 'bg-green-50 text-green-700 border-green-200'
+                                  : 'bg-gray-50 text-gray-600 border-gray-200'
+                              }`}>
+                                {loc.isActive
+                                  ? <ToggleRight className="w-3.5 h-3.5" />
+                                  : <ToggleLeft className="w-3.5 h-3.5" />}
+                                {loc.isActive ? 'Active' : 'Inactive'}
+                              </span>
                             </button>
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 onClick={() => openEdit(loc)}
-                                className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors"
+                                className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-blue-50 hover:text-blue-600 transition-colors"
                                 title="Edit location"
                               >
                                 <Pencil className="w-4 h-4" />

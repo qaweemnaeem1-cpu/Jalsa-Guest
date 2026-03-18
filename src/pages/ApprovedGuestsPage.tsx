@@ -1,14 +1,19 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
+import { useAuditTrail } from '@/hooks/useAuditTrail';
+import { useDepartments } from '@/hooks/useDepartments';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { GuestViewModal } from '@/components/GuestViewModal';
+import { FamilyStatusCell } from '@/components/FamilyStatusCell';
+import { DepartmentSelect } from '@/components/DepartmentSelect';
+import { toast } from 'sonner';
 import {
   LayoutDashboard, ClipboardList, CheckSquare,
-  Search, ChevronDown, LogOut, Eye, CheckCircle, MessageSquare,
+  Search, ChevronDown, LogOut, Eye, CheckCircle, MessageSquare, ChevronRight,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import type { Guest } from '@/types';
@@ -23,18 +28,20 @@ const DESK_NAV = [
 export default function ApprovedGuestsPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { guests } = useGuests();
+  const { guests, assignFamilyMemberDepartment, updateGuest } = useGuests();
+  const { addEntry } = useAuditTrail();
+  const { getDeptBadgeCls } = useDepartments();
 
   const [search, setSearch] = useState('');
   const [countryFilter, setCountryFilter] = useState('all');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [viewGuestId, setViewGuestId] = useState<string | null>(null);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   if (!user) return null;
 
   const assignedCountries = user.assignedCountries || [];
 
-  // Guests from DI's countries that are approved/accommodated
   const approvedGuests = useMemo(() =>
     guests.filter(g =>
       assignedCountries.includes(g.country) &&
@@ -87,9 +94,38 @@ export default function ApprovedGuestsPage() {
   }, [approvedGuests, countryFilter, search]);
 
   const statusBadge = (status: string) => {
-    if (status === 'Approved')     return 'bg-green-50 text-green-700 border-green-200';
-    if (status === 'Accommodated') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (status === 'Approved')         return 'bg-green-50 text-green-700 border-green-200';
+    if (status === 'Accommodated')     return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (status === 'Needs Correction') return 'bg-orange-50 text-orange-700 border-orange-200';
+    if (status === 'Rejected')         return 'bg-red-50 text-red-700 border-red-200';
     return 'bg-gray-50 text-gray-700 border-gray-200';
+  };
+
+  const toggleRow = (id: string) => setExpandedRows(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const handleMemberDeptAssign = (g: Guest, memberId: string | null, memberName: string, dept: string) => {
+    if (memberId === null) {
+      updateGuest(g.id, {
+        assignedDepartment: dept,
+        assignedDepartmentAt: new Date().toISOString(),
+        assignedDepartmentBy: user.id,
+        assignedDepartmentByName: user.name,
+      });
+    } else {
+      assignFamilyMemberDepartment(g.id, memberId, dept);
+    }
+    addEntry({
+      guestId: g.id, guestName: g.fullName, guestReference: g.referenceNumber,
+      type: 'assignment', action: memberId ? 'Member department assigned' : 'Department assigned',
+      details: `${memberName} assigned to ${dept}`, newValue: dept,
+      createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
+      createdAt: new Date().toISOString(),
+    });
+    toast.success(`${memberName} assigned to ${dept}`);
   };
 
   return (
@@ -263,33 +299,113 @@ export default function ApprovedGuestsPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#E8E3DB]">
-                        {filtered.map(g => (
-                          <tr key={g.id} className="hover:bg-[#FAFAFA]">
-                            <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">{g.referenceNumber}</td>
-                            <td className="px-4 py-3 font-medium text-[#1A1A1A]">{g.fullName}</td>
-                            <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.country}</td>
-                            <td className="px-4 py-3">
-                              <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200 capitalize">
-                                {g.guestType}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-3">
-                              <Badge variant="outline" className={`text-xs ${statusBadge(g.status)}`}>
-                                {GUEST_STATUS_LABELS[g.status] ?? g.status}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-[#4A4A4A]">{getApprovedDate(g)}</td>
-                            <td className="px-4 py-3">
-                              <button
-                                onClick={() => setViewGuestId(g.id)}
-                                title="View details"
-                                className="p-1.5 rounded-md text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors"
+                        {filtered.map(g => {
+                          const isFamily = g.guestType === 'family' && g.familyMembers.length > 0;
+                          const isExpanded = expandedRows.has(g.id);
+
+                          const drawerMembers = [
+                            { memberId: null as string | null, name: g.fullName, relationship: 'Head',
+                              status: g.status as string, dept: g.assignedDepartment },
+                            ...g.familyMembers.map(m => ({
+                              memberId: m.id, name: m.name, relationship: m.relationship,
+                              status: (m.status ?? g.status) as string, dept: m.assignedDepartment,
+                            })),
+                          ];
+
+                          return (
+                            <Fragment key={g.id}>
+                              <tr
+                                className={`hover:bg-[#FAFAFA] ${isFamily ? 'cursor-pointer select-none' : ''}`}
+                                onClick={isFamily ? () => toggleRow(g.id) : undefined}
                               >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                                <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">{g.referenceNumber}</td>
+                                <td className="px-4 py-3 font-medium text-[#1A1A1A]">
+                                  <div className="flex items-center gap-1.5">
+                                    {g.fullName}
+                                    {isFamily && (
+                                      isExpanded
+                                        ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                        : <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.country}</td>
+                                <td className="px-4 py-3">
+                                  <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200 capitalize">
+                                    {g.guestType}{isFamily && ` (${g.familyMembers.length + 1})`}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <FamilyStatusCell guest={g} />
+                                </td>
+                                <td className="px-4 py-3 text-sm text-[#4A4A4A]">{getApprovedDate(g)}</td>
+                                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => setViewGuestId(g.id)}
+                                    title="View details"
+                                    className="p-1.5 rounded-md text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                </td>
+                              </tr>
+
+                              {/* ── Family member drawer (read-only + dept assignment) ── */}
+                              {isFamily && isExpanded && (
+                                <tr>
+                                  <td colSpan={7} className="p-0 bg-[#F9F8F6] border-b border-[#E8E3DB]">
+                                    <div className="px-6 py-4 space-y-2">
+                                      <p className="text-[10px] font-semibold text-[#4A4A4A] uppercase tracking-widest mb-3">
+                                        Family Members · {drawerMembers.length} total
+                                      </p>
+                                      {drawerMembers.map((row, idx) => (
+                                        <div
+                                          key={row.memberId ?? 'head'}
+                                          className="flex items-center gap-3 py-2 px-3 rounded-lg bg-white border border-[#E8E3DB]"
+                                        >
+                                          {/* Number */}
+                                          <span className="w-6 h-6 bg-[#2D5A45] rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                                            {idx + 1}
+                                          </span>
+                                          {/* Avatar */}
+                                          <div className="w-7 h-7 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-xs font-medium shrink-0">
+                                            {row.name.charAt(0)}
+                                          </div>
+                                          {/* Name + relationship */}
+                                          <div className="flex items-center gap-1.5 min-w-0 w-44 shrink-0">
+                                            <span className="font-medium text-sm text-[#1A1A1A] truncate">{row.name}</span>
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 capitalize shrink-0">
+                                              {row.relationship}
+                                            </span>
+                                          </div>
+                                          {/* Status badge */}
+                                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 shrink-0 ${statusBadge(row.status)}`}>
+                                            {GUEST_STATUS_LABELS[row.status as keyof typeof GUEST_STATUS_LABELS] ?? row.status}
+                                          </Badge>
+                                          {/* Department — dropdown if unassigned, pill if assigned */}
+                                          <div className="ml-auto shrink-0">
+                                            {row.dept ? (
+                                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${getDeptBadgeCls(row.dept)}`}>
+                                                {row.dept}
+                                              </span>
+                                            ) : (
+                                              <DepartmentSelect
+                                                value=""
+                                                onValueChange={v => { if (v) handleMemberDeptAssign(g, row.memberId, row.name, v); }}
+                                                placeholder="Assign dept..."
+                                                className="text-[10px] min-w-[120px]"
+                                              />
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

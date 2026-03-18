@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -28,7 +28,8 @@ import { useDepartments } from '@/hooks/useDepartments';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { getRoleDisplayLabel } from '@/components/ProfileDialog';
 import { sanitizeComment } from '@/hooks/useAuditTrail';
-import type { Guest } from '@/types';
+import { FamilyStatusCell } from '@/components/FamilyStatusCell';
+import type { Guest, GuestStatus, FamilyMemberStatus } from '@/types';
 
 const DESK_NAV = [
   { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
@@ -43,7 +44,7 @@ const PAGE_SIZE = 15;
 export default function GuestsToReviewPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { guests, updateGuest } = useGuests();
+  const { guests, updateGuest, updateFamilyMemberStatus, assignFamilyMemberDepartment } = useGuests();
   const { addEntry, addComment } = useAuditTrail();
   const { getDeptBadgeCls } = useDepartments();
 
@@ -70,6 +71,16 @@ export default function GuestsToReviewPage() {
   const [deptWarningGuestId, setDeptWarningGuestId] = useState<string | null>(null);
   const [deptSelectGuestId, setDeptSelectGuestId] = useState<string | null>(null);
   const [deptSelectValue, setDeptSelectValue] = useState('');
+
+  // Family drawer state
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [memberCorrectionDialog, setMemberCorrectionDialog] = useState<{
+    guestId: string; memberId: string | null; memberName: string; reason: string;
+  } | null>(null);
+  const [memberRejectDialog, setMemberRejectDialog] = useState<{
+    guestId: string; memberId: string | null; memberName: string; reason: string;
+  } | null>(null);
+  const [assignAllValues, setAssignAllValues] = useState<Record<string, string>>({});
 
   if (!user) return null;
 
@@ -217,6 +228,130 @@ export default function GuestsToReviewPage() {
     }
     toast.success(`${guest.fullName} rejected`);
     setRejectDialog({ open: false, guest: null, reason: '' });
+  };
+
+  // ── Family drawer handlers ──────────────────────────────────────────────────
+
+  const toggleRow = (id: string) => setExpandedRows(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const memberBadgeCls = (status: string) => {
+    if (status === 'Awaiting Review')  return 'bg-amber-50 text-amber-700 border-amber-200';
+    if (status === 'Needs Correction') return 'bg-orange-50 text-orange-700 border-orange-200';
+    if (status === 'Approved')         return 'bg-green-50 text-green-700 border-green-200';
+    if (status === 'Accommodated')     return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (status === 'Rejected')         return 'bg-red-50 text-red-700 border-red-200';
+    return 'bg-gray-50 text-gray-600 border-gray-200';
+  };
+
+  const handleDrawerApprove = (g: Guest, memberId: string | null, memberName: string) => {
+    if (memberId === null) {
+      updateGuest(g.id, { status: 'Approved' });
+      makeAuditEntry(g, g.status, 'Approved');
+    } else {
+      updateFamilyMemberStatus(g.id, memberId, 'Approved');
+      addEntry({
+        guestId: g.id, guestName: g.fullName, guestReference: g.referenceNumber,
+        type: 'status_change', action: 'Member approved',
+        details: `${memberName} → Approved`, newValue: 'Approved',
+        createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
+        createdAt: new Date().toISOString(),
+      });
+    }
+    toast.success(`${memberName} approved`);
+  };
+
+  const handleMemberCorrectionConfirm = () => {
+    if (!memberCorrectionDialog || memberCorrectionDialog.reason.trim().length < 10) return;
+    const { guestId, memberId, memberName, reason } = memberCorrectionDialog;
+    const g = guests.find(x => x.id === guestId);
+    if (!g) return;
+    const safe = sanitizeComment(reason);
+    if (memberId === null) {
+      updateGuest(guestId, { status: 'Needs Correction' });
+      makeAuditEntry(g, g.status, 'Needs Correction');
+    } else {
+      updateFamilyMemberStatus(guestId, memberId, 'Needs Correction');
+      addEntry({
+        guestId: g.id, guestName: g.fullName, guestReference: g.referenceNumber,
+        type: 'status_change', action: 'Member correction requested',
+        details: `${memberName} flagged for correction`, newValue: 'Needs Correction',
+        createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
+        createdAt: new Date().toISOString(),
+      });
+    }
+    if (safe) {
+      addComment({
+        guestId: g.id, guestName: g.fullName, guestReference: g.referenceNumber,
+        comment: memberId ? `[${memberName}] ${safe}` : safe,
+        createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
+      });
+    }
+    toast.success(`Correction requested for ${memberName}`);
+    setMemberCorrectionDialog(null);
+  };
+
+  const handleMemberRejectConfirm = () => {
+    if (!memberRejectDialog || memberRejectDialog.reason.trim().length < 10) return;
+    const { guestId, memberId, memberName, reason } = memberRejectDialog;
+    const g = guests.find(x => x.id === guestId);
+    if (!g) return;
+    const safe = sanitizeComment(reason);
+    if (memberId === null) {
+      updateGuest(guestId, { status: 'Rejected', rejectionReason: safe });
+      makeAuditEntry(g, g.status, 'Rejected');
+    } else {
+      updateFamilyMemberStatus(guestId, memberId, 'Rejected');
+      addEntry({
+        guestId: g.id, guestName: g.fullName, guestReference: g.referenceNumber,
+        type: 'status_change', action: 'Member rejected',
+        details: `${memberName} rejected`, newValue: 'Rejected',
+        createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
+        createdAt: new Date().toISOString(),
+      });
+    }
+    if (safe) {
+      addComment({
+        guestId: g.id, guestName: g.fullName, guestReference: g.referenceNumber,
+        comment: memberId ? `[${memberName}] ${safe}` : safe,
+        createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
+      });
+    }
+    toast.success(`${memberName} rejected`);
+    setMemberRejectDialog(null);
+  };
+
+  const handleMemberDeptAssign = (g: Guest, memberId: string | null, memberName: string, dept: string) => {
+    if (memberId === null) {
+      handleDeptAssignById(g.id, dept);
+    } else {
+      assignFamilyMemberDepartment(g.id, memberId, dept);
+      addEntry({
+        guestId: g.id, guestName: g.fullName, guestReference: g.referenceNumber,
+        type: 'assignment', action: 'Member department assigned',
+        details: `${memberName} assigned to ${dept}`, newValue: dept,
+        createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
+        createdAt: new Date().toISOString(),
+      });
+      toast.success(`${memberName} assigned to ${dept}`);
+    }
+  };
+
+  const handleApproveAll = (g: Guest) => {
+    updateGuest(g.id, { status: 'Approved' });
+    makeAuditEntry(g, g.status, 'Approved');
+    g.familyMembers.forEach(m => updateFamilyMemberStatus(g.id, m.id, 'Approved'));
+    toast.success(`All ${g.familyMembers.length + 1} members approved`);
+  };
+
+  const handleAssignAll = (g: Guest, dept: string) => {
+    if (!dept) return;
+    handleDeptAssignById(g.id, dept);
+    g.familyMembers.forEach(m => assignFamilyMemberDepartment(g.id, m.id, dept));
+    setAssignAllValues(prev => ({ ...prev, [g.id]: '' }));
   };
 
   return (
@@ -373,87 +508,220 @@ export default function GuestsToReviewPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#E8E3DB]">
-                          {paginated.map(g => (
-                            <tr key={g.id} className="hover:bg-[#FAFAFA]">
-                              <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">{g.referenceNumber}</td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-medium text-[#1A1A1A]">{g.fullName}</span>
-                                  {(g.resubmitCount ?? 0) > 0 && (
-                                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">
-                                      Re-submitted
+                          {paginated.map(g => {
+                            const isFamily = g.guestType === 'family' && g.familyMembers.length > 0;
+                            const isExpanded = expandedRows.has(g.id);
+
+                            // Build unified member list: head first, then family members
+                            const drawerMembers = [
+                              { memberId: null as string | null, name: g.fullName, relationship: 'Head',
+                                status: g.status as string, dept: g.assignedDepartment },
+                              ...g.familyMembers.map(m => ({
+                                memberId: m.id, name: m.name, relationship: m.relationship,
+                                status: (m.status ?? g.status) as string, dept: m.assignedDepartment,
+                              })),
+                            ];
+
+                            return (
+                              <Fragment key={g.id}>
+                                <tr
+                                  className={`hover:bg-[#FAFAFA] ${isFamily ? 'cursor-pointer select-none' : ''}`}
+                                  onClick={isFamily ? () => toggleRow(g.id) : undefined}
+                                >
+                                  <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">{g.referenceNumber}</td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-medium text-[#1A1A1A]">{g.fullName}</span>
+                                      {isFamily && (
+                                        isExpanded
+                                          ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                          : <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                      )}
+                                      {(g.resubmitCount ?? 0) > 0 && (
+                                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">
+                                          Re-submitted
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.country}</td>
+                                  <td className="px-4 py-3">
+                                    <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200 capitalize">
+                                      {g.guestType}{isFamily && ` (${g.familyMembers.length + 1})`}
                                     </Badge>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.country}</td>
-                              <td className="px-4 py-3">
-                                <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200 capitalize">
-                                  {g.guestType}
-                                </Badge>
-                              </td>
-                              <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.submittedAt ?? '—'}</td>
-                              <td className="px-4 py-3">
-                                <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
-                                  {GUEST_STATUS_LABELS[g.status] ?? g.status}
-                                </Badge>
-                              </td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-1.5">
-                                  <button
-                                    onClick={e => { e.stopPropagation(); setViewGuestId(g.id); }}
-                                    title="View details"
-                                    className="p-1.5 rounded-md text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors"
-                                  >
-                                    <Eye className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={e => { e.stopPropagation(); setEditGuestId(g.id); }}
-                                    title="Edit guest"
-                                    className="p-1.5 rounded-md text-green-600 hover:bg-green-50 transition-colors"
-                                  >
-                                    <Pencil className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={e => { e.stopPropagation(); handleApproveClick(g); }}
-                                    title="Approve"
-                                    className="p-1.5 rounded-md text-green-600 hover:bg-green-50 transition-colors"
-                                  >
-                                    <CheckCircle className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={e => { e.stopPropagation(); setCorrectionDialog({ open: true, guest: g, reason: '' }); }}
-                                    title="Needs Correction"
-                                    className="p-1.5 rounded-md text-orange-500 hover:bg-orange-50 transition-colors"
-                                  >
-                                    <AlertCircle className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={e => { e.stopPropagation(); setRejectDialog({ open: true, guest: g, reason: '' }); }}
-                                    title="Reject"
-                                    className="p-1.5 rounded-md text-red-500 hover:bg-red-50 transition-colors"
-                                  >
-                                    <XCircle className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3">
-                                {g.assignedDepartment ? (
-                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getDeptBadgeCls(g.assignedDepartment)}`}>
-                                    {g.assignedDepartment}
-                                  </span>
-                                ) : (
-                                  <DepartmentSelect
-                                    value=""
-                                    onValueChange={v => { if (v) setDeptAssign({ guestId: g.id, dept: v }); }}
-                                    placeholder="Select..."
-                                    stopPropagation
-                                    className="text-xs min-w-[130px]"
-                                  />
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.submittedAt ?? '—'}</td>
+                                  <td className="px-4 py-3">
+                                    <FamilyStatusCell guest={g} />
+                                  </td>
+                                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                                    <div className="flex items-center gap-1.5">
+                                      <button
+                                        onClick={() => setViewGuestId(g.id)}
+                                        title="View details"
+                                        className="p-1.5 rounded-md text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors"
+                                      >
+                                        <Eye className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => setEditGuestId(g.id)}
+                                        title="Edit guest"
+                                        className="p-1.5 rounded-md text-green-600 hover:bg-green-50 transition-colors"
+                                      >
+                                        <Pencil className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleApproveClick(g)}
+                                        title={isFamily ? 'Approve all members' : 'Approve'}
+                                        className="p-1.5 rounded-md text-green-600 hover:bg-green-50 transition-colors"
+                                      >
+                                        <CheckCircle className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => setCorrectionDialog({ open: true, guest: g, reason: '' })}
+                                        title="Needs Correction"
+                                        className="p-1.5 rounded-md text-orange-500 hover:bg-orange-50 transition-colors"
+                                      >
+                                        <AlertCircle className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => setRejectDialog({ open: true, guest: g, reason: '' })}
+                                        title="Reject"
+                                        className="p-1.5 rounded-md text-red-500 hover:bg-red-50 transition-colors"
+                                      >
+                                        <XCircle className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                                    {g.assignedDepartment ? (
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getDeptBadgeCls(g.assignedDepartment)}`}>
+                                        {g.assignedDepartment}
+                                      </span>
+                                    ) : (
+                                      <DepartmentSelect
+                                        value=""
+                                        onValueChange={v => { if (v) setDeptAssign({ guestId: g.id, dept: v }); }}
+                                        placeholder="Select..."
+                                        stopPropagation
+                                        className="text-xs min-w-[130px]"
+                                      />
+                                    )}
+                                  </td>
+                                </tr>
+
+                                {/* ── Family member drawer ── */}
+                                {isFamily && isExpanded && (
+                                  <tr>
+                                    <td colSpan={8} className="p-0 bg-[#F9F8F6] border-b border-[#E8E3DB]">
+                                      <div className="px-6 py-4 space-y-2">
+                                        <p className="text-[10px] font-semibold text-[#4A4A4A] uppercase tracking-widest mb-3">
+                                          Family Members · {drawerMembers.length} total
+                                        </p>
+                                        {drawerMembers.map((row, idx) => {
+                                          const isApproved = row.status === 'Approved' || row.status === 'Accommodated';
+                                          return (
+                                            <div
+                                              key={row.memberId ?? 'head'}
+                                              className="flex items-center gap-3 py-2 px-3 rounded-lg bg-white border border-[#E8E3DB]"
+                                            >
+                                              {/* Number */}
+                                              <span className="w-6 h-6 bg-[#2D5A45] rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                                                {idx + 1}
+                                              </span>
+                                              {/* Avatar */}
+                                              <div className="w-7 h-7 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-xs font-medium shrink-0">
+                                                {row.name.charAt(0)}
+                                              </div>
+                                              {/* Name + relationship */}
+                                              <div className="flex items-center gap-1.5 min-w-0 w-44 shrink-0">
+                                                <span className="font-medium text-sm text-[#1A1A1A] truncate">{row.name}</span>
+                                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 capitalize shrink-0">
+                                                  {row.relationship}
+                                                </span>
+                                              </div>
+                                              {/* Status badge */}
+                                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border shrink-0 ${memberBadgeCls(row.status)}`}>
+                                                {row.status}
+                                              </span>
+                                              {/* Action buttons */}
+                                              <div className="flex items-center gap-1 shrink-0">
+                                                <button
+                                                  onClick={() => handleDrawerApprove(g, row.memberId, row.name)}
+                                                  disabled={isApproved}
+                                                  title="Approve"
+                                                  className="p-1 rounded text-green-600 hover:bg-green-50 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+                                                >
+                                                  <CheckCircle className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                  onClick={() => setMemberCorrectionDialog({ guestId: g.id, memberId: row.memberId, memberName: row.name, reason: '' })}
+                                                  disabled={isApproved}
+                                                  title="Needs Correction"
+                                                  className="p-1 rounded text-orange-500 hover:bg-orange-50 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+                                                >
+                                                  <AlertCircle className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                  onClick={() => setMemberRejectDialog({ guestId: g.id, memberId: row.memberId, memberName: row.name, reason: '' })}
+                                                  disabled={isApproved}
+                                                  title="Reject"
+                                                  className="p-1 rounded text-red-500 hover:bg-red-50 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+                                                >
+                                                  <XCircle className="w-3.5 h-3.5" />
+                                                </button>
+                                              </div>
+                                              {/* Department */}
+                                              <div className="ml-auto shrink-0">
+                                                {row.dept ? (
+                                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${getDeptBadgeCls(row.dept)}`}>
+                                                    {row.dept}
+                                                  </span>
+                                                ) : (
+                                                  <DepartmentSelect
+                                                    value=""
+                                                    onValueChange={v => { if (v) handleMemberDeptAssign(g, row.memberId, row.name, v); }}
+                                                    placeholder="Assign dept..."
+                                                    className="text-[10px] min-w-[120px]"
+                                                  />
+                                                )}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+
+                                        {/* ── Bulk actions ── */}
+                                        <div className="flex items-center gap-3 pt-3 border-t border-[#E8E3DB] mt-1">
+                                          <button
+                                            onClick={() => handleApproveAll(g)}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-medium transition-colors"
+                                          >
+                                            <CheckCircle className="w-3.5 h-3.5" />
+                                            Approve All
+                                          </button>
+                                          <div className="flex items-center gap-1.5">
+                                            <DepartmentSelect
+                                              value={assignAllValues[g.id] ?? ''}
+                                              onValueChange={v => setAssignAllValues(prev => ({ ...prev, [g.id]: v }))}
+                                              placeholder="Assign all to..."
+                                              className="text-xs min-w-[140px]"
+                                            />
+                                            <button
+                                              onClick={() => handleAssignAll(g, assignAllValues[g.id] ?? '')}
+                                              disabled={!assignAllValues[g.id]}
+                                              className="px-3 py-1.5 bg-[#2D5A45] hover:bg-[#234839] text-white rounded-md text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                              Apply
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
                                 )}
-                              </td>
-                            </tr>
-                          ))}
+                              </Fragment>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -668,6 +936,90 @@ export default function GuestsToReviewPage() {
             >
               <AlertCircle className="w-4 h-4 mr-1.5" />
               Send for Correction
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Member Correction Dialog */}
+      <Dialog
+        open={!!memberCorrectionDialog}
+        onOpenChange={open => { if (!open) setMemberCorrectionDialog(null); }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-orange-500" />
+              Request Correction
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-[#4A4A4A]">
+              Sending <span className="font-medium">{memberCorrectionDialog?.memberName}</span> back for correction.
+            </p>
+            <Textarea
+              value={memberCorrectionDialog?.reason ?? ''}
+              onChange={e => setMemberCorrectionDialog(d => d ? { ...d, reason: e.target.value } : d)}
+              placeholder="Describe what needs to be corrected (required, min. 10 chars)..."
+              rows={4}
+              maxLength={1000}
+              className="border-[#D4CFC7] focus:border-[#2D5A45] resize-none text-sm"
+            />
+            {(memberCorrectionDialog?.reason.length ?? 0) > 0 && (memberCorrectionDialog?.reason.trim().length ?? 0) < 10 && (
+              <p className="text-xs text-red-500">Please provide at least 10 characters.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMemberCorrectionDialog(null)}>Cancel</Button>
+            <Button
+              onClick={handleMemberCorrectionConfirm}
+              disabled={(memberCorrectionDialog?.reason.trim().length ?? 0) < 10}
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+            >
+              <AlertCircle className="w-4 h-4 mr-1.5" />
+              Send for Correction
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Member Reject Dialog */}
+      <Dialog
+        open={!!memberRejectDialog}
+        onOpenChange={open => { if (!open) setMemberRejectDialog(null); }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <XCircle className="w-5 h-5 text-red-500" />
+              Reject Member
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-[#4A4A4A]">
+              Rejecting <span className="font-medium text-red-600">{memberRejectDialog?.memberName}</span>. This action should be used carefully.
+            </p>
+            <Textarea
+              value={memberRejectDialog?.reason ?? ''}
+              onChange={e => setMemberRejectDialog(d => d ? { ...d, reason: e.target.value } : d)}
+              placeholder="Reason for rejection (required, min. 10 chars)..."
+              rows={4}
+              maxLength={1000}
+              className="border-[#D4CFC7] focus:border-[#2D5A45] resize-none text-sm"
+            />
+            {(memberRejectDialog?.reason.length ?? 0) > 0 && (memberRejectDialog?.reason.trim().length ?? 0) < 10 && (
+              <p className="text-xs text-red-500">Please provide at least 10 characters.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMemberRejectDialog(null)}>Cancel</Button>
+            <Button
+              onClick={handleMemberRejectConfirm}
+              disabled={(memberRejectDialog?.reason.trim().length ?? 0) < 10}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              <XCircle className="w-4 h-4 mr-1.5" />
+              Confirm Reject
             </Button>
           </DialogFooter>
         </DialogContent>

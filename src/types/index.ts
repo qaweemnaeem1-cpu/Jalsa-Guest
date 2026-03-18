@@ -11,12 +11,29 @@ export interface User {
   department?: string;
 }
 
+export type FamilyMemberStatus =
+  | 'Awaiting Review'
+  | 'Needs Correction'
+  | 'Approved'
+  | 'Rejected'
+  | 'Accommodated'
+  | 'Assigned - Reserve 1'
+  | 'Assigned - UK Jamaat'
+  | 'Assigned - Central Guests';
+
 export interface FamilyMember {
   id: string;
   name: string;
   age: number;
   relationship: string;
   gender: 'male' | 'female';
+  status?: FamilyMemberStatus;
+  assignedDepartment?: string;
+  assignedDepartmentAt?: string;
+  placedLocation?: string;
+  placedAt?: string;
+  rejectionReason?: string;
+  remarks?: string;
 }
 
 export interface GuestRemark {

@@ -7,11 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   LayoutDashboard, Users, Clock, MessageSquare, XCircle,
-  Search, ChevronDown, LogOut,
+  Search, ChevronDown, LogOut, ChevronRight,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { getRoleDisplayLabel } from '@/components/ProfileDialog';
+import { FamilyStatusCell } from '@/components/FamilyStatusCell';
 import type { GuestStatus } from '@/types';
 
 const COORD_NAV = [
@@ -46,6 +47,13 @@ export default function CoordinatorSubmittedPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<GuestStatus | 'all'>('all');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const toggleRow = (id: string) => setExpandedRows(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
   if (!user) return null;
 
@@ -211,24 +219,74 @@ export default function CoordinatorSubmittedPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#E8E3DB]">
-                        {allSubmitted.map(g => (
-                          <tr key={g.id} className="hover:bg-[#FAFAFA]">
-                            <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">{g.referenceNumber}</td>
-                            <td className="px-4 py-3 font-medium text-[#1A1A1A]">{g.fullName}</td>
-                            <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.country}</td>
-                            <td className="px-4 py-3">
-                              <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200 capitalize">
-                                {g.guestType}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.submittedAt ?? '—'}</td>
-                            <td className="px-4 py-3">
-                              <Badge variant="outline" className={`text-xs ${statusBadgeCls(g.status)}`}>
-                                {GUEST_STATUS_LABELS[g.status] ?? g.status}
-                              </Badge>
-                            </td>
-                          </tr>
-                        ))}
+                        {allSubmitted.map(g => {
+                          const isFamily = g.guestType === 'family' && g.familyMembers.length > 0;
+                          const isExpanded = expandedRows.has(g.id);
+                          return (
+                            <>
+                              <tr
+                                key={g.id}
+                                className={`hover:bg-[#FAFAFA] ${isFamily ? 'cursor-pointer' : ''}`}
+                                onClick={isFamily ? () => toggleRow(g.id) : undefined}
+                              >
+                                <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">{g.referenceNumber}</td>
+                                <td className="px-4 py-3 font-medium text-[#1A1A1A]">
+                                  <div className="flex items-center gap-1.5">
+                                    {g.fullName}
+                                    {isFamily && (
+                                      isExpanded
+                                        ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                        : <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.country}</td>
+                                <td className="px-4 py-3">
+                                  <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200 capitalize">
+                                    {g.guestType}
+                                    {isFamily && (
+                                      <span className="ml-1 text-[#4A4A4A]">({g.familyMembers.length + 1})</span>
+                                    )}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.submittedAt ?? '—'}</td>
+                                <td className="px-4 py-3">
+                                  <FamilyStatusCell guest={g} expandable={isFamily} />
+                                </td>
+                              </tr>
+                              {isFamily && isExpanded && (
+                                <tr key={`${g.id}-members`} className="bg-[#F9F8F6]">
+                                  <td colSpan={6} className="px-8 py-3">
+                                    <div className="space-y-1.5">
+                                      <p className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wide mb-2">
+                                        Family Members
+                                      </p>
+                                      {[
+                                        { name: g.fullName, status: g.status as string, rel: 'Head' },
+                                        ...g.familyMembers.map(m => ({
+                                          name: m.name,
+                                          status: (m.status ?? g.status) as string,
+                                          rel: m.relationship,
+                                        })),
+                                      ].map((m, i) => (
+                                        <div key={i} className="flex items-center gap-3">
+                                          <div className="w-6 h-6 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-[10px] font-medium shrink-0">
+                                            {m.name.charAt(0)}
+                                          </div>
+                                          <span className="text-sm text-[#1A1A1A] w-36 shrink-0">{m.name}</span>
+                                          <span className="text-xs text-[#4A4A4A] capitalize w-20 shrink-0">{m.rel}</span>
+                                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusBadgeCls(m.status)}`}>
+                                            {GUEST_STATUS_LABELS[m.status as GuestStatus] ?? m.status}
+                                          </Badge>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
