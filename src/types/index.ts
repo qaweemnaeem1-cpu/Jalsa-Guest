@@ -1,4 +1,4 @@
-export type UserRole = 'super-admin' | 'desk-in-charge' | 'coordinator' | 'transport' | 'accommodation' | 'viewer' | 'department-head';
+export type UserRole = 'super-admin' | 'desk-in-charge' | 'coordinator' | 'transport' | 'accommodation' | 'viewer' | 'department-head' | 'location-manager';
 
 export interface User {
   id: string;
@@ -9,6 +9,7 @@ export interface User {
   countryCode?: string;
   assignedCountries?: string[];
   department?: string;
+  location?: string;
 }
 
 export type FamilyMemberStatus =
@@ -150,4 +151,30 @@ export interface Country {
   totalRegistrations: number;
   approved: number;
   pending: number;
+}
+
+// ── Room system ────────────────────────────────────────────────────────────────
+
+export interface Block {
+  id: string;
+  name: string;
+  locationId: string; // location name, e.g. "Jamia"
+  isActive: boolean;
+}
+
+export interface Room {
+  id: string;
+  name: string;
+  locationId: string;
+  blockId?: string;
+  capacity: number;
+  isActive: boolean;
+}
+
+export interface BedAssignment {
+  bedNumber: number;
+  guestId?: string;
+  guestName?: string;
+  familyMemberId?: string;
+  assignedAt?: string;
 }

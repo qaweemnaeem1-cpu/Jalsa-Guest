@@ -4,6 +4,7 @@ import { LayoutDashboard, Inbox, CheckCircle, Users, MapPin, Clock, ArrowRight }
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { DeptSidebar } from '@/components/DeptSidebar';
+import { DeptUserMenu } from '@/components/DeptUserMenu';
 import { getStatusBadgeClass } from '@/lib/constants';
 import { useDepartments } from '@/hooks/useDepartments';
 
@@ -53,12 +54,15 @@ export default function DeptDashboardPage() {
         <DeptSidebar />
         <main className="flex-1 ml-64">
           <header className="bg-white border-b border-[#E8E3DB] px-6 py-4">
-            <div className="flex items-center gap-3">
-              <LayoutDashboard className="w-5 h-5 text-[#2D5A45]" />
-              <div>
-                <h1 className="text-xl font-semibold text-[#1A1A1A]">{dept} Dashboard</h1>
-                <p className="text-xs text-[#4A4A4A] mt-0.5">{user.name} — {locations.length} location{locations.length !== 1 ? 's' : ''}</p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <LayoutDashboard className="w-5 h-5 text-[#2D5A45]" />
+                <div>
+                  <h1 className="text-xl font-semibold text-[#1A1A1A]">{dept} Dashboard</h1>
+                  <p className="text-xs text-[#4A4A4A] mt-0.5">{locations.length} location{locations.length !== 1 ? 's' : ''}</p>
+                </div>
               </div>
+              <DeptUserMenu />
             </div>
           </header>
 

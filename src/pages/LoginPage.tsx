@@ -13,6 +13,7 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: 'desk-in-charge', label: 'Desk In-Charge' },
   { value: 'coordinator', label: 'Coordinator' },
   { value: 'department-head', label: 'Dept. Head' },
+  { value: 'location-manager', label: 'Loc. Manager' },
 ];
 
 export default function LoginPage() {

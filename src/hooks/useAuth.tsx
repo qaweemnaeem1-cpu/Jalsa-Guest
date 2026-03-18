@@ -62,6 +62,14 @@ const DEMO_USERS: Record<UserRole, User> = {
     role: 'department-head',
     department: 'Reserve 1 (R1)',
   },
+  'location-manager': {
+    id: 'lm-001',
+    name: 'Jamia Manager',
+    email: 'jamia.lm@tabshir.org',
+    role: 'location-manager',
+    location: 'Jamia',
+    department: 'Reserve 1 (R1)',
+  },
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {

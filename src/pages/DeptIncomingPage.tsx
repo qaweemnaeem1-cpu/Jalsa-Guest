@@ -4,7 +4,9 @@ import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { DeptSidebar } from '@/components/DeptSidebar';
+import { DeptUserMenu } from '@/components/DeptUserMenu';
 import { useDepartments } from '@/hooks/useDepartments';
+import { useAuditTrail2 } from '@/hooks/useAuditTrail2';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { FamilyBadge, type FamilyMemberInfo } from '@/components/FamilyBadge';
 import { Input } from '@/components/ui/input';
@@ -125,6 +127,7 @@ export default function DeptIncomingPage() {
   const { user } = useAuth();
   const { guests, updateGuest, placeFamilyMember } = useGuests();
   const { departments } = useDepartments();
+  const { addEntry: addEntry2 } = useAuditTrail2();
 
   const [viewGuestId, setViewGuestId] = useState<string | null>(null);
   const [pendingPlacement, setPendingPlacement] = useState<PendingPlacement | null>(null);
@@ -170,6 +173,7 @@ export default function DeptIncomingPage() {
   const handleConfirmPlacement = () => {
     if (!pendingPlacement || !user) return;
     const { guestId, memberId, location, name } = pendingPlacement;
+    const guest = guests.find(g => g.id === guestId);
     if (memberId) {
       placeFamilyMember(guestId, memberId, location);
     } else {
@@ -177,6 +181,18 @@ export default function DeptIncomingPage() {
         placedLocation: location,
         placedAt: new Date().toISOString(),
         placedBy: user.id,
+      });
+    }
+    if (guest) {
+      addEntry2({
+        guestId, guestName: name, guestReference: guest.referenceNumber,
+        locationId: location, locationName: location,
+        departmentId: dept, departmentName: dept,
+        type: 'guest_placed',
+        action: `Guest placed at ${location}`,
+        newValue: location,
+        createdBy: { id: user.id, name: user.name, role: 'department-head' },
+        createdAt: new Date().toISOString(),
       });
     }
     toast.success(`${name} placed at ${location}`);
@@ -191,6 +207,7 @@ export default function DeptIncomingPage() {
   const handleConfirmBulk = () => {
     if (!bulkPending || !user) return;
     const { guestId, location, rows } = bulkPending;
+    const guest = guests.find(g => g.id === guestId);
     for (const r of rows) {
       if (r.memberId) {
         placeFamilyMember(guestId, r.memberId, location);
@@ -199,6 +216,18 @@ export default function DeptIncomingPage() {
           placedLocation: location,
           placedAt: new Date().toISOString(),
           placedBy: user.id,
+        });
+      }
+      if (guest) {
+        addEntry2({
+          guestId, guestName: r.name, guestReference: guest.referenceNumber,
+          locationId: location, locationName: location,
+          departmentId: dept, departmentName: dept,
+          type: 'guest_placed',
+          action: `Guest placed at ${location}`,
+          newValue: location,
+          createdBy: { id: user.id, name: user.name, role: 'department-head' },
+          createdAt: new Date().toISOString(),
         });
       }
     }
@@ -233,11 +262,14 @@ export default function DeptIncomingPage() {
                   <p className="text-xs text-[#4A4A4A] mt-0.5">Guests assigned to {dept} — awaiting placement</p>
                 </div>
               </div>
-              {allRows.length > 0 && (
-                <span className="bg-amber-100 text-amber-700 text-xs font-semibold px-3 py-1 rounded-full border border-amber-200">
-                  {allRows.length} unplaced
-                </span>
-              )}
+              <div className="flex items-center gap-3">
+                {allRows.length > 0 && (
+                  <span className="bg-amber-100 text-amber-700 text-xs font-semibold px-3 py-1 rounded-full border border-amber-200">
+                    {allRows.length} unplaced
+                  </span>
+                )}
+                <DeptUserMenu />
+              </div>
             </div>
           </header>
 

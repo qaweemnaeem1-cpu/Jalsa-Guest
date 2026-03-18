@@ -3,6 +3,7 @@ import { Users, Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Eye, EyeOff } fro
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { DeptSidebar } from '@/components/DeptSidebar';
+import { DeptUserMenu } from '@/components/DeptUserMenu';
 import { useDepartments } from '@/hooks/useDepartments';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -178,13 +179,16 @@ export default function DeptSubUsersPage() {
                   <p className="text-xs text-[#4A4A4A] mt-0.5">Manage users for {dept} locations</p>
                 </div>
               </div>
-              <Button
-                onClick={openAdd}
-                className="bg-[#2D5A45] hover:bg-[#234839] text-white h-9 px-4 text-sm flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Add Sub User
-              </Button>
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={openAdd}
+                  className="bg-[#2D5A45] hover:bg-[#234839] text-white h-9 px-4 text-sm flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Sub User
+                </Button>
+                <DeptUserMenu />
+              </div>
             </div>
           </header>
 

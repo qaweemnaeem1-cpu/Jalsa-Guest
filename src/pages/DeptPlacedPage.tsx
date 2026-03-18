@@ -3,6 +3,7 @@ import { CheckCircle, Eye } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { DeptSidebar } from '@/components/DeptSidebar';
+import { DeptUserMenu } from '@/components/DeptUserMenu';
 import { useDepartments } from '@/hooks/useDepartments';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { FamilyBadge, type FamilyMemberInfo } from '@/components/FamilyBadge';
@@ -141,6 +142,7 @@ export default function DeptPlacedPage() {
                 <span className="bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full border border-green-200">
                   {filteredRows.length} placed
                 </span>
+                <DeptUserMenu />
               </div>
             </div>
           </header>

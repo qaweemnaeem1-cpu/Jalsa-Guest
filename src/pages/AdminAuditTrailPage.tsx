@@ -5,6 +5,7 @@ import { useGuests } from '@/hooks/useGuests';
 import { useUsers } from '@/hooks/useUsers';
 import { useAuditTrail, sanitizeComment } from '@/hooks/useAuditTrail';
 import type { AuditEntry } from '@/hooks/useAuditTrail';
+import { useAuditTrail2, type AuditEntry2 } from '@/hooks/useAuditTrail2';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -122,18 +123,80 @@ type QuickFilter = 'all' | 'unread' | 'Awaiting Review' | 'Needs Correction';
 type DialogFilter = 'all' | 'comments' | 'status_changes' | 'edits' | 'submissions';
 type DateRangeFilter = 'all' | 'today' | 'week' | 'month';
 
+// ── Trail 2 helpers ────────────────────────────────────────────────────────────
+
+const T2_TYPE_DOT: Record<string, string> = {
+  guest_placed:    'bg-green-400',
+  room_assignment: 'bg-blue-400',
+  room_change:     'bg-amber-400',
+  status_change:   'bg-purple-400',
+  comment:         'bg-[#2D5A45]',
+};
+const T2_TYPE_LABEL: Record<string, string> = {
+  guest_placed:    'Placed',
+  room_assignment: 'Room Assigned',
+  room_change:     'Room Move',
+  status_change:   'Status',
+  comment:         'Comment',
+};
+const T2_ROLE_BADGE: Record<string, string> = {
+  'department-head':  'bg-[#E8F5EE] text-[#2D5A45] border-[#D6E4D9]',
+  'location-manager': 'bg-blue-50 text-blue-700 border-blue-200',
+  'super-admin':      'bg-red-50 text-red-700 border-red-200',
+};
+const T2_ROLE_LABEL: Record<string, string> = {
+  'department-head':  'Dept. Head',
+  'location-manager': 'Location Mgr',
+  'super-admin':      'Super Admin',
+};
+
+function Trail2Row({ entry }: { entry: AuditEntry2 }) {
+  return (
+    <div className="flex items-start gap-3 px-5 py-4 border-b border-[#E8E3DB] last:border-b-0 hover:bg-[#F9F8F6]">
+      <span className={`mt-1 w-2.5 h-2.5 rounded-full shrink-0 ${T2_TYPE_DOT[entry.type] ?? 'bg-gray-400'}`} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+          <span className="text-sm font-medium text-[#1A1A1A]">{entry.guestName}</span>
+          <span className="text-[10px] font-mono text-[#4A4A4A]/60">{entry.guestReference}</span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${T2_ROLE_BADGE[entry.createdBy.role] ?? 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+            {T2_ROLE_LABEL[entry.createdBy.role] ?? entry.createdBy.role}
+          </span>
+          <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-gray-200">
+            {T2_TYPE_LABEL[entry.type] ?? entry.type}
+          </span>
+        </div>
+        <p className="text-sm text-[#1A1A1A]">{entry.type === 'comment' ? entry.comment : entry.action}</p>
+        {entry.newValue && entry.type !== 'comment' && (
+          <span className="text-xs text-[#4A4A4A] bg-white border border-[#E8E3DB] px-2 py-0.5 rounded font-mono mt-1 inline-block">
+            {entry.newValue}
+          </span>
+        )}
+        <p className="text-xs text-[#4A4A4A]/60 mt-1">
+          {entry.createdBy.name} · {entry.locationName} · {entry.departmentName}
+        </p>
+      </div>
+      <span className="text-xs text-[#4A4A4A]/50 shrink-0 mt-0.5">{formatTime(entry.createdAt)}</span>
+    </div>
+  );
+}
+
 export default function AdminAuditTrailPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { guests } = useGuests();
   const { users } = useUsers();
   const { entries, addComment, markGuestEntriesAsRead } = useAuditTrail();
+  const { entries: entries2 } = useAuditTrail2();
 
+  const [trailTab, setTrailTab] = useState<'registration' | 'accommodation'>('registration');
   const [search, setSearch] = useState('');
   const [countryFilter, setCountryFilter] = useState('all');
   const [diFilter, setDiFilter] = useState('all');
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
   const [dateFilter, setDateFilter] = useState<DateRangeFilter>('all');
+  const [t2Search, setT2Search] = useState('');
+  const [t2LocationFilter, setT2LocationFilter] = useState('all');
+  const [t2TypeFilter, setT2TypeFilter] = useState('all');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   // Dialog state
@@ -327,6 +390,29 @@ export default function AdminAuditTrailPage() {
 
   const hasActiveFilters = search || countryFilter !== 'all' || diFilter !== 'all' || quickFilter !== 'all' || dateFilter !== 'all';
 
+  // ── Trail 2 derived data ─────────────────────────────────────────────────────
+
+  const t2Locations = useMemo(() => {
+    const s = new Set(entries2.map(e => e.locationName));
+    return Array.from(s).sort();
+  }, [entries2]);
+
+  const filteredEntries2 = useMemo(() => {
+    let list = entries2;
+    if (t2LocationFilter !== 'all') list = list.filter(e => e.locationName === t2LocationFilter);
+    if (t2TypeFilter !== 'all') list = list.filter(e => e.type === t2TypeFilter);
+    if (t2Search) {
+      const s = t2Search.toLowerCase();
+      list = list.filter(e =>
+        e.guestName.toLowerCase().includes(s) ||
+        e.guestReference.toLowerCase().includes(s) ||
+        e.locationName.toLowerCase().includes(s) ||
+        e.departmentName.toLowerCase().includes(s),
+      );
+    }
+    return list.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [entries2, t2LocationFilter, t2TypeFilter, t2Search]);
+
   const handleStandaloneComment = () => {
     if (!standaloneGuestId || !standaloneComment.trim()) return;
     const g = guests.find(x => x.id === standaloneGuestId);
@@ -389,7 +475,7 @@ export default function AdminAuditTrailPage() {
                   <h1 className="text-xl font-semibold text-[#1A1A1A]">Audit Trail</h1>
                   <p className="text-xs text-[#4A4A4A]">Complete activity log across all countries</p>
                 </div>
-                {totalUnreadCount > 0 && (
+                {trailTab === 'registration' && totalUnreadCount > 0 && (
                   <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
                     {totalUnreadCount} unread
                   </span>
@@ -424,6 +510,78 @@ export default function AdminAuditTrailPage() {
             </div>
           </header>
 
+          {/* Trail tabs */}
+          <div className="border-b border-[#E8E3DB] bg-white px-6 flex gap-1">
+            <button
+              onClick={() => setTrailTab('registration')}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${trailTab === 'registration' ? 'border-[#2D5A45] text-[#2D5A45]' : 'border-transparent text-[#4A4A4A] hover:text-[#1A1A1A]'}`}
+            >
+              Registration Trail
+            </button>
+            <button
+              onClick={() => setTrailTab('accommodation')}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${trailTab === 'accommodation' ? 'border-[#2D5A45] text-[#2D5A45]' : 'border-transparent text-[#4A4A4A] hover:text-[#1A1A1A]'}`}
+            >
+              Accommodation Trail
+              {entries2.length > 0 && (
+                <span className="ml-2 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                  {entries2.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {trailTab === 'accommodation' ? (
+            <div className="p-6 max-w-5xl mx-auto space-y-5">
+              {/* Trail 2 filters */}
+              <div className="bg-white rounded-xl border border-[#E8E3DB] shadow-sm p-4 flex flex-wrap gap-3">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
+                  <Input
+                    value={t2Search}
+                    onChange={e => setT2Search(e.target.value)}
+                    placeholder="Search guests, locations, departments…"
+                    className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-9"
+                  />
+                </div>
+                <select
+                  value={t2LocationFilter}
+                  onChange={e => setT2LocationFilter(e.target.value)}
+                  className="px-3 py-1.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none h-9"
+                >
+                  <option value="all">All Locations</option>
+                  {t2Locations.map(l => <option key={l} value={l}>{l}</option>)}
+                </select>
+                <select
+                  value={t2TypeFilter}
+                  onChange={e => setT2TypeFilter(e.target.value)}
+                  className="px-3 py-1.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none h-9"
+                >
+                  <option value="all">All Types</option>
+                  <option value="guest_placed">Guest Placed</option>
+                  <option value="room_assignment">Room Assigned</option>
+                  <option value="room_change">Room Move</option>
+                  <option value="comment">Comments</option>
+                  <option value="status_change">Status Changes</option>
+                </select>
+              </div>
+
+              <div className="bg-white rounded-xl border border-[#E8E3DB] shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-[#E8E3DB] bg-[#F9F8F6] flex items-center justify-between">
+                  <span className="text-sm font-semibold text-[#1A1A1A]">Accommodation Events</span>
+                  <span className="text-xs text-[#4A4A4A]/60">{filteredEntries2.length} entries</span>
+                </div>
+                {filteredEntries2.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3">
+                    <ScrollText className="w-10 h-10 text-gray-300" />
+                    <p className="text-sm text-gray-400">No entries match the selected filters.</p>
+                  </div>
+                ) : (
+                  filteredEntries2.map(e => <Trail2Row key={e.id} entry={e} />)
+                )}
+              </div>
+            </div>
+          ) : (
           <div className="p-6 max-w-5xl mx-auto space-y-5">
             {/* Summary Bar */}
             <div className="grid grid-cols-3 gap-4">
@@ -624,6 +782,7 @@ export default function AdminAuditTrailPage() {
               )}
             </div>
           </div>
+          )} {/* end registration tab */}
         </main>
       </div>
 

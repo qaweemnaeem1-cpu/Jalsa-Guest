@@ -1,44 +1,58 @@
 import { useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Inbox, CheckCircle, Users, MapPin, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Inbox, BedDouble, CheckCircle, MessageSquare } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
+import { useRooms } from '@/hooks/useRooms';
 import { useAuditTrail2 } from '@/hooks/useAuditTrail2';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 
-export function DeptSidebar() {
+export function LocationSidebar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { user } = useAuth();
   const { guests } = useGuests();
-
-  const dept = user?.department ?? '';
-  const userId = user?.id ?? '';
-
+  const { rooms, bedAssignments } = useRooms();
   const { entries: entries2 } = useAuditTrail2();
 
-  const incomingCount = useMemo(
-    () => guests.filter(g => g.assignedDepartment === dept && !g.placedLocation).length,
-    [guests, dept],
-  );
+  const loc = user?.location ?? '';
+  const userId = user?.id ?? '';
 
-  const placedCount = useMemo(
-    () => guests.filter(g => g.assignedDepartment === dept && !!g.placedLocation).length,
-    [guests, dept],
-  );
+  // Total people placed at this location (guests + family members)
+  const placedCount = useMemo(() => {
+    let n = 0;
+    for (const g of guests) {
+      if (g.placedLocation === loc) n++;
+      for (const m of g.familyMembers ?? []) {
+        if (m.placedLocation === loc) n++;
+      }
+    }
+    return n;
+  }, [guests, loc]);
+
+  // People with a bed at this location
+  const accommodatedCount = useMemo(() => {
+    const locationRooms = rooms.filter(r => r.locationId === loc);
+    let n = 0;
+    for (const room of locationRooms) {
+      n += (bedAssignments[room.id] ?? []).filter(b => !!b.guestName).length;
+    }
+    return n;
+  }, [rooms, bedAssignments, loc]);
+
+  const incomingCount = Math.max(0, placedCount - accommodatedCount);
 
   const unreadMessages = useMemo(
-    () => entries2.filter(e => e.departmentId === dept && !e.readBy.includes(userId) && e.createdBy.id !== userId).length,
-    [entries2, dept, userId],
+    () => entries2.filter(e => e.locationId === loc && !e.readBy.includes(userId) && e.createdBy.id !== userId).length,
+    [entries2, loc, userId],
   );
 
   const NAV = [
-    { icon: LayoutDashboard, label: 'Dashboard',      href: '/dept/dashboard', badge: 0 },
-    { icon: Inbox,           label: 'Incoming Guests', href: '/dept/incoming',  badge: incomingCount, badgeColor: 'bg-amber-500' },
-    { icon: CheckCircle,     label: 'Placed Guests',   href: '/dept/placed',    badge: placedCount,   badgeColor: 'bg-green-500' },
-    { icon: Users,           label: 'Sub Users',          href: '/dept/sub-users', badge: 0 },
-    { icon: MapPin,          label: 'Locations',          href: '/dept/locations', badge: 0 },
-    { icon: MessageSquare,   label: 'Messages & Updates', href: '/dept/messages',  badge: unreadMessages, badgeColor: 'bg-red-500' },
+    { icon: LayoutDashboard, label: 'Dashboard',        href: '/location/dashboard',     badge: 0 },
+    { icon: Inbox,           label: 'Incoming',          href: '/location/incoming',      badge: incomingCount,    badgeColor: 'bg-amber-500' },
+    { icon: BedDouble,       label: 'Rooms & Blocks',    href: '/location/rooms',         badge: 0 },
+    { icon: CheckCircle,     label: 'Accommodated',      href: '/location/accommodated',  badge: accommodatedCount, badgeColor: 'bg-green-500' },
+    { icon: MessageSquare,   label: 'Messages',          href: '/location/messages',      badge: unreadMessages, badgeColor: 'bg-red-500' },
   ];
 
   return (
@@ -50,7 +64,7 @@ export function DeptSidebar() {
           </div>
           <div>
             <span className="font-semibold text-[#1A1A1A]">Jalsa Guest</span>
-            <p className="text-xs text-[#4A4A4A]">Department View</p>
+            <p className="text-xs text-[#4A4A4A]">Location Manager</p>
           </div>
         </div>
       </div>

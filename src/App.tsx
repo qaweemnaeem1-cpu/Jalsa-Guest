@@ -6,7 +6,9 @@ import { UsersProvider } from '@/hooks/useUsers';
 import { AssignableItemsProvider } from '@/hooks/useAssignableItems';
 import { CoordinatorsProvider } from '@/hooks/useCoordinators';
 import { AuditTrailProvider } from '@/hooks/useAuditTrail';
+import { AuditTrail2Provider } from '@/hooks/useAuditTrail2';
 import { DepartmentsProvider } from '@/hooks/useDepartments';
+import { RoomsProvider } from '@/hooks/useRooms';
 import { Toaster } from 'sonner';
 
 import LandingPage from '@/pages/LandingPage';
@@ -31,6 +33,12 @@ import DeptIncomingPage from '@/pages/DeptIncomingPage';
 import DeptPlacedPage from '@/pages/DeptPlacedPage';
 import DeptSubUsersPage from '@/pages/DeptSubUsersPage';
 import DeptLocationsPage from '@/pages/DeptLocationsPage';
+import DeptMessagesPage from '@/pages/DeptMessagesPage';
+import LocationDashboardPage from '@/pages/LocationDashboardPage';
+import LocationIncomingPage from '@/pages/LocationIncomingPage';
+import LocationRoomsPage from '@/pages/LocationRoomsPage';
+import LocationAccommodatedPage from '@/pages/LocationAccommodatedPage';
+import LocationMessagesPage from '@/pages/LocationMessagesPage';
 
 function ProtectedRoute({ children, requiredRoles }: { children: React.ReactNode; requiredRoles?: string[] }) {
   const { isAuthenticated, user } = useAuth();
@@ -55,6 +63,7 @@ function GuestsPageOrRedirect() {
 function DashboardOrRedirect() {
   const { user } = useAuth();
   if (user?.role === 'department-head') return <Navigate to="/dept/dashboard" replace />;
+  if (user?.role === 'location-manager') return <Navigate to="/location/dashboard" replace />;
   return <DashboardPage />;
 }
 
@@ -128,6 +137,12 @@ function AppRoutes() {
       <Route path="/dept/placed" element={<ProtectedRoute requiredRoles={['department-head', 'super-admin']}><DeptPlacedPage /></ProtectedRoute>} />
       <Route path="/dept/sub-users" element={<ProtectedRoute requiredRoles={['department-head', 'super-admin']}><DeptSubUsersPage /></ProtectedRoute>} />
       <Route path="/dept/locations" element={<ProtectedRoute requiredRoles={['department-head', 'super-admin']}><DeptLocationsPage /></ProtectedRoute>} />
+      <Route path="/dept/messages" element={<ProtectedRoute requiredRoles={['department-head', 'super-admin']}><DeptMessagesPage /></ProtectedRoute>} />
+      <Route path="/location/dashboard" element={<ProtectedRoute requiredRoles={['location-manager', 'super-admin']}><LocationDashboardPage /></ProtectedRoute>} />
+      <Route path="/location/incoming" element={<ProtectedRoute requiredRoles={['location-manager', 'super-admin']}><LocationIncomingPage /></ProtectedRoute>} />
+      <Route path="/location/rooms" element={<ProtectedRoute requiredRoles={['location-manager', 'super-admin']}><LocationRoomsPage /></ProtectedRoute>} />
+      <Route path="/location/accommodated" element={<ProtectedRoute requiredRoles={['location-manager', 'super-admin']}><LocationAccommodatedPage /></ProtectedRoute>} />
+      <Route path="/location/messages" element={<ProtectedRoute requiredRoles={['location-manager', 'super-admin']}><LocationMessagesPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -142,12 +157,16 @@ function App() {
         <AssignableItemsProvider>
         <DesignationsProvider>
           <AuditTrailProvider>
+          <AuditTrail2Provider>
           <GuestsProvider>
+          <RoomsProvider>
             <BrowserRouter>
               <AppRoutes />
             </BrowserRouter>
             <Toaster position="top-right" />
+          </RoomsProvider>
           </GuestsProvider>
+          </AuditTrail2Provider>
           </AuditTrailProvider>
         </DesignationsProvider>
         </AssignableItemsProvider>
