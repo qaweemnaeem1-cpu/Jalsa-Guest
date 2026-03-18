@@ -399,7 +399,7 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
                   Flight &amp; Travel
                 </TabsTrigger>
                 <TabsTrigger value="room" className={tabTriggerCls}>
-                  Room
+                  Department
                 </TabsTrigger>
                 <TabsTrigger value="remarks" className={tabTriggerCls}>
                   Remarks
@@ -410,7 +410,7 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
                   )}
                 </TabsTrigger>
                 <TabsTrigger value="history" className={tabTriggerCls}>
-                  Status History
+                  Audit Trail
                 </TabsTrigger>
               </TabsList>
             </div>

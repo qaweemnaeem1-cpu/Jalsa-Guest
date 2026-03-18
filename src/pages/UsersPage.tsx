@@ -39,11 +39,14 @@ import {
   X,
   Building2,
   Pencil,
+  BedDouble,
 } from 'lucide-react';
 import { COUNTRIES, ROLE_LABELS } from '@/lib/constants';
 import { useDepartments } from '@/hooks/useDepartments';
+import { useRooms } from '@/hooks/useRooms';
 import { CountryAssignmentPanel } from '@/components/CountryAssignmentPanel';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ProfileDialog } from '@/components/ProfileDialog';
 import type { UserRole } from '@/types';
 
 const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> = {
@@ -53,6 +56,7 @@ const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> 
     { icon: Users,           label: 'Users',             href: '/users' },
     { icon: Briefcase,       label: 'Designation List',  href: '/designations' },
     { icon: Globe,           label: 'Countries & Depts', href: '/countries-departments' },
+    { icon: BedDouble,       label: 'Rooms & Capacity',  href: '/admin/rooms' },
     { icon: ScrollText,      label: 'Audit Trail',       href: '/admin/audit-trail' },
   ],
   'desk-in-charge': [
@@ -118,7 +122,9 @@ export default function UsersPage() {
     addLocation, deleteLocation,
     getDeptBadgeCls, getLocPillCls,
   } = useDepartments();
+  const { getLocationOccupancy } = useRooms();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<UserType>('desk-in-charge');
   const [modalUserType, setModalUserType] = useState<UserType>('department-head');
   const [searchQuery, setSearchQuery] = useState('');
@@ -443,6 +449,13 @@ export default function UsersPage() {
                       <p className="text-sm font-medium text-[#1A1A1A]">{user.name}</p>
                       <p className="text-xs text-[#4A4A4A]">{user.email}</p>
                     </div>
+                    <button
+                      onClick={() => { setUserMenuOpen(false); setProfileOpen(true); }}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[#1A1A1A] hover:bg-[#F5F0E8] transition-colors"
+                    >
+                      <User className="w-4 h-4 text-[#4A4A4A]" />
+                      Profile
+                    </button>
                     <button
                       onClick={() => {
                         logout();
@@ -915,6 +928,7 @@ export default function UsersPage() {
                             <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Email</th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Department</th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Location</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Rooms</th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Phone</th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Status</th>
                             <th className="px-4 py-3 text-right text-sm font-semibold text-[#1A1A1A]">Actions</th>
@@ -923,7 +937,7 @@ export default function UsersPage() {
                         <tbody className="divide-y divide-[#E8E3DB]">
                           {filteredLocManagers.length === 0 ? (
                             <tr>
-                              <td colSpan={7} className="px-4 py-8 text-center text-[#4A4A4A]">
+                              <td colSpan={8} className="px-4 py-8 text-center text-[#4A4A4A]">
                                 No location managers found.
                               </td>
                             </tr>
@@ -952,6 +966,19 @@ export default function UsersPage() {
                                       {u.location}
                                     </span>
                                   ) : '—'}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {u.location ? (() => {
+                                    const occ = getLocationOccupancy(u.location);
+                                    return (
+                                      <div className="flex items-center gap-1.5 text-xs">
+                                        <BedDouble className="w-3.5 h-3.5 text-[#4A4A4A]" />
+                                        <span className="text-[#1A1A1A] font-medium">{occ.totalRooms}</span>
+                                        <span className="text-[#4A4A4A]/60">rooms</span>
+                                        <span className="text-green-600 font-medium">{occ.availableBeds} avail</span>
+                                      </div>
+                                    );
+                                  })() : <span className="text-[#4A4A4A]/40 text-xs">—</span>}
                                 </td>
                                 <td className="px-4 py-3 text-[#4A4A4A]">{u.phone || '—'}</td>
                                 <td className="px-4 py-3">
@@ -1468,6 +1495,8 @@ export default function UsersPage() {
           </div>
         </div>
       )}
+
+      <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} />
     </div>
   );
 }

@@ -27,8 +27,10 @@ import {
   ClipboardList,
   CheckSquare,
   MessageSquare,
+  User,
 } from 'lucide-react';
 import { ROLE_LABELS } from '@/lib/constants';
+import { ProfileDialog } from '@/components/ProfileDialog';
 import type { UserRole } from '@/types';
 
 // ── Strip HTML for security ────────────────────────────────────────────────────
@@ -82,6 +84,7 @@ export default function DesignationListPage() {
   const { designations, activeDesignations, addDesignation, updateDesignation, deleteDesignation, toggleDesignationStatus } = useDesignations();
 
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   // ── Designation tab state ────────────────────────────────────────────────────
   const [newDesignationName, setNewDesignationName] = useState('');
@@ -196,6 +199,13 @@ export default function DesignationListPage() {
                       <p className="text-sm font-medium text-[#1A1A1A]">{user.name}</p>
                       <p className="text-xs text-[#4A4A4A]">{user.email}</p>
                     </div>
+                    <button
+                      onClick={() => { setUserMenuOpen(false); setProfileOpen(true); }}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[#1A1A1A] hover:bg-[#F5F0E8] transition-colors"
+                    >
+                      <User className="w-4 h-4 text-[#4A4A4A]" />
+                      Profile
+                    </button>
                     <button
                       onClick={() => { logout(); navigate('/login'); }}
                       className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
@@ -324,6 +334,8 @@ export default function DesignationListPage() {
           </div>
         </main>
       </div>
+
+      <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} />
     </div>
   );
 }

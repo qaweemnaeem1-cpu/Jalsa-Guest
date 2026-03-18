@@ -10,11 +10,11 @@ import { toast } from 'sonner';
 import {
   LayoutDashboard, Users, Clock, MessageSquare,
   ChevronDown, LogOut,
-  CheckCircle, XCircle,
+  CheckCircle, XCircle, User,
 } from 'lucide-react';
 import { ROLE_LABELS } from '@/lib/constants';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
-import { getRoleDisplayLabel } from '@/components/ProfileDialog';
+import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
 
 const COORD_NAV = [
   { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
@@ -33,6 +33,7 @@ export default function CoordinatorRejectedPage() {
   const { user, logout } = useAuth();
   const { guests, updateGuest } = useGuests();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const [appealGuestId, setAppealGuestId] = useState<string | null>(null);
   const [appealText, setAppealText] = useState('');
@@ -136,6 +137,13 @@ export default function CoordinatorRejectedPage() {
                 </button>
                 {userMenuOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-[#E8E3DB] py-1 z-50">
+                    <button
+                      onClick={() => { setUserMenuOpen(false); setProfileOpen(true); }}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[#1A1A1A] hover:bg-[#F5F0E8] transition-colors"
+                    >
+                      <User className="w-4 h-4 text-[#4A4A4A]" />
+                      Profile
+                    </button>
                     <button
                       onClick={() => { logout(); navigate('/login'); }}
                       className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
@@ -250,6 +258,8 @@ export default function CoordinatorRejectedPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} />
     </div>
   );
 }

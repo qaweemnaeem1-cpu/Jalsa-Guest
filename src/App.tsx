@@ -39,6 +39,7 @@ import LocationIncomingPage from '@/pages/LocationIncomingPage';
 import LocationRoomsPage from '@/pages/LocationRoomsPage';
 import LocationAccommodatedPage from '@/pages/LocationAccommodatedPage';
 import LocationMessagesPage from '@/pages/LocationMessagesPage';
+import AdminRoomsPage from '@/pages/AdminRoomsPage';
 
 function ProtectedRoute({ children, requiredRoles }: { children: React.ReactNode; requiredRoles?: string[] }) {
   const { isAuthenticated, user } = useAuth();
@@ -131,6 +132,7 @@ function AppRoutes() {
       <Route path="/desk/rejected" element={<ProtectedRoute requiredRoles={['desk-in-charge','super-admin']}><DeskRejectedPage /></ProtectedRoute>} />
       <Route path="/desk/audit-trail" element={<Navigate to="/desk/messages" replace />} />
       <Route path="/desk/messages" element={<ProtectedRoute requiredRoles={['desk-in-charge','super-admin']}><DeskAuditTrailPage /></ProtectedRoute>} />
+      <Route path="/admin/rooms" element={<ProtectedRoute requiredRoles={['super-admin']}><AdminRoomsPage /></ProtectedRoute>} />
       <Route path="/admin/audit-trail" element={<ProtectedRoute requiredRoles={['super-admin']}><AdminAuditTrailPage /></ProtectedRoute>} />
       <Route path="/dept/dashboard" element={<ProtectedRoute requiredRoles={['department-head', 'super-admin']}><DeptDashboardPage /></ProtectedRoute>} />
       <Route path="/dept/incoming" element={<ProtectedRoute requiredRoles={['department-head', 'super-admin']}><DeptIncomingPage /></ProtectedRoute>} />

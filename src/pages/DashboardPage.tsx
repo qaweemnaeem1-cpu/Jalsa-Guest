@@ -26,14 +26,21 @@ import {
   ScrollText,
   RotateCcw,
   XCircle,
+  BedDouble,
+  Home,
+  MapPin,
+  User,
+  LogOut,
 } from 'lucide-react';
+import { useRooms } from '@/hooks/useRooms';
+import { useDepartments } from '@/hooks/useDepartments';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { useMemo, useState } from 'react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
-import { getRoleDisplayLabel } from '@/components/ProfileDialog';
+import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
 import type { UserRole } from '@/types';
 
 const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> = {
@@ -43,6 +50,7 @@ const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> 
     { icon: Users,         label: 'Users',              href: '/users' },
     { icon: Briefcase,     label: 'Designation List',   href: '/designations' },
     { icon: Globe,         label: 'Countries & Depts',  href: '/countries-departments' },
+    { icon: BedDouble,     label: 'Rooms & Capacity',   href: '/admin/rooms' },
     { icon: ScrollText,    label: 'Audit Trail',        href: '/admin/audit-trail' },
   ],
   'desk-in-charge': [
@@ -84,7 +92,10 @@ export default function DashboardPage() {
   const { guests, updateGuest } = useGuests();
   const { entries } = useAuditTrail();
   const { coordinators } = useCoordinators();
+  const { getLocationOccupancy } = useRooms();
+  const { departments } = useDepartments();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [diViewGuestId, setDiViewGuestId] = useState<string | null>(null);
   const [adminViewGuestId, setAdminViewGuestId] = useState<string | null>(null);
   const [adminOverturnGuestId, setAdminOverturnGuestId] = useState<string | null>(null);
@@ -443,6 +454,22 @@ export default function DashboardPage() {
   const quickActions = getQuickActions();
   const statsPanel = getStatsPanel();
 
+  // Accommodation Overview (super-admin only)
+  const accommodationOverview = useMemo(() => {
+    if (user.role !== 'super-admin') return [];
+    return Object.entries(departments).map(([dept, locs]) => {
+      let totalBeds = 0, occupiedBeds = 0;
+      const locationBreakdown = locs.map(loc => {
+        const occ = getLocationOccupancy(loc);
+        totalBeds += occ.totalBeds;
+        occupiedBeds += occ.occupiedBeds;
+        return { loc, ...occ };
+      });
+      const pct = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
+      return { dept, totalBeds, occupiedBeds, availableBeds: totalBeds - occupiedBeds, pct, locationBreakdown };
+    }).filter(d => d.totalBeds > 0);
+  }, [user.role, departments, getLocationOccupancy]);
+
   // ── DI-SPECIFIC DASHBOARD RENDER ─────────────────────────────────────────────
   if (user.role === 'desk-in-charge') {
     const DESK_NAV_LOCAL = [
@@ -533,9 +560,17 @@ export default function DashboardPage() {
                         <p className="text-xs text-[#4A4A4A]">{user.email}</p>
                       </div>
                       <button
+                        onClick={() => { setUserMenuOpen(false); setProfileOpen(true); }}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[#1A1A1A] hover:bg-[#F5F0E8] transition-colors"
+                      >
+                        <User className="w-4 h-4 text-[#4A4A4A]" />
+                        Profile
+                      </button>
+                      <button
                         onClick={() => { logout(); navigate('/login'); }}
                         className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                       >
+                        <LogOut className="w-4 h-4" />
                         Sign out
                       </button>
                     </div>
@@ -805,15 +840,20 @@ export default function DashboardPage() {
                       <p className="text-xs text-[#4A4A4A]">{user.email}</p>
                     </div>
                     <button
+                      onClick={() => { setUserMenuOpen(false); setProfileOpen(true); }}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[#1A1A1A] hover:bg-[#F5F0E8] transition-colors"
+                    >
+                      <User className="w-4 h-4 text-[#4A4A4A]" />
+                      Profile
+                    </button>
+                    <button
                       onClick={() => {
                         logout();
                         navigate('/login');
                       }}
                       className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
-                      </svg>
+                      <LogOut className="w-4 h-4" />
                       Sign out
                     </button>
                   </div>
@@ -976,7 +1016,53 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Section 5 — Rejected Guests Table (super-admin only) */}
+            {/* Section 5 — Accommodation Overview (super-admin only) */}
+            {user.role === 'super-admin' && accommodationOverview.length > 0 && (
+              <div className="bg-white rounded-xl border border-[#E8E3DB] overflow-hidden">
+                <div className="px-5 py-4 border-b border-[#E8E3DB] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <BedDouble className="w-5 h-5 text-[#2D5A45]" />
+                    <span className="text-sm font-semibold text-[#1A1A1A]">Accommodation Overview</span>
+                  </div>
+                  <button
+                    onClick={() => navigate('/admin/rooms')}
+                    className="text-xs text-[#2D5A45] hover:underline font-medium"
+                  >
+                    View all rooms →
+                  </button>
+                </div>
+                <div className="p-5 space-y-4">
+                  {accommodationOverview.map(({ dept, totalBeds, occupiedBeds, availableBeds, pct, locationBreakdown }) => {
+                    const barColor = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-[#2D5A45]';
+                    return (
+                      <div key={dept} className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="font-medium text-[#1A1A1A]">{dept}</span>
+                          <span className="text-[#4A4A4A] text-xs">{occupiedBeds}/{totalBeds} beds · {availableBeds} available</span>
+                        </div>
+                        <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {locationBreakdown.map(({ loc, totalBeds: lBeds, occupiedBeds: lOcc, availableBeds: lAvail }) => {
+                            const lPct = lBeds > 0 ? Math.round((lOcc / lBeds) * 100) : 0;
+                            const pillColor = lPct >= 90 ? 'bg-red-50 text-red-700 border-red-200' : lPct >= 70 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-[#E8F5EE] text-[#2D5A45] border-[#C6DDD0]';
+                            return (
+                              <span key={loc} className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${pillColor}`}>
+                                <MapPin className="w-2.5 h-2.5" />
+                                {loc}: {lAvail}/{lBeds}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Section 6 — Rejected Guests Table (super-admin only) */}
             {user.role === 'super-admin' && rejectedGuests.length > 0 && (
               <div id="rejected-guests-section" className="bg-white rounded-xl border border-[#E8E3DB] shadow-sm overflow-hidden">
                 <div className="px-5 py-4 border-b border-[#E8E3DB] bg-red-50 flex items-center justify-between">
@@ -1185,6 +1271,8 @@ export default function DashboardPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} />
     </div>
   );
 }

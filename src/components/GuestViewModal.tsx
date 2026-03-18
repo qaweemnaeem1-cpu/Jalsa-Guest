@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Send, Pencil, Trash2, X, Plane, Building2 } from 'lucide-react';
+import { Send, Pencil, Trash2, X, Plane, Building2, BedDouble } from 'lucide-react';
 import { AuditTimeline } from '@/components/AuditTimeline';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -19,6 +19,7 @@ import {
   DEFAULT_DESIGNATIONS, COUNTRIES,
 } from '@/lib/constants';
 import { useDepartments } from '@/hooks/useDepartments';
+import { useRooms } from '@/hooks/useRooms';
 import { DepartmentSelect } from '@/components/DepartmentSelect';
 import type { Guest, GuestStatus, UserRole } from '@/types';
 
@@ -202,11 +203,14 @@ export function GuestViewModal({
   const { updateGuest, addRemark } = useGuests();
   const { getEntriesForGuest, addEntry } = useAuditTrail();
   const { departments, getDeptBadgeCls, getLocPillCls } = useDepartments();
+  const { rooms, bedAssignments, assignGuestToRoom } = useRooms();
 
   const [commentText, setCommentText] = useState('');
   const [roomInput, setRoomInput] = useState('');
   const [deptEditValue, setDeptEditValue] = useState('');
   const [locEditValue, setLocEditValue] = useState('');
+  const [roomAssignId, setRoomAssignId] = useState('');
+  const [bedAssignNum, setBedAssignNum] = useState<number | ''>('');
 
   const canComment    = user ? ['desk-in-charge', 'super-admin', 'coordinator'].includes(user.role) : false;
   const canAssignRoom = user ? ['super-admin', 'accommodation'].includes(user.role) : false;
@@ -379,6 +383,36 @@ export function GuestViewModal({
     updateGuest(guest.id, { roomAssignment: roomInput || undefined });
     toast.success('Room assignment updated');
   };
+
+  const handleAssignRoomAccommodate = () => {
+    if (!guest || !user || !isSuperAdmin || !roomAssignId || bedAssignNum === '') return;
+    const bedNum = Number(bedAssignNum);
+    assignGuestToRoom(roomAssignId, bedNum, guest.id, guest.fullName);
+    updateGuest(guest.id, { status: 'Accommodated' });
+    toast.success(`${guest.fullName} assigned and marked as Accommodated`);
+    setRoomAssignId('');
+    setBedAssignNum('');
+  };
+
+  // Rooms at the guest's placed location (for super-admin room assignment)
+  const locationRooms = isSuperAdmin && guest?.placedLocation
+    ? rooms.filter(r => r.locationId === guest.placedLocation && r.isActive)
+    : [];
+
+  // Available beds for the selected room
+  const availableBedsInRoom = roomAssignId
+    ? (() => {
+        const beds = bedAssignments[roomAssignId] ?? [];
+        const room = rooms.find(r => r.id === roomAssignId);
+        const capacity = room?.capacity ?? 0;
+        const available: number[] = [];
+        for (let i = 1; i <= capacity; i++) {
+          const bed = beds.find(b => b.bedNumber === i);
+          if (!bed?.guestName) available.push(i);
+        }
+        return available;
+      })()
+    : [];
 
   if (!user || !guest) return null;
 
@@ -858,6 +892,59 @@ export function GuestViewModal({
                     <Building2 className="w-4 h-4 mr-1.5" />
                     Save Assignment
                   </Button>
+                </div>
+              )}
+
+              {/* Room Assignment — super-admin in edit mode, guest must be placed at a location */}
+              {isSuperAdmin && isEditMode && guest.placedLocation && guest.status !== 'Accommodated' && (
+                <div className="bg-white rounded-xl border border-[#E8E3DB] p-5 space-y-4">
+                  <SectionHeading>Room Assignment</SectionHeading>
+                  {locationRooms.length === 0 ? (
+                    <p className="text-sm text-[#4A4A4A] italic">No rooms configured at {guest.placedLocation}.</p>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-xs font-medium text-[#4A4A4A] mb-1">Room</p>
+                          <select
+                            value={roomAssignId}
+                            onChange={e => { setRoomAssignId(e.target.value); setBedAssignNum(''); }}
+                            className={selectCls}
+                          >
+                            <option value="">Select room…</option>
+                            {locationRooms.map(r => (
+                              <option key={r.id} value={r.id}>{r.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-[#4A4A4A] mb-1">Bed</p>
+                          <select
+                            value={bedAssignNum}
+                            onChange={e => setBedAssignNum(e.target.value === '' ? '' : Number(e.target.value))}
+                            disabled={!roomAssignId}
+                            className={`${selectCls} ${!roomAssignId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            <option value="">Select bed…</option>
+                            {availableBedsInRoom.map(n => (
+                              <option key={n} value={n}>Bed {n}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      {availableBedsInRoom.length === 0 && roomAssignId && (
+                        <p className="text-xs text-red-600">No available beds in this room.</p>
+                      )}
+                      <Button
+                        onClick={handleAssignRoomAccommodate}
+                        disabled={!roomAssignId || bedAssignNum === '' || availableBedsInRoom.length === 0}
+                        className="bg-[#2D5A45] hover:bg-[#234839] text-white disabled:opacity-50"
+                      >
+                        <BedDouble className="w-4 h-4 mr-1.5" />
+                        Assign Room &amp; Accommodate
+                      </Button>
+                    </>
+                  )}
                 </div>
               )}
             </TabsContent>

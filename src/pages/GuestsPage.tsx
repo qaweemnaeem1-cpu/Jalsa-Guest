@@ -41,7 +41,13 @@ import {
   ScrollText,
   ClipboardList,
   CheckSquare,
+  BedDouble,
+  Columns,
+  User,
 } from 'lucide-react';
+import { ProfileDialog } from '@/components/ProfileDialog';
+import { useMemo, useRef, useEffect } from 'react';
+import { useRooms } from '@/hooks/useRooms';
 import { GUEST_STATUS_LABELS, ROLE_LABELS } from '@/lib/constants';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { FamilyStatusCell } from '@/components/FamilyStatusCell';
@@ -54,6 +60,7 @@ const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> 
     { icon: Users,           label: 'Users',             href: '/users' },
     { icon: Briefcase,       label: 'Designation List',  href: '/designations' },
     { icon: Globe,           label: 'Countries & Depts', href: '/countries-departments' },
+    { icon: BedDouble,       label: 'Rooms & Capacity',  href: '/admin/rooms' },
     { icon: ScrollText,      label: 'Audit Trail',       href: '/admin/audit-trail' },
   ],
   'desk-in-charge': [
@@ -80,6 +87,8 @@ const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> 
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
     { icon: Users, label: 'Guests', href: '/guests' },
   ],
+  'department-head': [],
+  'location-manager': [],
 };
 
 // Format relative time
@@ -242,7 +251,33 @@ export default function GuestsPage() {
   const { user, logout } = useAuth();
   const { guests, updateGuest, deleteGuest, addRemark, getMyWaitingGuests, getMySubmittedGuests, getNeedsCorrectionCount } = useGuests();
   const { users } = useUsers();
+  const { rooms, bedAssignments } = useRooms();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [colsOpen, setColsOpen] = useState(false);
+  const [visibleCols, setVisibleCols] = useState({ dept: true, location: true, room: true });
+  const colsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (colsRef.current && !colsRef.current.contains(e.target as Node)) setColsOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Build guestId → "RoomName / Bed N" map (head guests only)
+  const guestRoomMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const room of rooms) {
+      for (const bed of bedAssignments[room.id] ?? []) {
+        if (bed.guestId && !bed.familyMemberId) {
+          m.set(bed.guestId, `${room.name} / Bed ${bed.bedNumber}`);
+        }
+      }
+    }
+    return m;
+  }, [rooms, bedAssignments]);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'waiting' | 'submitted' | 'awaiting' | 'processed'>('waiting');
   const [expandedGuestId, setExpandedGuestId] = useState<string | null>(null);
@@ -457,6 +492,13 @@ export default function GuestsPage() {
                       <p className="text-xs text-[#4A4A4A]">{user.email}</p>
                     </div>
                     <button
+                      onClick={() => { setUserMenuOpen(false); setProfileOpen(true); }}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[#1A1A1A] hover:bg-[#F5F0E8] transition-colors"
+                    >
+                      <User className="w-4 h-4 text-[#4A4A4A]" />
+                      Profile
+                    </button>
+                    <button
                       onClick={() => {
                         logout();
                         navigate('/login');
@@ -503,6 +545,38 @@ export default function GuestsPage() {
                         </option>
                       ))}
                     </select>
+                  )}
+
+                  {/* Column toggle — super-admin only */}
+                  {user.role === 'super-admin' && (
+                    <div className="relative" ref={colsRef}>
+                      <button
+                        onClick={() => setColsOpen(o => !o)}
+                        className="h-10 px-3 border border-[#D4CFC7] rounded-md text-sm bg-white text-[#1A1A1A] hover:bg-[#F5F0E8] flex items-center gap-2 transition-colors"
+                      >
+                        <Columns className="w-4 h-4 text-[#4A4A4A]" />
+                        Columns
+                      </button>
+                      {colsOpen && (
+                        <div className="absolute right-0 mt-1 bg-white rounded-lg shadow-lg border border-[#E8E3DB] p-3 z-50 min-w-[160px] space-y-2">
+                          {([
+                            ['dept', 'Department'],
+                            ['location', 'Location'],
+                            ['room', 'Room'],
+                          ] as [keyof typeof visibleCols, string][]).map(([key, label]) => (
+                            <label key={key} className="flex items-center gap-2 cursor-pointer text-sm text-[#1A1A1A]">
+                              <input
+                                type="checkbox"
+                                checked={visibleCols[key]}
+                                onChange={() => setVisibleCols(v => ({ ...v, [key]: !v[key] }))}
+                                className="w-4 h-4 accent-[#2D5A45]"
+                              />
+                              {label}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {/* Add Guest Button */}
@@ -594,6 +668,15 @@ export default function GuestsPage() {
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Designation</th>
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Type</th>
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Status</th>
+                        {user.role === 'super-admin' && visibleCols.dept && (
+                          <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Department</th>
+                        )}
+                        {user.role === 'super-admin' && visibleCols.location && (
+                          <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Location</th>
+                        )}
+                        {user.role === 'super-admin' && visibleCols.room && (
+                          <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Room</th>
+                        )}
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Submitted</th>
                         <th className="text-right px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Actions</th>
                       </tr>
@@ -646,6 +729,33 @@ export default function GuestsPage() {
                             <td className="px-4 py-3">
                               <FamilyStatusCell guest={guest} />
                             </td>
+                            {user.role === 'super-admin' && visibleCols.dept && (
+                              <td className="px-4 py-3">
+                                {guest.assignedDepartment ? (
+                                  <span className="text-xs bg-[#E8F5EE] text-[#2D5A45] border border-[#D6E4D9] px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
+                                    {guest.assignedDepartment}
+                                  </span>
+                                ) : <span className="text-[#4A4A4A]/40">—</span>}
+                              </td>
+                            )}
+                            {user.role === 'super-admin' && visibleCols.location && (
+                              <td className="px-4 py-3">
+                                {guest.placedLocation ? (
+                                  <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
+                                    {guest.placedLocation}
+                                  </span>
+                                ) : <span className="text-[#4A4A4A]/40">—</span>}
+                              </td>
+                            )}
+                            {user.role === 'super-admin' && visibleCols.room && (
+                              <td className="px-4 py-3">
+                                {guestRoomMap.get(guest.id) ? (
+                                  <span className="text-xs font-mono text-[#1A1A1A] whitespace-nowrap">
+                                    {guestRoomMap.get(guest.id)}
+                                  </span>
+                                ) : <span className="text-[#4A4A4A]/40">—</span>}
+                              </td>
+                            )}
                             <td className="px-4 py-3 text-[#4A4A4A]">{guest.submittedAt}</td>
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-end gap-2">
@@ -897,6 +1007,8 @@ export default function GuestsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} />
     </div>
   );
 }

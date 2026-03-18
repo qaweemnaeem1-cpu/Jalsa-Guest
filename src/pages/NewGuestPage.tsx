@@ -46,7 +46,7 @@ import {
   VISA_STATUS_LABELS,
 } from '@/lib/constants';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
-import { getRoleDisplayLabel } from '@/components/ProfileDialog';
+import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
 import type { UserRole, FamilyMember, VisaDetails } from '@/types';
 
 const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> = {
@@ -166,6 +166,7 @@ export default function NewGuestPage() {
   const { addGuest } = useGuests();
   const { activeDesignations } = useDesignations();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -420,6 +421,13 @@ export default function NewGuestPage() {
                       <p className="text-sm font-medium text-[#1A1A1A]">{user.name}</p>
                       <p className="text-xs text-[#4A4A4A]">{user.email}</p>
                     </div>
+                    <button
+                      onClick={() => { setUserMenuOpen(false); setProfileOpen(true); }}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[#1A1A1A] hover:bg-[#F5F0E8] transition-colors"
+                    >
+                      <User className="w-4 h-4 text-[#4A4A4A]" />
+                      Profile
+                    </button>
                     <button
                       onClick={() => {
                         logout();
@@ -928,6 +936,8 @@ export default function NewGuestPage() {
           </div>
         </main>
       </div>
+
+      <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} />
     </div>
   );
 }
