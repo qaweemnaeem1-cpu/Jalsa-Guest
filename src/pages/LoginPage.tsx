@@ -9,34 +9,31 @@ import { Shield, Eye, EyeOff, Lock, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, authError } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [localError, setLocalError] = useState('');
 
   if (isAuthenticated) {
     navigate('/dashboard');
     return null;
   }
 
+  const error = localError || authError || '';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setLocalError('');
     if (!email || !password) {
-      setError('Please enter your email and password.');
+      setLocalError('Please enter your email and password.');
       return;
     }
     setIsLoading(true);
-    try {
-      await login(email, password);
-      navigate('/dashboard');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+    const success = await login(email, password);
+    setIsLoading(false);
+    if (success) navigate('/dashboard');
   };
 
   return (
