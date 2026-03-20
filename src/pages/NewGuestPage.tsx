@@ -48,28 +48,12 @@ import {
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
 import type { UserRole, FamilyMember, VisaDetails } from '@/types';
+import { SUPER_ADMIN_NAV, DESK_NAV, COORD_NAV } from '@/lib/navItems';
 
 const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> = {
-  'super-admin': [
-    { icon: LayoutDashboard, label: 'Dashboard',         href: '/dashboard' },
-    { icon: Users,           label: 'Guests',            href: '/guests' },
-    { icon: Users,           label: 'Users',             href: '/users' },
-    { icon: Briefcase,       label: 'Designation List',  href: '/designations' },
-    { icon: ScrollText,      label: 'Audit Trail',       href: '/admin/audit-trail' },
-  ],
-  'desk-in-charge': [
-    { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
-    { icon: ClipboardList,   label: 'Guests to Review',   href: '/desk/review' },
-    { icon: CheckSquare,     label: 'Processed Guests',   href: '/desk/processed' },
-    { icon: ClipboardList,   label: 'Messages & Updates', href: '/desk/messages' },
-  ],
-  'coordinator': [
-    { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
-    { icon: Clock,           label: 'Pending Guests',     href: '/coordinator/pending' },
-    { icon: Users,           label: 'Submitted Guests',   href: '/coordinator/submitted' },
-    { icon: XCircle,         label: 'Rejected Guests',    href: '/coordinator/rejected' },
-    { icon: MessageSquare,   label: 'Messages & Updates', href: '/coordinator/messages' },
-  ],
+  'super-admin': SUPER_ADMIN_NAV,
+  'desk-in-charge': DESK_NAV,
+  'coordinator': COORD_NAV,
   'transport': [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
     { icon: Users, label: 'Guests', href: '/guests' },

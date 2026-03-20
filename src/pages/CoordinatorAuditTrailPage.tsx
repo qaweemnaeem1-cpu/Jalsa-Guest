@@ -17,14 +17,7 @@ import {
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
-
-const COORD_NAV = [
-  { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
-  { icon: Clock,           label: 'Pending Guests',     href: '/coordinator/pending' },
-  { icon: Users,           label: 'Submitted Guests',   href: '/coordinator/submitted' },
-  { icon: XCircle,         label: 'Rejected Guests',    href: '/coordinator/rejected' },
-  { icon: MessageSquare,   label: 'Messages & Updates', href: '/coordinator/messages' },
-];
+import { COORD_NAV } from '@/lib/navItems';
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 

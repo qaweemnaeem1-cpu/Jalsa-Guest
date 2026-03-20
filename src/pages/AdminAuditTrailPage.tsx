@@ -19,15 +19,9 @@ import {
 import { ProfileDialog } from '@/components/ProfileDialog';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import type { Guest } from '@/types';
+import { SUPER_ADMIN_NAV } from '@/lib/navItems';
 
-const NAV_ITEMS = [
-  { icon: FileText,   label: 'Dashboard',        href: '/dashboard' },
-  { icon: Users,      label: 'Guests',            href: '/guests' },
-  { icon: Users,      label: 'Users',             href: '/users' },
-  { icon: Briefcase,  label: 'Designation List',  href: '/designations' },
-  { icon: Globe,      label: 'Countries & Depts', href: '/countries-departments' },
-  { icon: ScrollText, label: 'Audit Trail',       href: '/admin/audit-trail' },
-];
+const NAV_ITEMS = SUPER_ADMIN_NAV;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

@@ -48,29 +48,12 @@ import { CountryAssignmentPanel } from '@/components/CountryAssignmentPanel';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ProfileDialog } from '@/components/ProfileDialog';
 import type { UserRole } from '@/types';
+import { SUPER_ADMIN_NAV, DESK_NAV, COORD_NAV } from '@/lib/navItems';
 
 const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> = {
-  'super-admin': [
-    { icon: LayoutDashboard, label: 'Dashboard',         href: '/dashboard' },
-    { icon: Users,           label: 'Guests',            href: '/guests' },
-    { icon: Users,           label: 'Users',             href: '/users' },
-    { icon: Briefcase,       label: 'Designation List',  href: '/designations' },
-    { icon: Globe,           label: 'Countries & Depts', href: '/countries-departments' },
-    { icon: BedDouble,       label: 'Rooms & Capacity',  href: '/admin/rooms' },
-    { icon: ScrollText,      label: 'Audit Trail',       href: '/admin/audit-trail' },
-  ],
-  'desk-in-charge': [
-    { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
-    { icon: ClipboardList,   label: 'Guests to Review',   href: '/desk/review' },
-    { icon: CheckSquare,     label: 'Processed Guests',   href: '/desk/processed' },
-    { icon: MessageSquare,   label: 'Messages & Updates', href: '/desk/messages' },
-  ],
-  'coordinator': [
-    { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
-    { icon: Clock,           label: 'Pending Guests',     href: '/coordinator/pending' },
-    { icon: Users,           label: 'Submitted Guests',   href: '/coordinator/submitted' },
-    { icon: MessageSquare,   label: 'Messages & Updates', href: '/coordinator/messages' },
-  ],
+  'super-admin': SUPER_ADMIN_NAV,
+  'desk-in-charge': DESK_NAV,
+  'coordinator': COORD_NAV,
   'transport': [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
     { icon: Users, label: 'Guests', href: '/guests' },

@@ -30,14 +30,7 @@ import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
 import { sanitizeComment } from '@/hooks/useAuditTrail';
 import { FamilyStatusCell } from '@/components/FamilyStatusCell';
 import type { Guest, GuestStatus, FamilyMemberStatus } from '@/types';
-
-const DESK_NAV = [
-  { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
-  { icon: ClipboardList,   label: 'Guests to Review',   href: '/desk/review' },
-  { icon: CheckSquare,     label: 'Processed Guests',   href: '/desk/processed' },
-  { icon: XCircle,         label: 'Rejected Guests',    href: '/desk/rejected' },
-  { icon: MessageSquare,   label: 'Messages & Updates', href: '/desk/messages' },
-];
+import { DESK_NAV } from '@/lib/navItems';
 
 const PAGE_SIZE = 15;
 

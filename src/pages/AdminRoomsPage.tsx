@@ -10,16 +10,9 @@ import {
 import { Input } from '@/components/ui/input';
 import { ROLE_LABELS } from '@/lib/constants';
 import { ProfileDialog } from '@/components/ProfileDialog';
+import { SUPER_ADMIN_NAV } from '@/lib/navItems';
 
-const NAV_ITEMS = [
-  { icon: LayoutDashboard, label: 'Dashboard',        href: '/dashboard' },
-  { icon: Users,           label: 'Guests',           href: '/guests' },
-  { icon: Users,           label: 'Users',            href: '/users' },
-  { icon: Briefcase,       label: 'Designation List', href: '/designations' },
-  { icon: Globe,           label: 'Countries & Depts',href: '/countries-departments' },
-  { icon: BedDouble,       label: 'Rooms & Capacity', href: '/admin/rooms' },
-  { icon: ScrollText,      label: 'Audit Trail',      href: '/admin/audit-trail' },
-];
+const NAV_ITEMS = SUPER_ADMIN_NAV;
 
 function OccupancyBar({ pct }: { pct: number }) {
   const color = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-[#2D5A45]';

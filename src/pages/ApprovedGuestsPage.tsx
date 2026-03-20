@@ -17,13 +17,7 @@ import {
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import type { Guest } from '@/types';
-
-const DESK_NAV = [
-  { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
-  { icon: ClipboardList,   label: 'Guests to Review',   href: '/desk/review' },
-  { icon: CheckSquare,     label: 'Processed Guests',   href: '/desk/processed' },
-  { icon: MessageSquare,   label: 'Messages & Updates', href: '/desk/messages' },
-];
+import { DESK_NAV } from '@/lib/navItems';
 
 export default function ApprovedGuestsPage() {
   const navigate = useNavigate();

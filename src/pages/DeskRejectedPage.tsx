@@ -14,14 +14,7 @@ import {
 import { ROLE_LABELS } from '@/lib/constants';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
-
-const DESK_NAV = [
-  { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
-  { icon: ClipboardList,   label: 'Guests to Review',   href: '/desk/review' },
-  { icon: CheckSquare,     label: 'Processed Guests',   href: '/desk/processed' },
-  { icon: XCircle,         label: 'Rejected Guests',    href: '/desk/rejected' },
-  { icon: MessageSquare,   label: 'Messages & Updates', href: '/desk/messages' },
-];
+import { DESK_NAV } from '@/lib/navItems';
 
 function appealBadge(status?: string) {
   if (!status || status === 'none') {

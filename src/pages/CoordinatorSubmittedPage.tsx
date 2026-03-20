@@ -14,14 +14,7 @@ import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
 import { FamilyStatusCell } from '@/components/FamilyStatusCell';
 import type { GuestStatus } from '@/types';
-
-const COORD_NAV = [
-  { icon: LayoutDashboard, label: 'Dashboard',          href: '/dashboard' },
-  { icon: Clock,           label: 'Pending Guests',     href: '/coordinator/pending' },
-  { icon: Users,           label: 'Submitted Guests',   href: '/coordinator/submitted' },
-  { icon: XCircle,         label: 'Rejected Guests',    href: '/coordinator/rejected' },
-  { icon: MessageSquare,   label: 'Messages & Updates', href: '/coordinator/messages' },
-];
+import { COORD_NAV } from '@/lib/navItems';
 
 const STATUS_CHIPS: { label: string; value: GuestStatus | 'all' }[] = [
   { label: 'All',          value: 'all' },
