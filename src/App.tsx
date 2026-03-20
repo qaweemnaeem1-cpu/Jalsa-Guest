@@ -42,7 +42,15 @@ import LocationMessagesPage from '@/pages/LocationMessagesPage';
 import AdminRoomsPage from '@/pages/AdminRoomsPage';
 
 function ProtectedRoute({ children, requiredRoles }: { children: React.ReactNode; requiredRoles?: string[] }) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#F5F0E8] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#2D5A45] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;

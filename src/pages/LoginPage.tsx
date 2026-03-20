@@ -5,16 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Shield, Eye, EyeOff, Lock } from 'lucide-react';
-import type { UserRole } from '@/types';
-
-const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
-  { value: 'super-admin', label: 'Super Admin' },
-  { value: 'desk-in-charge', label: 'Desk In-Charge' },
-  { value: 'coordinator', label: 'Coordinator' },
-  { value: 'department-head', label: 'Dept. Head' },
-  { value: 'location-manager', label: 'Loc. Manager' },
-];
+import { Shield, Eye, EyeOff, Lock, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -23,7 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<UserRole>('super-admin');
+  const [error, setError] = useState('');
 
   if (isAuthenticated) {
     navigate('/dashboard');
@@ -32,25 +23,17 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    try {
-      await login(email, password, selectedRole);
-      navigate('/dashboard');
-    } catch (error) {
-      console.error('Login failed:', error);
-    } finally {
-      setIsLoading(false);
+    setError('');
+    if (!email || !password) {
+      setError('Please enter your email and password.');
+      return;
     }
-  };
-
-  const handleQuickLogin = async (role: UserRole) => {
-    setSelectedRole(role);
     setIsLoading(true);
     try {
-      await login('', '', role);
+      await login(email, password);
       navigate('/dashboard');
-    } catch (error) {
-      console.error('Login failed:', error);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -64,7 +47,7 @@ export default function LoginPage() {
             <Shield className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-[#1A1A1A]">Jalsa Guest</h1>
-          <p className="text-[#4A4A4A]">Jalsa Salana Jalsa Salana UK</p>
+          <p className="text-[#4A4A4A]">Jalsa Salana UK</p>
         </div>
 
         <Card className="border-[#E8E3DB] shadow-xl">
@@ -76,6 +59,13 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="flex items-center gap-2 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  {error}
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-[#1A1A1A]">Email address</Label>
                 <Input
@@ -85,6 +75,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45]"
+                  autoComplete="email"
                 />
               </div>
 
@@ -98,6 +89,7 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] pr-10"
+                    autoComplete="current-password"
                   />
                   <button
                     type="button"
@@ -109,20 +101,6 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="remember"
-                    className="rounded border-[#D4CFC7] text-[#2D5A45] focus:ring-[#2D5A45]"
-                  />
-                  <Label htmlFor="remember" className="text-sm text-[#4A4A4A]">Remember me</Label>
-                </div>
-                <button type="button" className="text-sm text-[#2D5A45] hover:underline">
-                  Forgot password?
-                </button>
-              </div>
-
               <Button
                 type="submit"
                 disabled={isLoading}
@@ -131,31 +109,6 @@ export default function LoginPage() {
                 {isLoading ? 'Signing in...' : 'Sign in'}
               </Button>
             </form>
-
-            <div className="mt-6 pt-6 border-t border-[#E8E3DB]">
-              <p className="text-xs text-[#4A4A4A] mb-3 uppercase tracking-wide">Quick Login (Demo)</p>
-              <div className="grid grid-cols-2 gap-2">
-                {ROLE_OPTIONS.map((role) => (
-                  <Button
-                    key={role.value}
-                    type="button"
-                    variant="outline"
-                    onClick={() => handleQuickLogin(role.value)}
-                    disabled={isLoading}
-                    className={`text-xs border-[#D4CFC7] ${
-                      selectedRole === role.value
-                        ? 'bg-[#2D5A45] text-white hover:bg-[#234839]'
-                        : 'text-[#4A4A4A] hover:bg-[#E8F5EE]'
-                    }`}
-                  >
-                    {role.label}
-                  </Button>
-                ))}
-              </div>
-              <p className="text-xs text-[#4A4A4A] mt-2 text-center">
-                MFA Code: 123456 (any 6 digits starting with 1)
-              </p>
-            </div>
           </CardContent>
         </Card>
 
