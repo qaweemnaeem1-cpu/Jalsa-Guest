@@ -1,10 +1,15 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import type { Guest, GuestStatus, GuestRemark, GuestStatusEvent, FamilyMember, FamilyMemberStatus } from '@/types';
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
+import type { Guest, GuestStatus, GuestRemark, FamilyMember, FamilyMemberStatus } from '@/types';
 import { useAuth } from './useAuth';
+
+// ── Context type ───────────────────────────────────────────────────────────────
 
 interface GuestsContextType {
   guests: Guest[];
-  addGuest: (guestData: Omit<Guest, 'id' | 'referenceNumber' | 'submittedAt' | 'status' | 'resubmitCount' | 'appealStatus'>) => Guest;
+  isLoading: boolean;
+  addGuest: (guestData: Omit<Guest, 'id' | 'referenceNumber' | 'submittedAt' | 'status' | 'resubmitCount' | 'appealStatus'>) => Promise<Guest | null>;
   updateGuest: (id: string, updates: Partial<Guest>) => void;
   deleteGuest: (id: string) => void;
   addRemark: (guestId: string, remark: Omit<GuestRemark, 'id' | 'createdAt'>) => void;
@@ -24,392 +29,307 @@ interface GuestsContextType {
 
 const GuestsContext = createContext<GuestsContextType | undefined>(undefined);
 
-// Generate sample guests for demo - now with draft and needs-correction examples
-const generateSampleGuests = (): Guest[] => {
-  return [
-    {
-      id: '1',
-      referenceNumber: 'MEH-2024-000001',
-      fullName: 'Klaus Mueller',
-      country: 'Germany',
-      countryCode: 'DE',
-      gender: 'male',
-      age: 45,
-      dateOfBirth: '1979-03-15',
-      passportNumber: 'C01X00T00',
-      contactNumber: '+49 170 1234567',
-      email: 'klaus.mueller@example.de',
-      visaStatus: 'not-required',
-      guestType: 'individual',
-      familyMembers: [],
-      designation: 'Jamaat Member',
-      arrivalFlightNumber: 'LH900',
-      arrivalAirport: 'LHR',
-      arrivalTerminal: 'T2',
-      arrivalTime: '2024-07-15T10:30',
-      departureFlightNumber: 'LH901',
-      departureAirport: 'LHR',
-      departureTerminal: 'T2',
-      departureTime: '2024-07-20T14:00',
-      wheelchairRequired: false,
-      status: 'Accommodated',
-      submittedBy: '3',
-      submittedAt: '2024-01-10',
-      resubmitCount: 0,
-      appealStatus: 'none',
-      department: 'Guest Services',
-      roomAssignment: 'A-101',
-      assignedDepartment: 'Reserve 1 (R1)',
-      assignedDepartmentAt: '2024-01-14T10:00:00',
-      assignedDepartmentBy: '1',
-      assignedDepartmentByName: 'Ahmad Khan',
-      placedLocation: 'Jamia',
-      placedAt: '2024-01-14T11:00:00',
-      placedBy: 'dh-001',
-      placedByName: 'R1 In-Charge',
-      statusHistory: [
-        {
-          id: 'sh1',
-          status: 'Awaiting Review',
-          changedBy: 'Klaus Mueller',
-          changedByRole: 'coordinator',
-          changedAt: '2024-01-10T09:00:00',
-        },
-        {
-          id: 'sh2',
-          status: 'Approved',
-          changedBy: 'Fatima Ali',
-          changedByRole: 'desk-in-charge',
-          changedAt: '2024-01-11T14:30:00',
-          remark: 'All documentation verified. Approved.',
-        },
-        {
-          id: 'sh3',
-          status: 'Accommodated',
-          changedBy: 'Ahmad Khan',
-          changedByRole: 'super-admin',
-          changedAt: '2024-01-12T10:00:00',
-          remark: 'Assigned to room A-101.',
-        },
-      ] satisfies GuestStatusEvent[],
-    },
-    {
-      id: '2',
-      referenceNumber: 'MEH-2024-000002',
-      fullName: 'Hans Schmidt',
-      country: 'Germany',
-      countryCode: 'DE',
-      gender: 'male',
-      age: 38,
-      dateOfBirth: '1986-07-22',
-      passportNumber: 'C01X00T01',
-      contactNumber: '+49 171 2345678',
-      email: 'hans.schmidt@example.de',
-      visaStatus: 'not-required',
-      guestType: 'family',
-      familyMembers: [
-        {
-          id: 'f1',
-          name: 'Helga Schmidt',
-          age: 40,
-          relationship: 'spouse',
-          gender: 'female',
-          status: 'Accommodated',
-          assignedDepartment: 'Reserve 1 (R1)',
-          assignedDepartmentAt: '2024-01-15T10:00:00',
-          placedLocation: 'Hotels',
-          placedAt: '2024-01-15T13:00:00',
-        },
-        {
-          id: 'f2',
-          name: 'Max Schmidt',
-          age: 14,
-          relationship: 'son',
-          gender: 'male',
-          status: 'Approved',
-          assignedDepartment: 'Reserve 1 (R1)',
-          assignedDepartmentAt: '2024-01-15T10:00:00',
-        },
-      ],
-      designation: 'Local Missionary',
-      arrivalFlightNumber: 'LH902',
-      arrivalAirport: 'LGW',
-      arrivalTerminal: 'N',
-      arrivalTime: '2024-07-15T12:00',
-      departureFlightNumber: 'LH903',
-      departureAirport: 'LGW',
-      departureTerminal: 'N',
-      departureTime: '2024-07-20T16:00',
-      wheelchairRequired: false,
-      status: 'Accommodated',
-      submittedBy: '3',
-      submittedAt: '2024-01-11',
-      resubmitCount: 1,
-      resubmittedAt: '2024-01-13T08:00:00',
-      appealStatus: 'none',
-      department: 'Guest Services',
-      roomAssignment: 'A-102',
-      assignedDepartment: 'Reserve 1 (R1)',
-      assignedDepartmentAt: '2024-01-15T10:00:00',
-      assignedDepartmentBy: '1',
-      assignedDepartmentByName: 'Ahmad Khan',
-      placedLocation: 'Hotels',
-      placedAt: '2024-01-15T13:00:00',
-      placedBy: 'dh-001',
-      placedByName: 'R1 In-Charge',
-      statusHistory: [
-        {
-          id: 'sh4',
-          status: 'Awaiting Review',
-          changedBy: 'Klaus Mueller',
-          changedByRole: 'coordinator',
-          changedAt: '2024-01-11T10:00:00',
-        },
-        {
-          id: 'sh5',
-          status: 'Needs Correction',
-          changedBy: 'Fatima Ali',
-          changedByRole: 'desk-in-charge',
-          changedAt: '2024-01-12T11:00:00',
-          remark: 'Please provide family member passport copies.',
-        },
-        {
-          id: 'sh6',
-          status: 'Approved',
-          changedBy: 'Fatima Ali',
-          changedByRole: 'desk-in-charge',
-          changedAt: '2024-01-14T09:30:00',
-        },
-        {
-          id: 'sh7',
-          status: 'Accommodated',
-          changedBy: 'Ahmad Khan',
-          changedByRole: 'super-admin',
-          changedAt: '2024-01-15T12:00:00',
-          remark: 'Assigned to room A-102 with family.',
-        },
-      ] satisfies GuestStatusEvent[],
-    },
-    {
-      id: '3',
-      referenceNumber: 'MEH-2024-000003',
-      fullName: 'Peter Weber',
-      country: 'Germany',
-      countryCode: 'DE',
-      gender: 'male',
-      age: 52,
-      dateOfBirth: '1972-11-08',
-      passportNumber: 'C01X00T02',
-      contactNumber: '+49 172 3456789',
-      email: 'peter.weber@example.de',
-      visaStatus: 'not-required',
-      guestType: 'individual',
-      familyMembers: [],
-      designation: 'National Amir',
-      arrivalFlightNumber: 'LH904',
-      arrivalAirport: 'LHR',
-      arrivalTerminal: 'T5',
-      arrivalTime: '2024-07-15T08:00',
-      departureFlightNumber: 'LH905',
-      departureAirport: 'LHR',
-      departureTerminal: 'T5',
-      departureTime: '2024-07-20T12:00',
-      wheelchairRequired: true,
-      specialNeeds: 'Requires wheelchair assistance',
-      status: 'Accommodated',
-      submittedBy: '3',
-      submittedAt: '2024-01-12',
-      resubmitCount: 0,
-      appealStatus: 'none',
-      reviewedBy: 'di-002',
-      reviewedAt: '2024-01-13T15:00:00',
-      department: 'VIP Services',
-      roomAssignment: 'VIP-201',
-      assignedDepartment: 'Reserve 1 (R1)',
-      assignedDepartmentAt: '2024-01-14T12:00:00',
-      assignedDepartmentBy: '1',
-      statusHistory: [
-        {
-          id: 'sh8',
-          status: 'Awaiting Review',
-          changedBy: 'Klaus Mueller',
-          changedByRole: 'coordinator',
-          changedAt: '2024-01-12T08:00:00',
-        },
-        {
-          id: 'sh9',
-          status: 'Approved',
-          changedBy: 'Fatima Ali',
-          changedByRole: 'desk-in-charge',
-          changedAt: '2024-01-13T15:00:00',
-          remark: 'VIP guest. Approved with priority handling.',
-        },
-        {
-          id: 'sh10',
-          status: 'Accommodated',
-          changedBy: 'Ahmad Khan',
-          changedByRole: 'super-admin',
-          changedAt: '2024-01-14T11:00:00',
-          remark: 'VIP room VIP-201 assigned. Wheelchair arrangements confirmed.',
-        },
-      ] satisfies GuestStatusEvent[],
-    },
-    // Draft guest for coordinator
-    {
-      id: '4',
-      referenceNumber: 'MEH-2024-000004',
-      fullName: 'Anna Schmidt',
-      country: 'Germany',
-      countryCode: 'DE',
-      gender: 'female',
-      age: 32,
-      dateOfBirth: '1992-05-20',
-      passportNumber: 'C01X00T03',
-      contactNumber: '+49 173 4567890',
-      email: 'anna.schmidt@example.de',
-      visaStatus: 'not-required',
-      guestType: 'individual',
-      familyMembers: [],
-      designation: 'Jamaat Member',
-      arrivalFlightNumber: 'LH906',
-      arrivalAirport: 'LHR',
-      arrivalTerminal: 'T2',
-      arrivalTime: '2024-07-16T09:00',
-      departureFlightNumber: 'LH907',
-      departureAirport: 'LHR',
-      departureTerminal: 'T2',
-      departureTime: '2024-07-21T15:00',
-      wheelchairRequired: false,
-      status: 'Awaiting Review',
-      submittedBy: '3',
-      submittedAt: '2024-02-01',
-      resubmitCount: 0,
-      appealStatus: 'none',
-    },
-    // Needs correction guest for coordinator
-    {
-      id: '5',
-      referenceNumber: 'MEH-2024-000005',
-      fullName: 'Thomas Muller',
-      country: 'Germany',
-      countryCode: 'DE',
-      gender: 'male',
-      age: 41,
-      dateOfBirth: '1983-08-12',
-      passportNumber: 'C01X00T04',
-      contactNumber: '+49 174 5678901',
-      email: 'thomas.muller@example.de',
-      visaStatus: 'pending',
-      guestType: 'individual',
-      familyMembers: [],
-      designation: 'National Amla Member',
-      arrivalFlightNumber: 'LH908',
-      arrivalAirport: 'LHR',
-      arrivalTerminal: 'T3',
-      arrivalTime: '2024-07-17T11:00',
-      departureFlightNumber: 'LH909',
-      departureAirport: 'LHR',
-      departureTerminal: 'T3',
-      departureTime: '2024-07-22T10:00',
-      wheelchairRequired: false,
-      status: 'Needs Correction',
-      submittedBy: '3',
-      submittedAt: '2024-02-05',
-      resubmitCount: 1,
-      appealStatus: 'none',
-      remarks: [
-        {
-          id: 'r1',
-          authorId: '2',
-          authorName: 'Fatima Ali',
-          authorRole: 'desk-in-charge',
-          message: 'Please provide a clearer copy of the passport. The current image is blurry and the passport number is not readable.',
-          createdAt: '2024-02-06T10:30:00',
-        },
-      ],
-    },
-    // Pending review guest
-    {
-      id: '6',
-      referenceNumber: 'MEH-2024-000006',
-      fullName: 'Lisa Wagner',
-      country: 'Germany',
-      countryCode: 'DE',
-      gender: 'female',
-      age: 28,
-      dateOfBirth: '1996-03-08',
-      passportNumber: 'C01X00T05',
-      contactNumber: '+49 175 6789012',
-      email: 'lisa.wagner@example.de',
-      visaStatus: 'not-required',
-      guestType: 'family',
-      familyMembers: [
-        {
-          id: 'f3',
-          name: 'Erik Wagner',
-          age: 45,
-          relationship: 'spouse',
-          gender: 'male',
-          status: 'Awaiting Review',
-        },
-      ],
-      designation: 'Jamaat Member',
-      arrivalFlightNumber: 'LH910',
-      arrivalAirport: 'LGW',
-      arrivalTerminal: 'N',
-      arrivalTime: '2024-07-18T14:00',
-      departureFlightNumber: 'LH911',
-      departureAirport: 'LGW',
-      departureTerminal: 'N',
-      departureTime: '2024-07-23T16:00',
-      wheelchairRequired: false,
-      status: 'Awaiting Review',
-      submittedBy: '3',
-      submittedAt: '2024-02-10',
-      resubmitCount: 0,
-      appealStatus: 'none',
-    },
-  ];
-};
+// ── DB ↔ TypeScript mappers ────────────────────────────────────────────────────
 
-let nextId = 7;
-let nextReferenceNumber = 7;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToFamilyMember(row: any): FamilyMember {
+  return {
+    id: String(row.id),
+    name: row.name,
+    age: row.age,
+    relationship: row.relationship,
+    gender: row.gender,
+    status: row.status ?? undefined,
+    assignedDepartment: row.assigned_department ?? undefined,
+    assignedDepartmentAt: row.assigned_department_at ?? undefined,
+    placedLocation: row.placed_location ?? undefined,
+    placedAt: row.placed_at ?? undefined,
+    rejectionReason: row.rejection_reason ?? undefined,
+    remarks: row.remarks ?? undefined,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToGuest(row: any): Guest {
+  return {
+    id: String(row.id),
+    referenceNumber: row.reference_number,
+    fullName: row.full_name,
+    country: row.country,
+    countryCode: row.country_code,
+    gender: row.gender,
+    age: row.age,
+    dateOfBirth: row.date_of_birth ?? undefined,
+    passportNumber: row.passport_number,
+    contactNumber: row.contact_number,
+    email: row.email ?? undefined,
+    visaStatus: row.visa_status,
+    visaDetails: row.visa_details ?? undefined,
+    guestType: row.guest_type,
+    familyMembers: Array.isArray(row.family_members)
+      ? row.family_members.map(rowToFamilyMember)
+      : [],
+    designation: row.designation,
+    arrivalFlightNumber: row.arrival_flight_number ?? undefined,
+    arrivalAirport: row.arrival_airport ?? undefined,
+    arrivalTerminal: row.arrival_terminal ?? undefined,
+    arrivalTime: row.arrival_time ?? undefined,
+    departureFlightNumber: row.departure_flight_number ?? undefined,
+    departureAirport: row.departure_airport ?? undefined,
+    departureTerminal: row.departure_terminal ?? undefined,
+    departureTime: row.departure_time ?? undefined,
+    specialNeeds: row.special_needs ?? undefined,
+    dietaryRequirements: row.dietary_requirements ?? undefined,
+    wheelchairRequired: row.wheelchair_required ?? false,
+    status: row.status,
+    submittedBy: row.submitted_by,
+    submittedAt: row.submitted_at,
+    resubmittedAt: row.resubmitted_at ?? undefined,
+    resubmitCount: row.resubmit_count ?? 0,
+    reviewedBy: row.reviewed_by ?? undefined,
+    reviewedAt: row.reviewed_at ?? undefined,
+    rejectionReason: row.rejection_reason ?? undefined,
+    appealStatus: row.appeal_status ?? 'none',
+    appealReason: row.appeal_reason ?? undefined,
+    appealedAt: row.appealed_at ?? undefined,
+    department: row.department ?? undefined,
+    roomAssignment: row.room_assignment ?? undefined,
+    assignedDepartment: row.assigned_department ?? undefined,
+    assignedDepartmentAt: row.assigned_department_at ?? undefined,
+    assignedDepartmentBy: row.assigned_department_by ?? undefined,
+    assignedDepartmentByName: row.assigned_department_by_name ?? undefined,
+    placedLocation: row.placed_location ?? undefined,
+    placedAt: row.placed_at ?? undefined,
+    placedBy: row.placed_by ?? undefined,
+    placedByName: row.placed_by_name ?? undefined,
+    remarks: Array.isArray(row.remarks) ? row.remarks : [],
+    statusHistory: Array.isArray(row.status_history) ? row.status_history : [],
+  };
+}
+
+/** Convert a camelCase Partial<Guest> to snake_case DB columns */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function updatesToDbRow(updates: Partial<Guest>): Record<string, any> {
+  const map: Record<string, string> = {
+    referenceNumber: 'reference_number',
+    fullName: 'full_name',
+    countryCode: 'country_code',
+    dateOfBirth: 'date_of_birth',
+    passportNumber: 'passport_number',
+    contactNumber: 'contact_number',
+    visaStatus: 'visa_status',
+    visaDetails: 'visa_details',
+    guestType: 'guest_type',
+    familyMembers: 'family_members', // excluded below
+    arrivalFlightNumber: 'arrival_flight_number',
+    arrivalAirport: 'arrival_airport',
+    arrivalTerminal: 'arrival_terminal',
+    arrivalTime: 'arrival_time',
+    departureFlightNumber: 'departure_flight_number',
+    departureAirport: 'departure_airport',
+    departureTerminal: 'departure_terminal',
+    departureTime: 'departure_time',
+    specialNeeds: 'special_needs',
+    dietaryRequirements: 'dietary_requirements',
+    wheelchairRequired: 'wheelchair_required',
+    submittedBy: 'submitted_by',
+    submittedAt: 'submitted_at',
+    resubmittedAt: 'resubmitted_at',
+    resubmitCount: 'resubmit_count',
+    reviewedBy: 'reviewed_by',
+    reviewedAt: 'reviewed_at',
+    rejectionReason: 'rejection_reason',
+    appealStatus: 'appeal_status',
+    appealReason: 'appeal_reason',
+    appealedAt: 'appealed_at',
+    roomAssignment: 'room_assignment',
+    assignedDepartment: 'assigned_department',
+    assignedDepartmentAt: 'assigned_department_at',
+    assignedDepartmentBy: 'assigned_department_by',
+    assignedDepartmentByName: 'assigned_department_by_name',
+    placedLocation: 'placed_location',
+    placedAt: 'placed_at',
+    placedBy: 'placed_by',
+    placedByName: 'placed_by_name',
+    statusHistory: 'status_history',
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const row: Record<string, any> = {};
+  for (const [key, value] of Object.entries(updates)) {
+    if (key === 'familyMembers') continue; // managed via family_members table
+    const dbKey = map[key] ?? key;
+    row[dbKey] = value;
+  }
+  return row;
+}
+
+// ── Provider ───────────────────────────────────────────────────────────────────
 
 export function GuestsProvider({ children }: { children: ReactNode }) {
-  const [guests, setGuests] = useState<Guest[]>(generateSampleGuests());
+  const [guests, setGuests] = useState<Guest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
 
-  const generateReferenceNumber = useCallback(() => {
-    const num = nextReferenceNumber.toString().padStart(6, '0');
-    nextReferenceNumber++;
-    return `MEH-2024-${num}`;
-  }, []);
+  // ── Fetch guests ────────────────────────────────────────────────────────────
 
-  const addGuest = useCallback((guestData: Omit<Guest, 'id' | 'referenceNumber' | 'submittedAt' | 'status' | 'resubmitCount' | 'appealStatus'>) => {
-    const newGuest: Guest = {
-      ...guestData,
-      id: (nextId++).toString(),
-      referenceNumber: generateReferenceNumber(),
-      submittedAt: new Date().toISOString().split('T')[0],
-      status: 'Awaiting Review',
-      resubmitCount: 0,
-      appealStatus: 'none',
-    };
+  const fetchGuests = useCallback(async () => {
+    if (!user) return;
+    setIsLoading(true);
+
+    let query = supabase
+      .from('guests')
+      .select('*, family_members(*)')
+      .order('created_at', { ascending: false });
+
+    // Role-based filtering
+    if (user.role === 'desk-in-charge' && user.assignedCountries?.length) {
+      query = query.in('country', user.assignedCountries);
+    } else if (user.role === 'coordinator') {
+      query = query.eq('country', user.country ?? '');
+    } else if (user.role === 'department-head') {
+      query = query.eq('assigned_department', user.department ?? '');
+    } else if (user.role === 'location-manager') {
+      query = query.eq('placed_location', user.location ?? '');
+    }
+    // super-admin, transport, accommodation, viewer: no filter
+
+    const { data, error } = await query;
+    if (error) {
+      toast.error('Failed to load guests');
+    } else if (data) {
+      setGuests(data.map(rowToGuest));
+    }
+    setIsLoading(false);
+  }, [user]);
+
+  useEffect(() => {
+    fetchGuests();
+  }, [fetchGuests]);
+
+  // ── Reference number ────────────────────────────────────────────────────────
+
+  const generateReferenceNumber = useCallback(() => {
+    const num = (guests.length + 1).toString().padStart(6, '0');
+    return `MEH-2024-${num}`;
+  }, [guests.length]);
+
+  // ── Add guest ───────────────────────────────────────────────────────────────
+
+  const addGuest = useCallback(async (
+    guestData: Omit<Guest, 'id' | 'referenceNumber' | 'submittedAt' | 'status' | 'resubmitCount' | 'appealStatus'>,
+  ): Promise<Guest | null> => {
+    const referenceNumber = generateReferenceNumber();
+
+    const { data, error } = await supabase
+      .from('guests')
+      .insert({
+        reference_number: referenceNumber,
+        full_name: guestData.fullName,
+        country: guestData.country,
+        country_code: guestData.countryCode,
+        gender: guestData.gender,
+        age: guestData.age,
+        date_of_birth: guestData.dateOfBirth,
+        passport_number: guestData.passportNumber,
+        contact_number: guestData.contactNumber,
+        email: guestData.email,
+        visa_status: guestData.visaStatus,
+        visa_details: guestData.visaDetails,
+        guest_type: guestData.guestType,
+        designation: guestData.designation,
+        arrival_flight_number: guestData.arrivalFlightNumber,
+        arrival_airport: guestData.arrivalAirport,
+        arrival_terminal: guestData.arrivalTerminal,
+        arrival_time: guestData.arrivalTime,
+        departure_flight_number: guestData.departureFlightNumber,
+        departure_airport: guestData.departureAirport,
+        departure_terminal: guestData.departureTerminal,
+        departure_time: guestData.departureTime,
+        special_needs: guestData.specialNeeds,
+        dietary_requirements: guestData.dietaryRequirements,
+        wheelchair_required: guestData.wheelchairRequired,
+        status: 'Awaiting Review',
+        submitted_by: guestData.submittedBy,
+        submitted_at: new Date().toISOString(),
+        resubmit_count: 0,
+        appeal_status: 'none',
+        department: guestData.department,
+      })
+      .select()
+      .single();
+
+    if (error || !data) {
+      toast.error('Failed to register guest');
+      return null;
+    }
+
+    // Insert family members if any
+    if (guestData.familyMembers?.length > 0) {
+      await supabase.from('family_members').insert(
+        guestData.familyMembers.map(m => ({
+          guest_id: data.id,
+          name: m.name,
+          age: m.age,
+          relationship: m.relationship,
+          gender: m.gender,
+          status: 'Awaiting Review',
+        })),
+      );
+    }
+
+    // Refetch to get the full row including family_members
+    const { data: full } = await supabase
+      .from('guests')
+      .select('*, family_members(*)')
+      .eq('id', data.id)
+      .single();
+
+    const newGuest = rowToGuest(full ?? data);
     setGuests(prev => [newGuest, ...prev]);
     return newGuest;
   }, [generateReferenceNumber]);
 
+  // ── Update guest (optimistic) ───────────────────────────────────────────────
+
   const updateGuest = useCallback((id: string, updates: Partial<Guest>) => {
-    setGuests(prev =>
-      prev.map(guest =>
-        guest.id === id ? { ...guest, ...updates } : guest
-      )
-    );
-  }, []);
+    // Optimistic update
+    setGuests(prev => prev.map(g => (g.id === id ? { ...g, ...updates } : g)));
+
+    const row = updatesToDbRow(updates);
+    row.updated_at = new Date().toISOString();
+
+    supabase
+      .from('guests')
+      .update(row)
+      .eq('id', id)
+      .then(({ error }) => {
+        if (error) {
+          toast.error('Failed to save changes');
+          // Revert by refetching
+          fetchGuests();
+        }
+      });
+  }, [fetchGuests]);
+
+  // ── Delete guest (optimistic) ───────────────────────────────────────────────
 
   const deleteGuest = useCallback((id: string) => {
-    setGuests(prev => prev.filter(guest => guest.id !== id));
-  }, []);
+    setGuests(prev => prev.filter(g => g.id !== id));
+
+    supabase
+      .from('guests')
+      .delete()
+      .eq('id', id)
+      .then(({ error }) => {
+        if (error) {
+          toast.error('Failed to delete guest');
+          fetchGuests();
+        }
+      });
+  }, [fetchGuests]);
+
+  // ── Add remark (optimistic, stored as JSONB on the guest row) ──────────────
 
   const addRemark = useCallback((guestId: string, remark: Omit<GuestRemark, 'id' | 'createdAt'>) => {
     const newRemark: GuestRemark = {
@@ -417,90 +337,123 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
       id: `r${Date.now()}`,
       createdAt: new Date().toISOString(),
     };
+
     setGuests(prev =>
-      prev.map(guest =>
-        guest.id === guestId
-          ? { ...guest, remarks: [...(guest.remarks || []), newRemark] }
-          : guest
-      )
+      prev.map(g =>
+        g.id === guestId
+          ? { ...g, remarks: [...(g.remarks ?? []), newRemark] }
+          : g,
+      ),
     );
+
+    supabase
+      .from('guests')
+      .select('remarks')
+      .eq('id', guestId)
+      .single()
+      .then(({ data }) => {
+        const existing = Array.isArray(data?.remarks) ? data.remarks : [];
+        return supabase
+          .from('guests')
+          .update({ remarks: [...existing, newRemark], updated_at: new Date().toISOString() })
+          .eq('id', guestId);
+      })
+      .then(({ error }) => {
+        if (error) toast.error('Failed to save remark');
+      });
   }, []);
 
-  const getGuestById = useCallback((id: string) => {
-    return guests.find(guest => guest.id === id);
-  }, [guests]);
+  // ── Queries ─────────────────────────────────────────────────────────────────
 
-  const getGuestsByCountry = useCallback((countryCode: string) => {
-    return guests.filter(guest => guest.countryCode === countryCode);
-  }, [guests]);
+  const getGuestById = useCallback((id: string) => guests.find(g => g.id === id), [guests]);
 
-  const getGuestsByStatus = useCallback((status: GuestStatus) => {
-    return guests.filter(guest => guest.status === status);
-  }, [guests]);
+  const getGuestsByCountry = useCallback(
+    (countryCode: string) => guests.filter(g => g.countryCode === countryCode),
+    [guests],
+  );
+
+  const getGuestsByStatus = useCallback(
+    (status: GuestStatus) => guests.filter(g => g.status === status),
+    [guests],
+  );
 
   const getMySubmissions = useCallback(() => {
     if (!user) return [];
-    return guests.filter(guest => guest.submittedBy === user.id);
+    return guests.filter(g => g.submittedBy === user.id);
   }, [guests, user]);
 
-  // For Coordinator: Waiting tab (needs-correction only — no more draft)
   const getMyWaitingGuests = useCallback(() => {
     if (!user) return [];
-    return guests.filter(guest =>
-      guest.submittedBy === user.id &&
-      guest.status === 'Needs Correction'
-    );
+    return guests.filter(g => g.submittedBy === user.id && g.status === 'Needs Correction');
   }, [guests, user]);
 
-  // For Coordinator: Submitted tab (Awaiting Review + Approved + Rejected)
   const getMySubmittedGuests = useCallback(() => {
     if (!user) return [];
-    return guests.filter(guest =>
-      guest.submittedBy === user.id &&
-      (guest.status === 'Awaiting Review' || guest.status === 'Approved' || guest.status === 'Rejected')
+    return guests.filter(
+      g =>
+        g.submittedBy === user.id &&
+        (g.status === 'Awaiting Review' || g.status === 'Approved' || g.status === 'Rejected'),
     );
   }, [guests, user]);
 
-  // Count of needs-correction guests for notification badge
   const getNeedsCorrectionCount = useCallback(() => {
     if (!user) return 0;
-    return guests.filter(guest =>
-      guest.submittedBy === user.id && guest.status === 'Needs Correction'
-    ).length;
+    return guests.filter(g => g.submittedBy === user.id && g.status === 'Needs Correction').length;
   }, [guests, user]);
+
+  // ── Family member operations ─────────────────────────────────────────────────
 
   const updateFamilyMember = useCallback((guestId: string, memberId: string, updates: Partial<FamilyMember>) => {
     setGuests(prev =>
-      prev.map(guest =>
-        guest.id === guestId
-          ? {
-              ...guest,
-              familyMembers: guest.familyMembers.map(m =>
-                m.id === memberId ? { ...m, ...updates } : m
-              ),
-            }
-          : guest
-      )
+      prev.map(g =>
+        g.id === guestId
+          ? { ...g, familyMembers: g.familyMembers.map(m => (m.id === memberId ? { ...m, ...updates } : m)) }
+          : g,
+      ),
     );
+
+    const row: Record<string, unknown> = {};
+    if (updates.status !== undefined) row.status = updates.status;
+    if (updates.assignedDepartment !== undefined) row.assigned_department = updates.assignedDepartment;
+    if (updates.assignedDepartmentAt !== undefined) row.assigned_department_at = updates.assignedDepartmentAt;
+    if (updates.placedLocation !== undefined) row.placed_location = updates.placedLocation;
+    if (updates.placedAt !== undefined) row.placed_at = updates.placedAt;
+    if (updates.rejectionReason !== undefined) row.rejection_reason = updates.rejectionReason;
+
+    if (Object.keys(row).length > 0) {
+      supabase
+        .from('family_members')
+        .update(row)
+        .eq('id', memberId)
+        .then(({ error }) => {
+          if (error) toast.error('Failed to update family member');
+        });
+    }
   }, []);
 
-  const updateFamilyMemberStatus = useCallback((guestId: string, memberId: string, newStatus: FamilyMemberStatus) => {
-    updateFamilyMember(guestId, memberId, { status: newStatus });
-  }, [updateFamilyMember]);
+  const updateFamilyMemberStatus = useCallback(
+    (guestId: string, memberId: string, newStatus: FamilyMemberStatus) =>
+      updateFamilyMember(guestId, memberId, { status: newStatus }),
+    [updateFamilyMember],
+  );
 
-  const assignFamilyMemberDepartment = useCallback((guestId: string, memberId: string, department: string) => {
-    updateFamilyMember(guestId, memberId, {
-      assignedDepartment: department,
-      assignedDepartmentAt: new Date().toISOString(),
-    });
-  }, [updateFamilyMember]);
+  const assignFamilyMemberDepartment = useCallback(
+    (guestId: string, memberId: string, department: string) =>
+      updateFamilyMember(guestId, memberId, {
+        assignedDepartment: department,
+        assignedDepartmentAt: new Date().toISOString(),
+      }),
+    [updateFamilyMember],
+  );
 
-  const placeFamilyMember = useCallback((guestId: string, memberId: string, location: string) => {
-    updateFamilyMember(guestId, memberId, {
-      placedLocation: location,
-      placedAt: new Date().toISOString(),
-    });
-  }, [updateFamilyMember]);
+  const placeFamilyMember = useCallback(
+    (guestId: string, memberId: string, location: string) =>
+      updateFamilyMember(guestId, memberId, {
+        placedLocation: location,
+        placedAt: new Date().toISOString(),
+      }),
+    [updateFamilyMember],
+  );
 
   const getFamilyStatusSummary = useCallback((guest: Guest) => {
     const all = [
@@ -516,6 +469,7 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
     <GuestsContext.Provider
       value={{
         guests,
+        isLoading,
         addGuest,
         updateGuest,
         deleteGuest,
@@ -541,8 +495,6 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
 
 export function useGuests() {
   const context = useContext(GuestsContext);
-  if (context === undefined) {
-    throw new Error('useGuests must be used within a GuestsProvider');
-  }
+  if (context === undefined) throw new Error('useGuests must be used within a GuestsProvider');
   return context;
 }

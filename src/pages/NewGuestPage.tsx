@@ -299,7 +299,7 @@ export default function NewGuestPage() {
     try {
       const country = COUNTRIES.find(c => c.code === formData.country);
       
-      addGuest({
+      const result = await addGuest({
         fullName: formData.fullName,
         country: country?.name || formData.country,
         countryCode: formData.country,
@@ -328,6 +328,7 @@ export default function NewGuestPage() {
         submittedBy: user.id,
       });
 
+      if (!result) return; // addGuest already showed an error toast
       toast.success('Guest registered — awaiting review');
       navigate(user.role === 'coordinator' ? '/coordinator/pending' : '/guests');
     } catch (error) {
