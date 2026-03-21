@@ -253,11 +253,16 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
       remarks:            [],
     };
 
-    console.log('[addGuest] Attempting insert:', insertRow);
+    // Convert empty strings and undefined to null for PostgreSQL
+    const cleanRow = Object.fromEntries(
+      Object.entries(insertRow).map(([k, v]) => [k, v === '' || v === undefined ? null : v]),
+    );
+
+    console.log('[addGuest] Attempting insert:', cleanRow);
 
     const { data, error } = await supabase
       .from('guests')
-      .insert(insertRow)
+      .insert(cleanRow)
       .select()
       .single();
 
