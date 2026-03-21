@@ -220,84 +220,100 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
   const addGuest = useCallback(async (
     guestData: Omit<Guest, 'id' | 'referenceNumber' | 'submittedAt' | 'status' | 'resubmitCount' | 'appealStatus'>,
   ): Promise<Guest | null> => {
-    const referenceNumber = generateReferenceNumber();
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const toNull = (val: any) =>
+        val === '' || val === undefined || val === null || val === 'undefined' ? null : val;
 
-    const insertRow = {
-      // Exact column names from the database
-      reference:          referenceNumber,
-      full_name:          guestData.fullName,
-      gender:             guestData.gender,
-      date_of_birth:      guestData.dateOfBirth,
-      age:                guestData.age,
-      guest_type:         guestData.guestType,
-      designation:        guestData.designation,
-      country:            guestData.country,
-      passport_number:    guestData.passportNumber,
-      contact_number:     guestData.contactNumber,
-      email:              guestData.email,
-      visa_status:        guestData.visaStatus,
-      wheelchair_required: guestData.wheelchairRequired,
-      special_needs:      guestData.specialNeeds,
-      flight_number:      guestData.arrivalFlightNumber,   // single flight_number column
-      arrival_date:       guestData.arrivalTime,           // date portion of arrival datetime
-      departure_date:     guestData.departureTime,         // date portion of departure datetime
-      arrival_airport:    guestData.arrivalAirport,
-      arrival_terminal:   guestData.arrivalTerminal,
-      departure_airport:  guestData.departureAirport,
-      departure_terminal: guestData.departureTerminal,
-      arrival_time:       guestData.arrivalTime,
-      departure_time:     guestData.departureTime,
-      status:             'Awaiting Review',
-      submitted_by:       guestData.submittedBy,
-      submitted_at:       new Date().toISOString(),
-      remarks:            [],
-    };
+      const toBool = (val: unknown) => val === true || val === 'true';
 
-    // Convert empty strings and undefined to null for PostgreSQL
-    const cleanRow = Object.fromEntries(
-      Object.entries(insertRow).map(([k, v]) => [k, v === '' || v === undefined ? null : v]),
-    );
+      const toInt = (val: unknown) => {
+        const n = parseInt(String(val));
+        return isNaN(n) ? null : n;
+      };
 
-    console.log('[addGuest] Attempting insert:', cleanRow);
+      // Get DB count for reference number
+      const { count } = await supabase.from('guests').select('*', { count: 'exact', head: true });
+      const reference = `MEH-2024-${String((count ?? 0) + 1).padStart(6, '0')}`;
 
-    const { data, error } = await supabase
-      .from('guests')
-      .insert(cleanRow)
-      .select()
-      .single();
+      const insertData = {
+        reference,
+        full_name:          toNull(guestData.fullName),
+        gender:             toNull(guestData.gender),
+        date_of_birth:      toNull(guestData.dateOfBirth),
+        age:                toInt(guestData.age),
+        guest_type:         toNull(guestData.guestType) ?? 'Individual',
+        designation:        toNull(guestData.designation),
+        country:            toNull(guestData.country),
+        passport_number:    toNull(guestData.passportNumber),
+        contact_number:     toNull(guestData.contactNumber),
+        email:              toNull(guestData.email),
+        visa_status:        toNull(guestData.visaStatus) ?? 'Not Required',
+        wheelchair_required: toBool(guestData.wheelchairRequired),
+        special_needs:      toNull(guestData.specialNeeds),
+        flight_number:      toNull(guestData.arrivalFlightNumber),
+        arrival_date:       toNull(guestData.arrivalTime),
+        departure_date:     toNull(guestData.departureTime),
+        arrival_airport:    toNull(guestData.arrivalAirport),
+        arrival_terminal:   toNull(guestData.arrivalTerminal),
+        departure_airport:  toNull(guestData.departureAirport),
+        departure_terminal: toNull(guestData.departureTerminal),
+        arrival_time:       toNull(guestData.arrivalTime),
+        departure_time:     toNull(guestData.departureTime),
+        remarks:            null,
+        status:             'Awaiting Review',
+        appeal_status:      'none',
+        submitted_by:       toNull(guestData.submittedBy),
+        submitted_at:       new Date().toISOString(),
+        resubmit_count:     0,
+      };
 
-    console.log('[addGuest] Supabase response:', { data, error });
+      console.log('[addGuest] Clean insert data:', insertData);
 
-    if (error || !data) {
+      const { data, error } = await supabase
+        .from('guests')
+        .insert(insertData)
+        .select()
+        .single();
+
+      console.log('[addGuest] Supabase response:', { data, error });
+
+      if (error || !data) {
+        console.error('[addGuest] Error:', error?.message);
+        toast.error('Failed to register guest');
+        return null;
+      }
+
+      // Insert family members if any
+      if (guestData.familyMembers?.length > 0) {
+        await supabase.from('family_members').insert(
+          guestData.familyMembers.map(m => ({
+            guest_id: data.id,
+            name:         toNull(m.name),
+            age:          toInt(m.age),
+            gender:       toNull(m.gender),
+            relationship: toNull(m.relationship),
+            status:       'Awaiting Review',
+          })),
+        );
+      }
+
+      // Refetch full row with family_members
+      const { data: full } = await supabase
+        .from('guests')
+        .select('*, family_members(*)')
+        .eq('id', data.id)
+        .single();
+
+      const newGuest = rowToGuest(full ?? data);
+      setGuests(prev => [newGuest, ...prev]);
+      return newGuest;
+    } catch (err) {
+      console.error('[addGuest] Exception:', err);
       toast.error('Failed to register guest');
       return null;
     }
-
-    // Insert family members if any
-    if (guestData.familyMembers?.length > 0) {
-      await supabase.from('family_members').insert(
-        guestData.familyMembers.map(m => ({
-          guest_id: data.id,
-          name: m.name,
-          age: m.age,
-          relationship: m.relationship,
-          gender: m.gender,
-          status: 'Awaiting Review',
-        })),
-      );
-    }
-
-    // Refetch to get the full row including family_members
-    const { data: full } = await supabase
-      .from('guests')
-      .select('*, family_members(*)')
-      .eq('id', data.id)
-      .single();
-
-    const newGuest = rowToGuest(full ?? data);
-    setGuests(prev => [newGuest, ...prev]);
-    return newGuest;
-  }, [generateReferenceNumber]);
+  }, []);
 
   // ── Update guest (optimistic) ───────────────────────────────────────────────
 
