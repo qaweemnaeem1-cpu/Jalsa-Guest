@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import type { Guest, GuestStatus, GuestRemark, FamilyMember, FamilyMemberStatus } from '@/types';
@@ -170,8 +170,11 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
   const [guests, setGuests] = useState<Guest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
+  const hasFetched = useRef(false);
 
   // ── Fetch guests ────────────────────────────────────────────────────────────
+  // Depends only on stable primitives (id, role) — not the full user object — to avoid
+  // infinite re-render loops caused by new object references on every render.
 
   const fetchGuests = useCallback(async () => {
     if (!user) return;
@@ -192,7 +195,6 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
     } else if (user.role === 'location-manager') {
       query = query.eq('placed_location', user.location ?? '');
     }
-    // super-admin, transport, accommodation, viewer: no filter
 
     const { data, error } = await query;
     console.log('[fetchGuests] role:', user.role, '| result:', { count: data?.length, error });
@@ -202,11 +204,21 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
       setGuests(data.map(rowToGuest));
     }
     setIsLoading(false);
-  }, [user]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.role]);
 
   useEffect(() => {
-    fetchGuests();
-  }, [fetchGuests]);
+    if (user?.id && !hasFetched.current) {
+      hasFetched.current = true;
+      fetchGuests();
+    }
+    if (!user) {
+      // User logged out — reset state
+      setGuests([]);
+      setIsLoading(false);
+      hasFetched.current = false;
+    }
+  }, [user?.id, fetchGuests]);
 
   // ── Reference number ────────────────────────────────────────────────────────
 
