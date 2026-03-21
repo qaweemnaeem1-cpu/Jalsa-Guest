@@ -53,37 +53,37 @@ function rowToFamilyMember(row: any): FamilyMember {
 function rowToGuest(row: any): Guest {
   return {
     id: String(row.id),
-    referenceNumber: row.reference_number,
-    fullName: row.full_name,
-    country: row.country,
-    countryCode: row.country_code,
+    referenceNumber: row.reference ?? row.reference_number ?? '',
+    fullName: row.full_name ?? '',
+    country: row.country ?? '',
+    countryCode: row.country_code ?? row.country ?? '',
     gender: row.gender,
     age: row.age,
     dateOfBirth: row.date_of_birth ?? undefined,
-    passportNumber: row.passport_number,
-    contactNumber: row.contact_number,
+    passportNumber: row.passport_number ?? '',
+    contactNumber: row.contact_number ?? '',
     email: row.email ?? undefined,
-    visaStatus: row.visa_status,
+    visaStatus: row.visa_status ?? 'not-required',
     visaDetails: row.visa_details ?? undefined,
-    guestType: row.guest_type,
+    guestType: row.guest_type ?? 'individual',
     familyMembers: Array.isArray(row.family_members)
       ? row.family_members.map(rowToFamilyMember)
       : [],
-    designation: row.designation,
-    arrivalFlightNumber: row.arrival_flight_number ?? undefined,
+    designation: row.designation ?? '',
+    arrivalFlightNumber: row.flight_number ?? row.arrival_flight_number ?? undefined,
     arrivalAirport: row.arrival_airport ?? undefined,
     arrivalTerminal: row.arrival_terminal ?? undefined,
-    arrivalTime: row.arrival_time ?? undefined,
-    departureFlightNumber: row.departure_flight_number ?? undefined,
+    arrivalTime: row.arrival_time ?? row.arrival_date ?? undefined,
+    departureFlightNumber: row.flight_number ?? row.departure_flight_number ?? undefined,
     departureAirport: row.departure_airport ?? undefined,
     departureTerminal: row.departure_terminal ?? undefined,
-    departureTime: row.departure_time ?? undefined,
+    departureTime: row.departure_time ?? row.departure_date ?? undefined,
     specialNeeds: row.special_needs ?? undefined,
     dietaryRequirements: row.dietary_requirements ?? undefined,
     wheelchairRequired: row.wheelchair_required ?? false,
     status: row.status,
-    submittedBy: row.submitted_by,
-    submittedAt: row.submitted_at,
+    submittedBy: row.submitted_by ?? '',
+    submittedAt: row.submitted_at ?? '',
     resubmittedAt: row.resubmitted_at ?? undefined,
     resubmitCount: row.resubmit_count ?? 0,
     reviewedBy: row.reviewed_by ?? undefined,
@@ -195,6 +195,7 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
     // super-admin, transport, accommodation, viewer: no filter
 
     const { data, error } = await query;
+    console.log('[fetchGuests] role:', user.role, '| result:', { count: data?.length, error });
     if (error) {
       toast.error('Failed to load guests');
     } else if (data) {
@@ -221,43 +222,46 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
   ): Promise<Guest | null> => {
     const referenceNumber = generateReferenceNumber();
 
+    const insertRow = {
+      // Exact column names from the database
+      reference:          referenceNumber,
+      full_name:          guestData.fullName,
+      gender:             guestData.gender,
+      date_of_birth:      guestData.dateOfBirth,
+      age:                guestData.age,
+      guest_type:         guestData.guestType,
+      designation:        guestData.designation,
+      country:            guestData.country,
+      passport_number:    guestData.passportNumber,
+      contact_number:     guestData.contactNumber,
+      email:              guestData.email,
+      visa_status:        guestData.visaStatus,
+      wheelchair_required: guestData.wheelchairRequired,
+      special_needs:      guestData.specialNeeds,
+      flight_number:      guestData.arrivalFlightNumber,   // single flight_number column
+      arrival_date:       guestData.arrivalTime,           // date portion of arrival datetime
+      departure_date:     guestData.departureTime,         // date portion of departure datetime
+      arrival_airport:    guestData.arrivalAirport,
+      arrival_terminal:   guestData.arrivalTerminal,
+      departure_airport:  guestData.departureAirport,
+      departure_terminal: guestData.departureTerminal,
+      arrival_time:       guestData.arrivalTime,
+      departure_time:     guestData.departureTime,
+      status:             'Awaiting Review',
+      submitted_by:       guestData.submittedBy,
+      submitted_at:       new Date().toISOString(),
+      remarks:            [],
+    };
+
+    console.log('[addGuest] Attempting insert:', insertRow);
+
     const { data, error } = await supabase
       .from('guests')
-      .insert({
-        reference_number: referenceNumber,
-        full_name: guestData.fullName,
-        country: guestData.country,
-        country_code: guestData.countryCode,
-        gender: guestData.gender,
-        age: guestData.age,
-        date_of_birth: guestData.dateOfBirth,
-        passport_number: guestData.passportNumber,
-        contact_number: guestData.contactNumber,
-        email: guestData.email,
-        visa_status: guestData.visaStatus,
-        visa_details: guestData.visaDetails,
-        guest_type: guestData.guestType,
-        designation: guestData.designation,
-        arrival_flight_number: guestData.arrivalFlightNumber,
-        arrival_airport: guestData.arrivalAirport,
-        arrival_terminal: guestData.arrivalTerminal,
-        arrival_time: guestData.arrivalTime,
-        departure_flight_number: guestData.departureFlightNumber,
-        departure_airport: guestData.departureAirport,
-        departure_terminal: guestData.departureTerminal,
-        departure_time: guestData.departureTime,
-        special_needs: guestData.specialNeeds,
-        dietary_requirements: guestData.dietaryRequirements,
-        wheelchair_required: guestData.wheelchairRequired,
-        status: 'Awaiting Review',
-        submitted_by: guestData.submittedBy,
-        submitted_at: new Date().toISOString(),
-        resubmit_count: 0,
-        appeal_status: 'none',
-        department: guestData.department,
-      })
+      .insert(insertRow)
       .select()
       .single();
+
+    console.log('[addGuest] Supabase response:', { data, error });
 
     if (error || !data) {
       toast.error('Failed to register guest');
