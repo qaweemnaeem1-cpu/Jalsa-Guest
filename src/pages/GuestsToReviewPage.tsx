@@ -501,6 +501,7 @@ export default function GuestsToReviewPage() {
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Passport Country</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Type</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Submitted</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Status</th>
@@ -546,6 +547,7 @@ export default function GuestsToReviewPage() {
                                     </div>
                                   </td>
                                   <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.country}</td>
+                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.passportCountry || '—'}</td>
                                   <td className="px-4 py-3">
                                     <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200 capitalize">
                                       {g.guestType}{isFamily && ` (${g.familyMembers.length + 1})`}
@@ -614,7 +616,7 @@ export default function GuestsToReviewPage() {
                                 {/* ── Family member drawer ── */}
                                 {isFamily && isExpanded && (
                                   <tr>
-                                    <td colSpan={8} className="p-0 bg-[#F9F8F6] border-b border-[#E8E3DB]">
+                                    <td colSpan={9} className="p-0 bg-[#F9F8F6] border-b border-[#E8E3DB]">
                                       <div className="px-6 py-4 space-y-2">
                                         <p className="text-[10px] font-semibold text-[#4A4A4A] uppercase tracking-widest mb-3">
                                           Family Members · {drawerMembers.length} total

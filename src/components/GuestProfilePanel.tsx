@@ -23,6 +23,7 @@ import { Pencil, Trash2, Send } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { GUEST_STATUS_LABELS, ROLE_LABELS, VISA_STATUS_LABELS } from '@/lib/constants';
+import { CountryCombobox } from '@/components/CountryCombobox';
 import type { Guest, GuestStatus, UserRole } from '@/types';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -126,6 +127,7 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
   const { updateGuest, deleteGuest, addRemark } = useGuests();
 
   const [isEditMode, setIsEditMode] = useState(false);
+  const [editPassportCountry, setEditPassportCountry] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [commentText, setCommentText] = useState('');
@@ -179,6 +181,7 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
         departureTime: guest.departureTime ?? '',
       });
       setRoomInput(guest.roomAssignment ?? '');
+      setEditPassportCountry(guest.passportCountry ?? '');
       setIsEditMode(false);
       setDeleteDialogOpen(false);
       setDeleteConfirmText('');
@@ -211,6 +214,7 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
     updateGuest(guest.id, {
       fullName: data.fullName,
       passportNumber: data.passportNumber,
+      passportCountry: editPassportCountry || undefined,
       country: data.country,
       gender: data.gender,
       age: data.age,
@@ -260,6 +264,7 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
       departureTerminal: guest.departureTerminal ?? '',
       departureTime: guest.departureTime ?? '',
     });
+    setEditPassportCountry(guest.passportCountry ?? '');
     setIsEditMode(false);
   };
 
@@ -451,6 +456,15 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
                       </div>
 
                       <div>
+                        <Label className="text-sm">Passport Issuing Country</Label>
+                        <CountryCombobox
+                          value={editPassportCountry}
+                          onChange={setEditPassportCountry}
+                          className="mt-1"
+                        />
+                      </div>
+
+                      <div>
                         <Label htmlFor="ep-country" className="text-sm">
                           Country <span className="text-red-500">*</span>
                         </Label>
@@ -575,6 +589,9 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
                       label="Passport Number"
                       value={<span className="font-mono">{guest.passportNumber}</span>}
                     />
+                    {guest.passportCountry && (
+                      <InfoRow label="Passport Issuing Country" value={guest.passportCountry} />
+                    )}
                     <InfoRow label="Contact Number" value={guest.contactNumber} />
                     <InfoRow label="Email Address" value={guest.email} />
                     <InfoRow label="Country" value={guest.country} />

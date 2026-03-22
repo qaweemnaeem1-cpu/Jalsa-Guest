@@ -120,7 +120,7 @@ function CoordinatorRemarksPanel({ guest, onAddReply, onResubmit }: CoordinatorR
 
   return (
     <tr>
-      <td colSpan={9} className="p-0">
+      <td colSpan={10} className="p-0">
         <div className="bg-[#FEF9C3] border-l-4 border-amber-500 p-4 m-2 rounded-r-lg">
           <h4 className="font-medium text-amber-800 mb-3 flex items-center gap-2">
             <MessageSquare className="w-4 h-4" />
@@ -193,7 +193,7 @@ function DeskInchargeRemarksPanel({ onConfirm }: DeskInchargeRemarksPanelProps) 
 
   return (
     <tr>
-      <td colSpan={10} className="p-0">
+      <td colSpan={11} className="p-0">
         <div className="bg-[#FEE2E2] border-l-4 border-red-500 p-4 m-2 rounded-r-lg">
           <h4 className="font-medium text-red-800 mb-3">Add Remark for Coordinator</h4>
           
@@ -645,6 +645,7 @@ export default function GuestsPage() {
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Reference</th>
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Name</th>
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Country</th>
+                        <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Passport Country</th>
                         {user.role === 'desk-in-charge' && (
                           <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Coordinator</th>
                         )}
@@ -695,6 +696,7 @@ export default function GuestsPage() {
                               </div>
                             </td>
                             <td className="px-4 py-3">{guest.country}</td>
+                            <td className="px-4 py-3">{guest.passportCountry || '—'}</td>
                             {user.role === 'desk-in-charge' && (
                               <td className="px-4 py-3">{getCoordinatorName(guest.submittedBy)}</td>
                             )}
@@ -863,7 +865,7 @@ export default function GuestsPage() {
                           {/* Family Members Expanded Section */}
                           {guest.guestType === 'family' && (
                             <tr>
-                              <td colSpan={user.role === 'desk-in-charge' ? 10 : 9} className="p-0">
+                              <td colSpan={user.role === 'desk-in-charge' ? 11 : 10} className="p-0">
                                 <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
                                   expandedFamilyId === guest.id ? 'max-h-[400px] opacity-100' : 'max-h-0 opacity-0'
                                 }`}>

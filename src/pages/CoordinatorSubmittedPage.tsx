@@ -214,6 +214,7 @@ export default function CoordinatorSubmittedPage() {
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Passport Country</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Type</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Submitted</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Status</th>
@@ -242,6 +243,7 @@ export default function CoordinatorSubmittedPage() {
                                   </div>
                                 </td>
                                 <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.country}</td>
+                                <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.passportCountry || '—'}</td>
                                 <td className="px-4 py-3">
                                   <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200 capitalize">
                                     {g.guestType}
@@ -257,7 +259,7 @@ export default function CoordinatorSubmittedPage() {
                               </tr>
                               {isFamily && isExpanded && (
                                 <tr key={`${g.id}-members`} className="bg-[#F9F8F6]">
-                                  <td colSpan={6} className="px-8 py-3">
+                                  <td colSpan={7} className="px-8 py-3">
                                     <div className="space-y-1.5">
                                       <p className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wide mb-2">
                                         Family Members

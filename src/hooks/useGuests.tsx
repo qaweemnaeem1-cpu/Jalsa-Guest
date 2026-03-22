@@ -39,6 +39,7 @@ function rowToFamilyMember(row: any): FamilyMember {
     age: row.age,
     relationship: row.relationship,
     gender: row.gender,
+    passportCountry: row.passport_country ?? undefined,
     status: row.status ?? undefined,
     assignedDepartment: row.assigned_department ?? undefined,
     assignedDepartmentAt: row.assigned_department_at ?? undefined,
@@ -61,6 +62,7 @@ function rowToGuest(row: any): Guest {
     age: row.age,
     dateOfBirth: row.date_of_birth ?? undefined,
     passportNumber: row.passport_number ?? '',
+    passportCountry: row.passport_country ?? undefined,
     contactNumber: row.contact_number ?? '',
     email: row.email ?? undefined,
     visaStatus: row.visa_status ?? 'not-required',
@@ -269,6 +271,7 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
           ? (toNull(user.country) ?? toNull(guestData.country))
           : toNull(guestData.country),
         passport_number:    toNull(guestData.passportNumber),
+        passport_country:   toNull(guestData.passportCountry),
         contact_number:     toNull(guestData.contactNumber),
         email:              toNull(guestData.email),
         visa_status:        toNull(guestData.visaStatus) ?? 'Not Required',
@@ -312,10 +315,11 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
         await supabase.from('family_members').insert(
           guestData.familyMembers.map(m => ({
             guest_id: data.id,
-            name:         toNull(m.name),
-            age:          toInt(m.age),
-            gender:       toNull(m.gender),
-            relationship: toNull(m.relationship),
+            name:             toNull(m.name),
+            age:              toInt(m.age),
+            gender:           toNull(m.gender),
+            passport_country: toNull(m.passportCountry),
+            relationship:     toNull(m.relationship),
             status:       'Awaiting Review',
           })),
         );

@@ -28,6 +28,7 @@ export interface FamilyMember {
   age: number;
   relationship: string;
   gender: 'male' | 'female';
+  passportCountry?: string;
   status?: FamilyMemberStatus;
   assignedDepartment?: string;
   assignedDepartmentAt?: string;
@@ -83,6 +84,7 @@ export interface Guest {
   age: number;
   dateOfBirth?: string;
   passportNumber: string;
+  passportCountry?: string;
   contactNumber: string;
   email?: string;
   visaStatus: VisaStatus;

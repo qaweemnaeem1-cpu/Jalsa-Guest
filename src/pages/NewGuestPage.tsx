@@ -34,17 +34,18 @@ import {
   XCircle,
   MessageSquare,
 } from 'lucide-react';
-import { 
-  COUNTRIES, 
-  AIRPORTS, 
-  VISA_STATUS_OPTIONS, 
+import {
+  COUNTRIES,
+  AIRPORTS,
+  VISA_STATUS_OPTIONS,
   VISA_TYPE_OPTIONS,
-  GENDER_OPTIONS, 
+  GENDER_OPTIONS,
   GUEST_TYPE_OPTIONS,
   RELATIONSHIP_OPTIONS,
   ROLE_LABELS,
   VISA_STATUS_LABELS,
 } from '@/lib/constants';
+import { CountryCombobox } from '@/components/CountryCombobox';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
 import type { UserRole, FamilyMember, VisaDetails } from '@/types';
@@ -140,6 +141,14 @@ function FamilyMemberForm({ member, index, onUpdate, onRemove }: FamilyMemberFor
           </select>
         </div>
       </div>
+
+      <div className="space-y-2">
+        <Label className="text-[#1A1A1A]">Passport Issuing Country</Label>
+        <CountryCombobox
+          value={member.passportCountry ?? ''}
+          onChange={(v) => onUpdate(index, { passportCountry: v })}
+        />
+      </div>
     </div>
   );
 }
@@ -163,6 +172,7 @@ export default function NewGuestPage() {
     familyMembers: [] as FamilyMember[],
     designation: '',
     passportNumber: '',
+    passportCountry: '',
     contactNumber: '',
     email: '',
     visaStatus: 'not-required' as 'not-required' | 'pending' | 'approved' | 'rejected' | 'expired',
@@ -307,6 +317,7 @@ export default function NewGuestPage() {
         age: parseInt(formData.age),
         dateOfBirth: formData.dateOfBirth,
         passportNumber: formData.passportNumber,
+        passportCountry: formData.passportCountry,
         contactNumber: formData.contactNumber,
         email: formData.email,
         visaStatus: formData.visaStatus,
@@ -452,7 +463,7 @@ export default function NewGuestPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-[#1A1A1A] font-medium">Country *</Label>
+                      <Label className="text-[#1A1A1A] font-medium">Registration Country *</Label>
                       {user?.role === 'coordinator' ? (
                         <div>
                           <input
@@ -461,7 +472,7 @@ export default function NewGuestPage() {
                             disabled
                             className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-[#F5F0E8] text-[#4A4A4A] h-11 cursor-not-allowed"
                           />
-                          <p className="text-xs text-[#4A4A4A] mt-1">Based on your coordinator assignment</p>
+                          <p className="text-xs text-[#4A4A4A] mt-1">Auto-assigned based on your coordinator role</p>
                         </div>
                       ) : (
                         <select
@@ -614,6 +625,15 @@ export default function NewGuestPage() {
                         onChange={(e) => handleInputChange('passportNumber', e.target.value)}
                         placeholder="Enter passport number"
                         className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-[#1A1A1A] font-medium">Passport Issuing Country</Label>
+                      <p className="text-xs text-[#4A4A4A] -mt-1">Country that issued the guest's passport</p>
+                      <CountryCombobox
+                        value={formData.passportCountry}
+                        onChange={(v) => handleInputChange('passportCountry', v)}
                       />
                     </div>
 
