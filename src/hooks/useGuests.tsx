@@ -186,10 +186,19 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
       .order('created_at', { ascending: false });
 
     // Role-based filtering
-    if (user.role === 'desk-in-charge' && user.assignedCountries?.length) {
-      query = query.in('country', user.assignedCountries);
+    if (user.role === 'super-admin') {
+      // no filter — sees all guests
+    } else if (user.role === 'desk-in-charge') {
+      const countries = user.assignedCountries ?? [];
+      if (countries.length === 0) {
+        setGuests([]);
+        setIsLoading(false);
+        return;
+      }
+      query = query.in('country', countries);
     } else if (user.role === 'coordinator') {
-      query = query.eq('country', user.country ?? '');
+      // Coordinators see all guests they personally submitted
+      query = query.eq('submitted_by', user.id);
     } else if (user.role === 'department-head') {
       query = query.eq('assigned_department', user.department ?? '');
     } else if (user.role === 'location-manager') {
@@ -197,7 +206,6 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
     }
 
     const { data, error } = await query;
-    console.log('[fetchGuests] role:', user.role, '| result:', { count: data?.length, error });
     if (error) {
       toast.error('Failed to load guests');
     } else if (data) {
@@ -256,7 +264,10 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
         age:                toInt(guestData.age),
         guest_type:         toNull(guestData.guestType) ?? 'Individual',
         designation:        toNull(guestData.designation),
-        country:            toNull(guestData.country),
+        // Coordinators always use their own country so guests are always visible to them
+        country: user?.role === 'coordinator'
+          ? (toNull(user.country) ?? toNull(guestData.country))
+          : toNull(guestData.country),
         passport_number:    toNull(guestData.passportNumber),
         contact_number:     toNull(guestData.contactNumber),
         email:              toNull(guestData.email),
@@ -325,7 +336,8 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
       toast.error('Failed to register guest');
       return null;
     }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.role, user?.country]);
 
   // ── Update guest (optimistic) ───────────────────────────────────────────────
 

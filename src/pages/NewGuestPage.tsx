@@ -453,16 +453,28 @@ export default function NewGuestPage() {
 
                     <div className="space-y-2">
                       <Label className="text-[#1A1A1A] font-medium">Country *</Label>
-                      <select
-                        value={formData.country}
-                        onChange={(e) => handleInputChange('country', e.target.value)}
-                        className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] h-11"
-                      >
-                        <option value="">Select country</option>
-                        {COUNTRIES.map((country) => (
-                          <option key={country.code} value={country.code}>{country.name}</option>
-                        ))}
-                      </select>
+                      {user?.role === 'coordinator' ? (
+                        <div>
+                          <input
+                            type="text"
+                            value={user.country || ''}
+                            disabled
+                            className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-[#F5F0E8] text-[#4A4A4A] h-11 cursor-not-allowed"
+                          />
+                          <p className="text-xs text-[#4A4A4A] mt-1">Based on your coordinator assignment</p>
+                        </div>
+                      ) : (
+                        <select
+                          value={formData.country}
+                          onChange={(e) => handleInputChange('country', e.target.value)}
+                          className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] h-11"
+                        >
+                          <option value="">Select country</option>
+                          {COUNTRIES.map((country) => (
+                            <option key={country.code} value={country.code}>{country.name}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
 
                     <div className="space-y-2">
