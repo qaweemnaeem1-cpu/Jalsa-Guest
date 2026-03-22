@@ -109,59 +109,67 @@ function rowToGuest(row: any): Guest {
   };
 }
 
-/** Convert a camelCase Partial<Guest> to snake_case DB columns */
+/** Convert a camelCase Partial<Guest> to snake_case DB columns.
+ *  Only emits columns that actually exist in the guests table. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function updatesToDbRow(updates: Partial<Guest>): Record<string, any> {
+  // camelCase key → exact DB column name
   const map: Record<string, string> = {
-    referenceNumber: 'reference_number',
-    fullName: 'full_name',
-    countryCode: 'country_code',
-    dateOfBirth: 'date_of_birth',
-    passportNumber: 'passport_number',
-    contactNumber: 'contact_number',
-    visaStatus: 'visa_status',
-    visaDetails: 'visa_details',
-    guestType: 'guest_type',
-    familyMembers: 'family_members', // excluded below
-    arrivalFlightNumber: 'arrival_flight_number',
-    arrivalAirport: 'arrival_airport',
-    arrivalTerminal: 'arrival_terminal',
-    arrivalTime: 'arrival_time',
-    departureFlightNumber: 'departure_flight_number',
-    departureAirport: 'departure_airport',
-    departureTerminal: 'departure_terminal',
-    departureTime: 'departure_time',
-    specialNeeds: 'special_needs',
-    dietaryRequirements: 'dietary_requirements',
+    fullName:           'full_name',
+    gender:             'gender',
+    dateOfBirth:        'date_of_birth',
+    age:                'age',
+    passportNumber:     'passport_number',
+    passportCountry:    'passport_country',
+    contactNumber:      'contact_number',
+    email:              'email',
+    visaStatus:         'visa_status',
+    guestType:          'guest_type',
+    designation:        'designation',
+    country:            'country',
+    arrivalFlightNumber: 'flight_number',     // DB has single flight_number column
+    arrivalAirport:     'arrival_airport',
+    arrivalTerminal:    'arrival_terminal',
+    arrivalTime:        'arrival_time',
+    departureAirport:   'departure_airport',
+    departureTerminal:  'departure_terminal',
+    departureTime:      'departure_time',
+    specialNeeds:       'special_needs',
     wheelchairRequired: 'wheelchair_required',
-    submittedBy: 'submitted_by',
-    submittedAt: 'submitted_at',
-    resubmittedAt: 'resubmitted_at',
-    resubmitCount: 'resubmit_count',
-    reviewedBy: 'reviewed_by',
-    reviewedAt: 'reviewed_at',
-    rejectionReason: 'rejection_reason',
-    appealStatus: 'appeal_status',
-    appealReason: 'appeal_reason',
-    appealedAt: 'appealed_at',
-    roomAssignment: 'room_assignment',
+    status:             'status',
+    submittedBy:        'submitted_by',
+    submittedAt:        'submitted_at',
+    resubmittedAt:      'resubmitted_at',
+    resubmitCount:      'resubmit_count',
+    reviewedBy:         'reviewed_by',
+    reviewedAt:         'reviewed_at',
+    rejectionReason:    'rejection_reason',
+    appealStatus:       'appeal_status',
+    appealReason:       'appeal_reason',
+    appealedAt:         'appealed_at',
     assignedDepartment: 'assigned_department',
     assignedDepartmentAt: 'assigned_department_at',
     assignedDepartmentBy: 'assigned_department_by',
-    assignedDepartmentByName: 'assigned_department_by_name',
-    placedLocation: 'placed_location',
-    placedAt: 'placed_at',
-    placedBy: 'placed_by',
-    placedByName: 'placed_by_name',
-    statusHistory: 'status_history',
+    placedLocation:     'placed_location',
+    placedAt:           'placed_at',
+    placedBy:           'placed_by',
+    remarks:            'remarks',
   };
+
+  // Fields that must never be sent to the DB (no matching column)
+  const skip = new Set([
+    'id', 'referenceNumber', 'familyMembers', 'countryCode', 'visaDetails',
+    'dietaryRequirements', 'departureFlightNumber', 'roomAssignment',
+    'assignedDepartmentByName', 'placedByName', 'statusHistory',
+  ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const row: Record<string, any> = {};
   for (const [key, value] of Object.entries(updates)) {
-    if (key === 'familyMembers') continue; // managed via family_members table
+    if (skip.has(key)) continue;
     const dbKey = map[key] ?? key;
-    row[dbKey] = value;
+    // Convert empty strings to null so PostgreSQL doesn't reject typed columns
+    row[dbKey] = value === '' ? null : value;
   }
   return row;
 }

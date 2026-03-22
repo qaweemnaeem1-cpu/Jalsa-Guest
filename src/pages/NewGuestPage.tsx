@@ -271,7 +271,8 @@ export default function NewGuestPage() {
       toast.error('Full name is required');
       return;
     }
-    if (!formData.country) {
+    // Coordinators have country auto-assigned — skip validation for them
+    if (!formData.country && user?.role !== 'coordinator') {
       toast.error('Country is required');
       return;
     }
@@ -308,11 +309,18 @@ export default function NewGuestPage() {
     
     try {
       const country = COUNTRIES.find(c => c.code === formData.country);
-      
+      // For coordinators, country comes from their profile; addGuest will also enforce this
+      const resolvedCountry = user?.role === 'coordinator'
+        ? (user.country || '')
+        : (country?.name || formData.country);
+      const resolvedCountryCode = user?.role === 'coordinator'
+        ? (user.countryCode || formData.country || '')
+        : formData.country;
+
       const result = await addGuest({
         fullName: formData.fullName,
-        country: country?.name || formData.country,
-        countryCode: formData.country,
+        country: resolvedCountry,
+        countryCode: resolvedCountryCode,
         gender: formData.gender,
         age: parseInt(formData.age),
         dateOfBirth: formData.dateOfBirth,
