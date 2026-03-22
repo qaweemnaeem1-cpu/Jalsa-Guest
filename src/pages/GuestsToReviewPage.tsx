@@ -76,11 +76,9 @@ export default function GuestsToReviewPage() {
   } | null>(null);
   const [assignAllValues, setAssignAllValues] = useState<Record<string, string>>({});
 
-  if (!user) return null;
+  // All useMemo hooks MUST be called before any conditional return (Rules of Hooks)
+  const assignedCountries = useMemo(() => user?.assignedCountries || [], [user?.assignedCountries]);
 
-  const assignedCountries = user.assignedCountries || [];
-
-  // Only "Awaiting Review" guests from DI's countries
   const reviewGuests = useMemo(() =>
     guests.filter(g =>
       assignedCountries.includes(g.country) &&
@@ -117,6 +115,8 @@ export default function GuestsToReviewPage() {
     }).sort((a, b) => (b.submittedAt ?? '').localeCompare(a.submittedAt ?? ''));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewGuests, countryFilter, search]);
+
+  if (!user) return null;
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);

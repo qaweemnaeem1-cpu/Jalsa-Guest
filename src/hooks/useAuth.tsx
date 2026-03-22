@@ -51,8 +51,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      setUser(data.user);
-      localStorage.setItem(SESSION_KEY, JSON.stringify(data.user));
+      // Normalize snake_case DB fields → camelCase User interface
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw = data.user as any;
+      const normalizedUser: User = {
+        id: String(raw.id),
+        name: raw.name,
+        email: raw.email,
+        role: raw.role as UserRole,
+        country: raw.country ?? undefined,
+        countryCode: raw.country_code ?? raw.countryCode ?? undefined,
+        assignedCountries: Array.isArray(raw.assigned_countries)
+          ? raw.assigned_countries
+          : Array.isArray(raw.assignedCountries)
+            ? raw.assignedCountries
+            : undefined,
+        department: raw.department ?? undefined,
+        location: raw.location ?? undefined,
+      };
+
+      console.log('[auth] Logged in user:', JSON.stringify(normalizedUser));
+
+      setUser(normalizedUser);
+      localStorage.setItem(SESSION_KEY, JSON.stringify(normalizedUser));
       setAuthError(null);
       return true;
     } catch {

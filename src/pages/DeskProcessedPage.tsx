@@ -67,9 +67,8 @@ export default function DeskProcessedPage() {
   // Department assignment
   const [deptAssign, setDeptAssign] = useState<{ guestId: string; dept: string } | null>(null);
 
-  if (!user) return null;
-
-  const assignedCountries = user.assignedCountries || [];
+  // All useMemo hooks MUST be called before any conditional return (Rules of Hooks)
+  const assignedCountries = useMemo(() => user?.assignedCountries || [], [user?.assignedCountries]);
 
   const reviewCount = useMemo(() =>
     guests.filter(g =>
@@ -113,6 +112,8 @@ export default function DeskProcessedPage() {
     }).sort((a, b) => (b.submittedAt ?? '').localeCompare(a.submittedAt ?? ''));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [processedGuests, statusFilter, countryFilter, search]);
+
+  if (!user) return null;
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
