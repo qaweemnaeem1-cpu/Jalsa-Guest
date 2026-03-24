@@ -177,7 +177,7 @@ export default function DashboardPage() {
       case 'desk-in-charge':
         return `${user.name} — ${(user.assignedCountries || []).length} assigned countries`;
       case 'coordinator':
-        return `${user.country} (${user.countryCode}) Coordinator`;
+        return `${user.country ?? ''} Coordinator`.trim();
       case 'transport':
         return 'Transport and arrivals management';
       case 'accommodation':
