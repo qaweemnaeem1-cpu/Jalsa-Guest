@@ -31,12 +31,20 @@ export function CountryCombobox({ value, onChange, placeholder = 'Search and sel
   return (
     <div ref={ref} className={`relative ${className ?? ''}`}>
       <div
-        className={`flex items-center justify-between w-full px-3 py-2.5 border rounded-md text-sm h-11 ${
+        tabIndex={disabled ? -1 : 0}
+        role="combobox"
+        aria-expanded={open}
+        className={`flex items-center justify-between w-full px-3 py-2.5 border rounded-md text-sm h-11 outline-none ${
           disabled
             ? 'bg-[#F5F0E8] border-[#D4CFC7] text-[#4A4A4A] cursor-not-allowed'
-            : 'bg-white border-[#D4CFC7] cursor-pointer hover:border-[#2D5A45]'
+            : 'bg-white border-[#D4CFC7] cursor-pointer hover:border-[#2D5A45] focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45]'
         }`}
         onClick={() => { if (!disabled) setOpen(o => !o); }}
+        onKeyDown={(e) => {
+          if (disabled) return;
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o); }
+          if (e.key === 'Escape') setOpen(false);
+        }}
       >
         <span className={value ? 'text-[#1A1A1A]' : 'text-[#9A9A9A]'}>
           {value || placeholder}

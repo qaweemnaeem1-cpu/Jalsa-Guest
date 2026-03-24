@@ -373,7 +373,7 @@ export default function NewGuestPage() {
             </div>
           </div>
 
-          <nav className="p-4 space-y-1">
+          <nav className="p-4 space-y-1 flex-1">
             <div className="text-xs font-medium text-[#4A4A4A] uppercase tracking-wider mb-2">Main</div>
             {navItems.map((item, index) => (
               <button
@@ -386,6 +386,20 @@ export default function NewGuestPage() {
               </button>
             ))}
           </nav>
+
+          {user.role === 'coordinator' && (
+            <div className="px-4 mb-2">
+              <button
+                type="button"
+                disabled
+                className="w-full bg-[#2D5A45] text-white rounded-lg py-3 px-4 flex items-center justify-center gap-2 text-sm font-medium opacity-50 cursor-default"
+              >
+                <Plus className="w-5 h-5" />
+                New Registration
+              </button>
+            </div>
+          )}
+
           <SidebarUserFooter />
         </aside>
 
@@ -452,8 +466,8 @@ export default function NewGuestPage() {
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Personal Information */}
               <Card className="shadow-sm">
-                <CardHeader className="bg-[#F9F8F6]">
-                  <CardTitle className="flex items-center gap-2 text-lg">
+                <CardHeader className="bg-[#D6E4D9]/30 border-l-4 border-[#2D5A45] py-3 px-4">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-800">
                     <User className="w-5 h-5 text-[#2D5A45]" />
                     Personal Information
                   </CardTitle>
@@ -535,8 +549,8 @@ export default function NewGuestPage() {
 
               {/* Guest Type & Designation */}
               <Card className="shadow-sm">
-                <CardHeader className="bg-[#F9F8F6]">
-                  <CardTitle className="flex items-center gap-2 text-lg">
+                <CardHeader className="bg-[#D6E4D9]/30 border-l-4 border-[#2D5A45] py-3 px-4">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-800">
                     <UsersRound className="w-5 h-5 text-[#2D5A45]" />
                     Guest Type & Designation
                   </CardTitle>
@@ -618,14 +632,14 @@ export default function NewGuestPage() {
 
               {/* Contact & Documents */}
               <Card className="shadow-sm">
-                <CardHeader className="bg-[#F9F8F6]">
-                  <CardTitle className="flex items-center gap-2 text-lg">
+                <CardHeader className="bg-[#D6E4D9]/30 border-l-4 border-[#2D5A45] py-3 px-4">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-800">
                     <FileText className="w-5 h-5 text-[#2D5A45]" />
                     Contact & Documents
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-6">
-                  <div className="grid md:grid-cols-2 gap-6">
+                  <div className="grid md:grid-cols-2 gap-6 items-start">
                     <div className="space-y-2">
                       <Label className="text-[#1A1A1A] font-medium">Passport Number *</Label>
                       <Input
@@ -638,7 +652,6 @@ export default function NewGuestPage() {
 
                     <div className="space-y-2">
                       <Label className="text-[#1A1A1A] font-medium">Passport Issuing Country</Label>
-                      <p className="text-xs text-[#4A4A4A] -mt-1">Country that issued the guest's passport</p>
                       <CountryCombobox
                         value={formData.passportCountry}
                         onChange={(v) => handleInputChange('passportCountry', v)}
@@ -671,8 +684,8 @@ export default function NewGuestPage() {
 
               {/* Visa Application Section */}
               <Card className="shadow-sm">
-                <CardHeader className="bg-[#F9F8F6]">
-                  <CardTitle className="flex items-center gap-2 text-lg">
+                <CardHeader className="bg-[#D6E4D9]/30 border-l-4 border-[#2D5A45] py-3 px-4">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-800">
                     <CreditCard className="w-5 h-5 text-[#2D5A45]" />
                     Visa Application
                   </CardTitle>
@@ -768,8 +781,8 @@ export default function NewGuestPage() {
 
               {/* Arrival Information */}
               <Card className="shadow-sm">
-                <CardHeader className="bg-[#F9F8F6]">
-                  <CardTitle className="flex items-center gap-2 text-lg">
+                <CardHeader className="bg-[#D6E4D9]/30 border-l-4 border-[#2D5A45] py-3 px-4">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-800">
                     <Plane className="w-5 h-5 text-[#2D5A45]" />
                     Arrival Information
                   </CardTitle>
@@ -833,8 +846,8 @@ export default function NewGuestPage() {
 
               {/* Departure Information */}
               <Card className="shadow-sm">
-                <CardHeader className="bg-[#F9F8F6]">
-                  <CardTitle className="flex items-center gap-2 text-lg">
+                <CardHeader className="bg-[#D6E4D9]/30 border-l-4 border-[#2D5A45] py-3 px-4">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-800">
                     <Plane className="w-5 h-5 text-[#2D5A45] rotate-180" />
                     Departure Information
                   </CardTitle>
@@ -898,8 +911,8 @@ export default function NewGuestPage() {
 
               {/* Special Requirements */}
               <Card className="shadow-sm">
-                <CardHeader className="bg-[#F9F8F6]">
-                  <CardTitle className="flex items-center gap-2 text-lg">
+                <CardHeader className="bg-[#D6E4D9]/30 border-l-4 border-[#2D5A45] py-3 px-4">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-800">
                     <Calendar className="w-5 h-5 text-[#2D5A45]" />
                     Special Requirements
                   </CardTitle>

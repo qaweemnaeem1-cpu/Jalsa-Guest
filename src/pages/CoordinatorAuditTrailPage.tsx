@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { toast } from 'sonner';
 import {
   LayoutDashboard, Clock, Users, XCircle,
-  ChevronDown, LogOut, Search, Send, MessageSquare, User,
+  ChevronDown, LogOut, Search, Send, MessageSquare, User, Plus,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
@@ -258,7 +258,7 @@ export default function CoordinatorAuditTrailPage() {
               </div>
             </div>
           </div>
-          <nav className="p-4 space-y-1">
+          <nav className="p-4 space-y-1 flex-1">
             <div className="text-xs font-medium text-[#4A4A4A] uppercase tracking-wider mb-2">Main</div>
             {COORD_NAV.map((item, i) => (
               <button
@@ -287,6 +287,18 @@ export default function CoordinatorAuditTrailPage() {
               </button>
             ))}
           </nav>
+
+          <div className="px-4 mb-2">
+            <button
+              type="button"
+              onClick={() => navigate('/guests/new')}
+              className="w-full bg-[#2D5A45] hover:bg-[#234a38] text-white rounded-lg py-3 px-4 flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+            >
+              <Plus className="w-5 h-5" />
+              New Registration
+            </button>
+          </div>
+
           <SidebarUserFooter />
         </aside>
 
