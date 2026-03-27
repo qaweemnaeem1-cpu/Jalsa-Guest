@@ -52,7 +52,8 @@ export type GuestStatus =
   | 'Needs Correction'  // Desk Incharge flagged it, sent back to Coordinator
   | 'Approved'          // Desk Incharge approved
   | 'Rejected'          // Desk Incharge rejected permanently
-  | 'Accommodated';     // Guest has been assigned accommodation
+  | 'Placed'            // Department Head placed guest at a location
+  | 'Accommodated';     // Guest has been assigned a room/bed
 
 export type VisaStatus = 'not-required' | 'pending' | 'approved' | 'rejected' | 'expired';
 export type GuestType = 'individual' | 'family';
@@ -114,6 +115,9 @@ export interface Guest {
   appealStatus?: 'none' | 'pending' | 'overturned' | 'denied';
   appealReason?: string;
   appealedAt?: string;
+  appealReviewedBy?: string;
+  accommodatedBy?: string;
+  accommodatedAt?: string;
   department?: string;
   roomAssignment?: string;
   assignedDepartment?: string;
@@ -133,7 +137,8 @@ export function canTransitionStatus(from: GuestStatus, to: GuestStatus): boolean
     'Awaiting Review': ['Approved', 'Needs Correction', 'Rejected'],
     'Needs Correction': ['Awaiting Review'],
     'Rejected': ['Awaiting Review'],
-    'Approved': ['Accommodated'],
+    'Approved': ['Placed', 'Accommodated'],
+    'Placed': ['Accommodated'],
     'Accommodated': [],
   };
   return transitions[from]?.includes(to) ?? false;

@@ -1192,6 +1192,7 @@ export default function DashboardPage() {
                   updateGuest(adminOverturnGuestId, {
                     status: 'Awaiting Review',
                     appealStatus: 'overturned',
+                    appealReviewedBy: user.id,
                   });
                   toast.success(`Rejection overturned — ${gName} sent back to review`);
                   setAdminOverturnGuestId(null);
@@ -1248,7 +1249,10 @@ export default function DashboardPage() {
               <button
                 onClick={() => {
                   if (!adminDenyGuestId) return;
-                  updateGuest(adminDenyGuestId, { appealStatus: 'denied' });
+                  updateGuest(adminDenyGuestId, {
+                    appealStatus: 'denied',
+                    appealReviewedBy: user.id,
+                  });
                   toast.success('Appeal denied');
                   setAdminDenyGuestId(null);
                 }}

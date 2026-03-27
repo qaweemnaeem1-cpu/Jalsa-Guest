@@ -10,7 +10,7 @@ interface GuestsContextType {
   guests: Guest[];
   isLoading: boolean;
   addGuest: (guestData: Omit<Guest, 'id' | 'referenceNumber' | 'submittedAt' | 'status' | 'resubmitCount' | 'appealStatus'>) => Promise<Guest | null>;
-  updateGuest: (id: string, updates: Partial<Guest>) => void;
+  updateGuest: (id: string, updates: Partial<Guest>) => Promise<void>;
   deleteGuest: (id: string) => void;
   addRemark: (guestId: string, remark: Omit<GuestRemark, 'id' | 'createdAt'>) => void;
   getGuestById: (id: string) => Guest | undefined;
@@ -94,6 +94,9 @@ function rowToGuest(row: any): Guest {
     appealStatus: row.appeal_status ?? 'none',
     appealReason: row.appeal_reason ?? undefined,
     appealedAt: row.appealed_at ?? undefined,
+    appealReviewedBy: row.appeal_reviewed_by ?? undefined,
+    accommodatedBy: row.accommodated_by ?? undefined,
+    accommodatedAt: row.accommodated_at ?? undefined,
     department: row.department ?? undefined,
     roomAssignment: row.room_assignment ?? undefined,
     assignedDepartment: row.assigned_department ?? undefined,
@@ -147,6 +150,9 @@ function updatesToDbRow(updates: Partial<Guest>): Record<string, any> {
     appealStatus:       'appeal_status',
     appealReason:       'appeal_reason',
     appealedAt:         'appealed_at',
+    appealReviewedBy:   'appeal_reviewed_by',
+    accommodatedBy:     'accommodated_by',
+    accommodatedAt:     'accommodated_at',
     assignedDepartment: 'assigned_department',
     assignedDepartmentAt: 'assigned_department_at',
     assignedDepartmentBy: 'assigned_department_by',
@@ -161,6 +167,7 @@ function updatesToDbRow(updates: Partial<Guest>): Record<string, any> {
     'id', 'referenceNumber', 'familyMembers', 'countryCode', 'visaDetails',
     'dietaryRequirements', 'departureFlightNumber', 'roomAssignment',
     'assignedDepartmentByName', 'placedByName', 'statusHistory',
+    'department',  // read-only profile field, not the assignment column
   ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -351,26 +358,34 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.role, user?.country]);
 
-  // ── Update guest (optimistic) ───────────────────────────────────────────────
+  // ── Update guest ────────────────────────────────────────────────────────────
 
-  const updateGuest = useCallback((id: string, updates: Partial<Guest>) => {
-    // Optimistic update
+  const updateGuest = useCallback(async (id: string, updates: Partial<Guest>): Promise<void> => {
+    // Optimistic update so the UI responds instantly
     setGuests(prev => prev.map(g => (g.id === id ? { ...g, ...updates } : g)));
 
     const row = updatesToDbRow(updates);
     row.updated_at = new Date().toISOString();
 
-    supabase
+    const { data, error } = await supabase
       .from('guests')
       .update(row)
       .eq('id', id)
-      .then(({ error }) => {
-        if (error) {
-          toast.error('Failed to save changes');
-          // Revert by refetching
-          fetchGuests();
-        }
-      });
+      .select()
+      .single();
+
+    if (error) {
+      toast.error('Failed to save changes');
+      // Revert optimistic update by refetching
+      fetchGuests();
+    } else if (data) {
+      // Sync state with server's canonical response, preserving family members already in memory
+      setGuests(prev => prev.map(g =>
+        g.id === id
+          ? { ...rowToGuest(data), familyMembers: g.familyMembers }
+          : g,
+      ));
+    }
   }, [fetchGuests]);
 
   // ── Delete guest (optimistic) ───────────────────────────────────────────────

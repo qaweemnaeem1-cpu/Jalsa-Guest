@@ -178,6 +178,7 @@ export default function DeptIncomingPage() {
       placeFamilyMember(guestId, memberId, location);
     } else {
       updateGuest(guestId, {
+        status: 'Placed',
         placedLocation: location,
         placedAt: new Date().toISOString(),
         placedBy: user.id,
@@ -213,6 +214,7 @@ export default function DeptIncomingPage() {
         placeFamilyMember(guestId, r.memberId, location);
       } else {
         updateGuest(guestId, {
+          status: 'Placed',
           placedLocation: location,
           placedAt: new Date().toISOString(),
           placedBy: user.id,

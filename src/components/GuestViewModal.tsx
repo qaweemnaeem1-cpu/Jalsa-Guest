@@ -388,7 +388,11 @@ export function GuestViewModal({
     if (!guest || !user || !isSuperAdmin || !roomAssignId || bedAssignNum === '') return;
     const bedNum = Number(bedAssignNum);
     assignGuestToRoom(roomAssignId, bedNum, guest.id, guest.fullName);
-    updateGuest(guest.id, { status: 'Accommodated' });
+    updateGuest(guest.id, {
+      status: 'Accommodated',
+      accommodatedBy: user.id,
+      accommodatedAt: new Date().toISOString(),
+    });
     toast.success(`${guest.fullName} assigned and marked as Accommodated`);
     setRoomAssignId('');
     setBedAssignNum('');

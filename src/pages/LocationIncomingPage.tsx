@@ -96,7 +96,7 @@ interface PendingAssign {
 
 export default function LocationIncomingPage() {
   const { user } = useAuth();
-  const { guests } = useGuests();
+  const { guests, updateGuest } = useGuests();
   const { rooms, blocks, bedAssignments, assignGuestToRoom, getRoomsByLocation } = useRooms();
   const { addEntry: addEntry2 } = useAuditTrail2();
 
@@ -143,6 +143,14 @@ export default function LocationIncomingPage() {
     const { guestId, memberId, name, roomId, roomName, bedNumber } = pendingAssign;
     const guest = guests.find(g => g.id === guestId);
     assignGuestToRoom(roomId, bedNumber, guestId, name, memberId ?? undefined);
+    // Persist accommodation to Supabase (only for the head guest, not family members)
+    if (!memberId) {
+      updateGuest(guestId, {
+        status: 'Accommodated',
+        accommodatedBy: user.id,
+        accommodatedAt: new Date().toISOString(),
+      });
+    }
     if (guest) {
       addEntry2({
         guestId, guestName: name, guestReference: guest.referenceNumber,

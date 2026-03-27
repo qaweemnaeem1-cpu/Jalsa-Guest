@@ -177,7 +177,11 @@ export default function GuestsToReviewPage() {
 
   const handleApproveConfirm = () => {
     if (!approveGuest) return;
-    updateGuest(approveGuest.id, { status: 'Approved' });
+    updateGuest(approveGuest.id, {
+      status: 'Approved',
+      reviewedBy: user.id,
+      reviewedAt: new Date().toISOString(),
+    });
     makeAuditEntry(approveGuest, approveGuest.status, 'Approved');
     toast.success(`${approveGuest.fullName} approved`);
     setApproveGuestId(null);
@@ -187,7 +191,11 @@ export default function GuestsToReviewPage() {
     const { guest, reason } = correctionDialog;
     if (!guest || reason.trim().length < 10) return;
     const safe = sanitizeComment(reason);
-    updateGuest(guest.id, { status: 'Needs Correction' });
+    updateGuest(guest.id, {
+      status: 'Needs Correction',
+      reviewedBy: user.id,
+      reviewedAt: new Date().toISOString(),
+    });
     makeAuditEntry(guest, guest.status, 'Needs Correction');
     if (safe) {
       addComment({
@@ -208,7 +216,9 @@ export default function GuestsToReviewPage() {
     const safe = sanitizeComment(reason);
     updateGuest(guest.id, {
       status: 'Rejected',
-      rejectionReason: safe,
+      rejectionReason: safe || null,
+      reviewedBy: user.id,
+      reviewedAt: new Date().toISOString(),
     });
     makeAuditEntry(guest, guest.status, 'Rejected');
     if (safe) {
@@ -243,7 +253,11 @@ export default function GuestsToReviewPage() {
 
   const handleDrawerApprove = (g: Guest, memberId: string | null, memberName: string) => {
     if (memberId === null) {
-      updateGuest(g.id, { status: 'Approved' });
+      updateGuest(g.id, {
+        status: 'Approved',
+        reviewedBy: user.id,
+        reviewedAt: new Date().toISOString(),
+      });
       makeAuditEntry(g, g.status, 'Approved');
     } else {
       updateFamilyMemberStatus(g.id, memberId, 'Approved');
@@ -265,7 +279,11 @@ export default function GuestsToReviewPage() {
     if (!g) return;
     const safe = sanitizeComment(reason);
     if (memberId === null) {
-      updateGuest(guestId, { status: 'Needs Correction' });
+      updateGuest(guestId, {
+        status: 'Needs Correction',
+        reviewedBy: user.id,
+        reviewedAt: new Date().toISOString(),
+      });
       makeAuditEntry(g, g.status, 'Needs Correction');
     } else {
       updateFamilyMemberStatus(guestId, memberId, 'Needs Correction');
@@ -295,7 +313,12 @@ export default function GuestsToReviewPage() {
     if (!g) return;
     const safe = sanitizeComment(reason);
     if (memberId === null) {
-      updateGuest(guestId, { status: 'Rejected', rejectionReason: safe });
+      updateGuest(guestId, {
+        status: 'Rejected',
+        rejectionReason: safe || null,
+        reviewedBy: user.id,
+        reviewedAt: new Date().toISOString(),
+      });
       makeAuditEntry(g, g.status, 'Rejected');
     } else {
       updateFamilyMemberStatus(guestId, memberId, 'Rejected');
@@ -335,7 +358,11 @@ export default function GuestsToReviewPage() {
   };
 
   const handleApproveAll = (g: Guest) => {
-    updateGuest(g.id, { status: 'Approved' });
+    updateGuest(g.id, {
+      status: 'Approved',
+      reviewedBy: user.id,
+      reviewedAt: new Date().toISOString(),
+    });
     makeAuditEntry(g, g.status, 'Approved');
     g.familyMembers.forEach(m => updateFamilyMemberStatus(g.id, m.id, 'Approved'));
     toast.success(`All ${g.familyMembers.length + 1} members approved`);
