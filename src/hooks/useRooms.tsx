@@ -92,12 +92,27 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
   // ── Initial fetch ────────────────────────────────────────────────────────────
 
   useEffect(() => {
+    // Fetch locations first to resolve UUIDs → names
+    supabase
+      .from('locations')
+      .select('id, name')
+      .then(({ data: locData }) => {
+        const locMap: Record<string, string> = {};
+        if (locData) {
+          for (const l of locData) locMap[l.id] = l.name;
+        }
+
     // Fetch blocks
     supabase
       .from('blocks')
       .select('*')
       .order('name')
-      .then(({ data }) => { if (data) setBlocks(data.map(rowToBlock)); });
+      .then(({ data }) => {
+        if (data) setBlocks(data.map(row => ({
+          ...rowToBlock(row),
+          locationId: locMap[row.location_id] ?? row.location_id,
+        })));
+      });
 
     // Fetch rooms then build bed slots
     supabase
@@ -106,7 +121,10 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
       .order('name')
       .then(async ({ data: roomData }) => {
         if (!roomData) return;
-        const loadedRooms = roomData.map(rowToRoom);
+        const loadedRooms = roomData.map(row => ({
+          ...rowToRoom(row),
+          locationId: locMap[row.location_id] ?? row.location_id,
+        }));
         setRooms(loadedRooms);
 
         // Build initial empty bed map from room capacities
@@ -139,6 +157,7 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
         }
         setBedAssignments(bedMap);
       });
+      }); // end locations fetch
   }, []);
 
   // ── Block CRUD ───────────────────────────────────────────────────────────────
