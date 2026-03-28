@@ -130,6 +130,8 @@ export interface Guest {
   placedByName?: string;
   remarks?: GuestRemark[];
   statusHistory?: GuestStatusEvent[];
+  mulaqat?: boolean;
+  delegationId?: string | null;
 }
 
 export function canTransitionStatus(from: GuestStatus, to: GuestStatus): boolean {

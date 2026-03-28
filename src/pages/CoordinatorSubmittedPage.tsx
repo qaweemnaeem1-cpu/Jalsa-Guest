@@ -10,6 +10,7 @@ import {
   Search, ChevronDown, LogOut, ChevronRight, User, Plus,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
+import { useDelegations } from '@/hooks/useDelegations';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
 import { FamilyStatusCell } from '@/components/FamilyStatusCell';
@@ -37,6 +38,7 @@ export default function CoordinatorSubmittedPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { guests } = useGuests();
+  const { getDelegationCountry } = useDelegations();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<GuestStatus | 'all'>('all');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -230,6 +232,8 @@ export default function CoordinatorSubmittedPage() {
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Type</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Submitted</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Status</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Delegation</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#E8E3DB]">
@@ -268,10 +272,22 @@ export default function CoordinatorSubmittedPage() {
                                 <td className="px-4 py-3">
                                   <FamilyStatusCell guest={g} expandable={isFamily} />
                                 </td>
+                                <td className="px-4 py-3">
+                                  <Badge variant="outline" className={`text-xs ${g.mulaqat ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                                    {g.mulaqat ? 'Yes' : 'No'}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-[#4A4A4A]">
+                                  {g.mulaqat && g.delegationId
+                                    ? <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                        {getDelegationCountry(g.delegationId) ?? g.country} Delegation
+                                      </span>
+                                    : <span className="text-gray-300">—</span>}
+                                </td>
                               </tr>
                               {isFamily && isExpanded && (
                                 <tr key={`${g.id}-members`} className="bg-[#F9F8F6]">
-                                  <td colSpan={7} className="px-8 py-3">
+                                  <td colSpan={9} className="px-8 py-3">
                                     <div className="space-y-1.5">
                                       <p className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wide mb-2">
                                         Family Members

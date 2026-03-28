@@ -109,6 +109,8 @@ function rowToGuest(row: any): Guest {
     placedByName: row.placed_by_name ?? undefined,
     remarks: Array.isArray(row.remarks) ? row.remarks : [],
     statusHistory: Array.isArray(row.status_history) ? row.status_history : [],
+    mulaqat: row.mulaqat ?? false,
+    delegationId: row.delegation_id ?? null,
   };
 }
 
@@ -161,6 +163,8 @@ function updatesToDbRow(updates: Partial<Guest>): Record<string, any> {
     placedAt:           'placed_at',
     placedBy:           'placed_by',
     remarks:            'remarks',
+    mulaqat:            'mulaqat',
+    delegationId:       'delegation_id',
   };
 
   // Fields that must never be sent to the DB (no matching column)
@@ -177,7 +181,7 @@ function updatesToDbRow(updates: Partial<Guest>): Record<string, any> {
     if (skip.has(key)) continue;
     const dbKey = map[key] ?? key;
     // Convert empty strings to null so PostgreSQL doesn't reject typed columns
-    row[dbKey] = value === '' ? null : value;
+    row[dbKey] = (value === '' || value === undefined) ? null : value;
   }
   return row;
 }

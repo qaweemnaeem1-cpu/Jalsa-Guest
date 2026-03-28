@@ -56,7 +56,8 @@ import {
 import { ProfileDialog } from '@/components/ProfileDialog';
 import { useMemo, useRef, useEffect } from 'react';
 import { useRooms } from '@/hooks/useRooms';
-import { GUEST_STATUS_LABELS, ROLE_LABELS } from '@/lib/constants';
+import { GUEST_STATUS_LABELS, ROLE_LABELS, ALL_COUNTRIES } from '@/lib/constants';
+import { useDelegations } from '@/hooks/useDelegations';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { FamilyStatusCell } from '@/components/FamilyStatusCell';
 import { DepartmentSelect } from '@/components/DepartmentSelect';
@@ -252,6 +253,7 @@ export default function GuestsPage() {
   const { guests, updateGuest, deleteGuest, addRemark, getMyWaitingGuests, getMySubmittedGuests, getNeedsCorrectionCount } = useGuests();
   const { users } = useUsers();
   const { rooms, bedAssignments } = useRooms();
+  const { getDelegationCountry, enableMulaqat, disableMulaqat, changeDelegationCountry } = useDelegations();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [colsOpen, setColsOpen] = useState(false);
@@ -755,6 +757,12 @@ export default function GuestsPage() {
                         {(user.role !== 'super-admin' || visibleCols.submitted) && (
                           <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Submitted</th>
                         )}
+                        {user.role === 'super-admin' && (
+                          <>
+                            <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Mulaqat</th>
+                            <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Delegation</th>
+                          </>
+                        )}
                         <th className="text-right px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Actions</th>
                       </tr>
                     </thead>
@@ -840,6 +848,41 @@ export default function GuestsPage() {
                             {(user.role !== 'super-admin' || visibleCols.submitted) && (
                               <td className="px-4 py-3 text-[#4A4A4A] whitespace-nowrap">{formatDate(guest.submittedAt)}</td>
                             )}
+
+                            {/* Mulaqat + Delegation — super-admin only */}
+                            {user.role === 'super-admin' && (
+                              <>
+                                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => guest.mulaqat ? disableMulaqat(guest) : enableMulaqat(guest)}
+                                    title={guest.mulaqat ? 'Remove from Mulaqat' : 'Add to Mulaqat'}
+                                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ${
+                                      guest.mulaqat ? 'bg-green-500' : 'bg-gray-300'
+                                    }`}
+                                  >
+                                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                                      guest.mulaqat ? 'translate-x-4' : 'translate-x-0.5'
+                                    }`} />
+                                  </button>
+                                </td>
+                                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                  {guest.mulaqat ? (
+                                    <select
+                                      value={getDelegationCountry(guest.delegationId) ?? guest.country}
+                                      onChange={(e) => changeDelegationCountry(guest, e.target.value)}
+                                      className="text-xs border border-blue-200 rounded-md px-2 py-1 bg-blue-50 text-blue-700 focus:border-blue-400 focus:ring-1 focus:ring-blue-300 min-w-[140px]"
+                                    >
+                                      {ALL_COUNTRIES.map(c => (
+                                        <option key={c.code} value={c.name}>{c.name}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <span className="text-gray-300 text-xs">—</span>
+                                  )}
+                                </td>
+                              </>
+                            )}
+
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-end gap-0.5">
                                 {/* Coordinator Actions */}

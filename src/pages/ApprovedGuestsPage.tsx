@@ -15,7 +15,8 @@ import {
   LayoutDashboard, ClipboardList, CheckSquare,
   Search, ChevronDown, LogOut, Eye, CheckCircle, MessageSquare, ChevronRight,
 } from 'lucide-react';
-import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
+import { ROLE_LABELS, GUEST_STATUS_LABELS, ALL_COUNTRIES } from '@/lib/constants';
+import { useDelegations } from '@/hooks/useDelegations';
 import type { Guest } from '@/types';
 import { DESK_NAV } from '@/lib/navItems';
 
@@ -25,6 +26,7 @@ export default function ApprovedGuestsPage() {
   const { guests, assignFamilyMemberDepartment, updateGuest } = useGuests();
   const { addEntry } = useAuditTrail();
   const { getDeptBadgeCls } = useDepartments();
+  const { getDelegationCountry, enableMulaqat, disableMulaqat, changeDelegationCountry } = useDelegations();
 
   const [search, setSearch] = useState('');
   const [countryFilter, setCountryFilter] = useState('all');
@@ -290,6 +292,8 @@ export default function ApprovedGuestsPage() {
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Status</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Approved Date</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Delegation</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#E8E3DB]">
@@ -342,12 +346,44 @@ export default function ApprovedGuestsPage() {
                                     <Eye className="w-4 h-4" />
                                   </button>
                                 </td>
+
+                                {/* Mulaqat toggle */}
+                                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => g.mulaqat ? disableMulaqat(g) : enableMulaqat(g)}
+                                    title={g.mulaqat ? 'Remove from Mulaqat' : 'Add to Mulaqat'}
+                                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ${
+                                      g.mulaqat ? 'bg-green-500' : 'bg-gray-300'
+                                    }`}
+                                  >
+                                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                                      g.mulaqat ? 'translate-x-4' : 'translate-x-0.5'
+                                    }`} />
+                                  </button>
+                                </td>
+
+                                {/* Delegation */}
+                                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                                  {g.mulaqat ? (
+                                    <select
+                                      value={getDelegationCountry(g.delegationId) ?? g.country}
+                                      onChange={e => changeDelegationCountry(g, e.target.value)}
+                                      className="text-xs border border-blue-200 rounded-md px-2 py-1 bg-blue-50 text-blue-700 focus:border-blue-400 focus:ring-1 focus:ring-blue-300 min-w-[140px]"
+                                    >
+                                      {ALL_COUNTRIES.map(c => (
+                                        <option key={c.code} value={c.name}>{c.name}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <span className="text-gray-300 text-xs">—</span>
+                                  )}
+                                </td>
                               </tr>
 
                               {/* ── Family member drawer (read-only + dept assignment) ── */}
                               {isFamily && isExpanded && (
                                 <tr>
-                                  <td colSpan={7} className="p-0 bg-[#F9F8F6] border-b border-[#E8E3DB]">
+                                  <td colSpan={9} className="p-0 bg-[#F9F8F6] border-b border-[#E8E3DB]">
                                     <div className="px-6 py-4 space-y-2">
                                       <p className="text-[10px] font-semibold text-[#4A4A4A] uppercase tracking-widest mb-3">
                                         Family Members · {drawerMembers.length} total
