@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useState, useEffect, type ReactNode } from 'react';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { useAuditTrail } from '@/hooks/useAuditTrail';
@@ -8,7 +9,7 @@ import type { Block, BedAssignment, Room } from '@/types';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface RoomGroup {
-  block: Block | null; // null = rooms not in a block
+  block: Block | null;
   rooms: Room[];
 }
 
@@ -28,15 +29,15 @@ export interface LocationOccupancy {
 interface RoomsContextValue {
   blocks: Block[];
   rooms: Room[];
-  bedAssignments: Record<string, BedAssignment[]>; // roomId → beds
+  bedAssignments: Record<string, BedAssignment[]>;
   // Blocks
-  addBlock: (locationId: string, name: string) => Block;
+  addBlock: (locationId: string, name: string) => Promise<Block | null>;
   updateBlock: (blockId: string, name: string) => void;
-  deleteBlock: (blockId: string) => void;
+  deleteBlock: (blockId: string) => Promise<void>;
   // Rooms
-  addRoom: (locationId: string, name: string, capacity: number, blockId?: string) => Room;
+  addRoom: (locationId: string, name: string, capacity: number, blockId?: string) => Promise<Room | null>;
   updateRoom: (roomId: string, name: string, capacity: number) => void;
-  deleteRoom: (roomId: string) => void;
+  deleteRoom: (roomId: string) => Promise<void>;
   // Beds
   assignGuestToRoom: (roomId: string, bedNumber: number, guestId: string, guestName: string, familyMemberId?: string) => void;
   removeGuestFromRoom: (roomId: string, bedNumber: number) => void;
@@ -46,47 +47,34 @@ interface RoomsContextValue {
   getLocationOccupancy: (locationId: string) => LocationOccupancy;
 }
 
-// ── Seed data ─────────────────────────────────────────────────────────────────
+// ── Row mappers ────────────────────────────────────────────────────────────────
 
-const SEED_BLOCKS: Block[] = [
-  { id: 'blk-1', name: 'Block A', locationId: 'Jamia',  isActive: true },
-  { id: 'blk-2', name: 'Block B', locationId: 'Jamia',  isActive: true },
-];
-
-const SEED_ROOMS: Room[] = [
-  // Jamia — Block A
-  { id: 'rm-A101', name: 'A-101', locationId: 'Jamia',  blockId: 'blk-1', capacity: 4, isActive: true },
-  { id: 'rm-A102', name: 'A-102', locationId: 'Jamia',  blockId: 'blk-1', capacity: 2, isActive: true },
-  { id: 'rm-A103', name: 'A-103', locationId: 'Jamia',  blockId: 'blk-1', capacity: 3, isActive: true },
-  // Jamia — Block B
-  { id: 'rm-B201', name: 'B-201', locationId: 'Jamia',  blockId: 'blk-2', capacity: 6, isActive: true },
-  { id: 'rm-B202', name: 'B-202', locationId: 'Jamia',  blockId: 'blk-2', capacity: 4, isActive: true },
-  // Jamia — no block
-  { id: 'rm-VIP1', name: 'VIP-1', locationId: 'Jamia',  capacity: 2, isActive: true },
-  // Hotels — no block
-  { id: 'rm-H101', name: 'H-101', locationId: 'Hotels', capacity: 2, isActive: true },
-  { id: 'rm-H102', name: 'H-102', locationId: 'Hotels', capacity: 2, isActive: true },
-];
-
-// Beds are fully initialised from seed capacity; occupied beds are pre-filled
-function buildSeedBeds(): Record<string, BedAssignment[]> {
-  const map: Record<string, BedAssignment[]> = {};
-  for (const room of SEED_ROOMS) {
-    map[room.id] = Array.from({ length: room.capacity }, (_, i) => ({
-      bedNumber: i + 1,
-    }));
-  }
-  // A-101, Bed 1 → Ahmed Khan (demo placeholder, no real guestId)
-  map['rm-A101'][0] = { bedNumber: 1, guestId: '', guestName: 'Ahmed Khan', assignedAt: '2024-01-15T10:00:00' };
-  // H-101, Bed 1 → Hans Schmidt (guest '2')
-  map['rm-H101'][0] = { bedNumber: 1, guestId: '2', guestName: 'Hans Schmidt', assignedAt: '2024-01-15T13:00:00' };
-  // H-101, Bed 2 → Helga Schmidt (guest '2', family member 'f1')
-  map['rm-H101'][1] = { bedNumber: 2, guestId: '2', guestName: 'Helga Schmidt', familyMemberId: 'f1', assignedAt: '2024-01-15T13:00:00' };
-  return map;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToBlock(row: any): Block {
+  return {
+    id: row.id,
+    name: row.name,
+    locationId: row.location_id,
+    isActive: row.is_active ?? true,
+  };
 }
 
-let nextBlockId = 100;
-let nextRoomId  = 200;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToRoom(row: any): Room {
+  return {
+    id: row.id,
+    name: row.name,
+    locationId: row.location_id,
+    blockId: row.block_id ?? undefined,
+    capacity: row.capacity,
+    isActive: row.is_active ?? true,
+  };
+}
+
+/** Build the full bed-slot array for a room (empty + occupied). */
+function buildBedSlots(capacity: number): BedAssignment[] {
+  return Array.from({ length: capacity }, (_, i) => ({ bedNumber: i + 1 }));
+}
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
@@ -97,65 +85,151 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
   const { guests, updateGuest } = useGuests();
   const { addEntry } = useAuditTrail();
 
-  const [blocks, setBlocks]         = useState<Block[]>(SEED_BLOCKS);
-  const [rooms, setRooms]           = useState<Room[]>(SEED_ROOMS);
-  const [bedAssignments, setBedAssignments] = useState<Record<string, BedAssignment[]>>(buildSeedBeds);
+  const [blocks, setBlocks] = useState<Block[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [bedAssignments, setBedAssignments] = useState<Record<string, BedAssignment[]>>({});
 
-  // ── Block CRUD ──────────────────────────────────────────────────────────────
+  // ── Initial fetch ────────────────────────────────────────────────────────────
 
-  const addBlock = useCallback((locationId: string, name: string): Block => {
-    const block: Block = { id: `blk-${nextBlockId++}`, name: name.trim(), locationId, isActive: true };
+  useEffect(() => {
+    // Fetch blocks
+    supabase
+      .from('blocks')
+      .select('*')
+      .order('name')
+      .then(({ data }) => { if (data) setBlocks(data.map(rowToBlock)); });
+
+    // Fetch rooms then build bed slots
+    supabase
+      .from('rooms')
+      .select('*')
+      .order('name')
+      .then(async ({ data: roomData }) => {
+        if (!roomData) return;
+        const loadedRooms = roomData.map(rowToRoom);
+        setRooms(loadedRooms);
+
+        // Build initial empty bed map from room capacities
+        const bedMap: Record<string, BedAssignment[]> = {};
+        for (const r of loadedRooms) {
+          bedMap[r.id] = buildBedSlots(r.capacity);
+        }
+
+        // Overlay actual assignments from DB
+        const { data: assignments } = await supabase
+          .from('bed_assignments')
+          .select('*')
+          .order('bed_number');
+
+        if (assignments) {
+          for (const a of assignments) {
+            const slots = bedMap[a.room_id];
+            if (!slots) continue;
+            const idx = slots.findIndex(b => b.bedNumber === a.bed_number);
+            if (idx !== -1) {
+              slots[idx] = {
+                bedNumber: a.bed_number,
+                guestId: a.guest_id ?? undefined,
+                guestName: a.guest_name ?? undefined,
+                familyMemberId: a.family_member_id ?? undefined,
+                assignedAt: a.assigned_at ?? undefined,
+              };
+            }
+          }
+        }
+        setBedAssignments(bedMap);
+      });
+  }, []);
+
+  // ── Block CRUD ───────────────────────────────────────────────────────────────
+
+  const addBlock = useCallback(async (locationId: string, name: string): Promise<Block | null> => {
+    const { data, error } = await supabase
+      .from('blocks')
+      .insert({ name: name.trim(), location_id: locationId, is_active: true })
+      .select()
+      .single();
+
+    if (error) { toast.error('Failed to add block'); return null; }
+    const block = rowToBlock(data);
     setBlocks(prev => [...prev, block]);
+    toast.success('Block added');
     return block;
   }, []);
 
   const updateBlock = useCallback((blockId: string, name: string) => {
+    supabase
+      .from('blocks')
+      .update({ name: name.trim(), updated_at: new Date().toISOString() })
+      .eq('id', blockId)
+      .then(({ error }) => { if (error) toast.error('Failed to update block'); });
     setBlocks(prev => prev.map(b => b.id === blockId ? { ...b, name: name.trim() } : b));
   }, []);
 
-  const deleteBlock = useCallback((blockId: string) => {
+  const deleteBlock = useCallback(async (blockId: string) => {
     const hasRooms = rooms.some(r => r.blockId === blockId);
     if (hasRooms) {
       toast.error('Cannot delete block — it still has rooms. Remove rooms first.');
       return;
     }
+    const { error } = await supabase.from('blocks').delete().eq('id', blockId);
+    if (error) { toast.error('Failed to delete block'); return; }
     setBlocks(prev => prev.filter(b => b.id !== blockId));
   }, [rooms]);
 
-  // ── Room CRUD ───────────────────────────────────────────────────────────────
+  // ── Room CRUD ────────────────────────────────────────────────────────────────
 
-  const addRoom = useCallback((locationId: string, name: string, capacity: number, blockId?: string): Room => {
-    const room: Room = { id: `rm-${nextRoomId++}`, name: name.trim(), locationId, blockId, capacity, isActive: true };
+  const addRoom = useCallback(async (
+    locationId: string, name: string, capacity: number, blockId?: string,
+  ): Promise<Room | null> => {
+    const { data, error } = await supabase
+      .from('rooms')
+      .insert({
+        name: name.trim(),
+        location_id: locationId,
+        block_id: blockId ?? null,
+        capacity,
+        is_active: true,
+      })
+      .select()
+      .single();
+
+    if (error) { toast.error('Failed to add room'); return null; }
+    const room = rowToRoom(data);
     setRooms(prev => [...prev, room]);
     setBedAssignments(prev => ({
       ...prev,
-      [room.id]: Array.from({ length: capacity }, (_, i) => ({ bedNumber: i + 1 })),
+      [room.id]: buildBedSlots(capacity),
     }));
+    toast.success('Room added');
     return room;
   }, []);
 
   const updateRoom = useCallback((roomId: string, name: string, capacity: number) => {
-    setRooms(prev => prev.map(r => {
-      if (r.id !== roomId) return r;
-      return { ...r, name: name.trim(), capacity };
-    }));
-    // Adjust bed array length while preserving existing assignments
+    supabase
+      .from('rooms')
+      .update({ name: name.trim(), capacity, updated_at: new Date().toISOString() })
+      .eq('id', roomId)
+      .then(({ error }) => { if (error) toast.error('Failed to update room'); });
+
+    setRooms(prev => prev.map(r => r.id !== roomId ? r : { ...r, name: name.trim(), capacity }));
     setBedAssignments(prev => {
       const existing = prev[roomId] ?? [];
-      const newBeds: BedAssignment[] = Array.from({ length: capacity }, (_, i) => {
-        return existing[i] ?? { bedNumber: i + 1 };
-      });
+      const newBeds: BedAssignment[] = Array.from({ length: capacity }, (_, i) =>
+        existing[i] ?? { bedNumber: i + 1 }
+      );
       return { ...prev, [roomId]: newBeds };
     });
   }, []);
 
-  const deleteRoom = useCallback((roomId: string) => {
+  const deleteRoom = useCallback(async (roomId: string) => {
     const beds = bedAssignments[roomId] ?? [];
-    const hasGuests = beds.some(b => !!b.guestName);
-    if (hasGuests) {
+    if (beds.some(b => !!b.guestName)) {
       toast.error('Cannot delete room — guests are assigned. Remove them first.');
       return;
     }
+    const { error } = await supabase.from('rooms').delete().eq('id', roomId);
+    if (error) { toast.error('Failed to delete room'); return; }
     setRooms(prev => prev.filter(r => r.id !== roomId));
     setBedAssignments(prev => {
       const next = { ...prev };
@@ -164,7 +238,7 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
     });
   }, [bedAssignments]);
 
-  // ── Bed assignment ──────────────────────────────────────────────────────────
+  // ── Bed assignment ───────────────────────────────────────────────────────────
 
   const assignGuestToRoom = useCallback((
     roomId: string,
@@ -175,6 +249,7 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
   ) => {
     const now = new Date().toISOString();
 
+    // Optimistic local update
     setBedAssignments(prev => {
       const beds = (prev[roomId] ?? []).map(b =>
         b.bedNumber === bedNumber
@@ -184,14 +259,26 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
       return { ...prev, [roomId]: beds };
     });
 
-    // Update guest status to Accommodated
+    // Persist bed assignment
+    supabase
+      .from('bed_assignments')
+      .insert({
+        room_id: roomId,
+        bed_number: bedNumber,
+        guest_id: guestId || null,
+        guest_name: guestName,
+        family_member_id: familyMemberId ?? null,
+        assigned_at: now,
+      })
+      .then(({ error }) => { if (error) console.error('bed_assignment insert:', error); });
+
+    // Update guest status + audit trail
     if (guestId) {
       const guest = guests.find(g => g.id === guestId);
       if (guest) {
         if (!familyMemberId) {
           updateGuest(guestId, { status: 'Accommodated' });
         }
-        // Create audit entry
         const room = rooms.find(r => r.id === roomId);
         addEntry({
           guestId,
@@ -216,47 +303,47 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
   const removeGuestFromRoom = useCallback((roomId: string, bedNumber: number) => {
     setBedAssignments(prev => {
       const beds = (prev[roomId] ?? []).map(b =>
-        b.bedNumber === bedNumber
-          ? { bedNumber: b.bedNumber }
-          : b,
+        b.bedNumber === bedNumber ? { bedNumber: b.bedNumber } : b,
       );
       return { ...prev, [roomId]: beds };
     });
+
+    supabase
+      .from('bed_assignments')
+      .delete()
+      .eq('room_id', roomId)
+      .eq('bed_number', bedNumber)
+      .then(({ error }) => { if (error) console.error('bed_assignment delete:', error); });
   }, []);
 
-  // ── Queries ─────────────────────────────────────────────────────────────────
+  // ── Queries ──────────────────────────────────────────────────────────────────
 
   const getRoomsByLocation = useCallback((locationId: string): RoomGroup[] => {
-    const locRooms = rooms.filter(r => r.locationId === locationId && r.isActive);
+    const locRooms  = rooms.filter(r => r.locationId === locationId && r.isActive);
     const locBlocks = blocks.filter(b => b.locationId === locationId && b.isActive);
 
     const groups: RoomGroup[] = locBlocks.map(block => ({
       block,
       rooms: locRooms.filter(r => r.blockId === block.id),
     }));
-
     const unblocked = locRooms.filter(r => !r.blockId);
-    if (unblocked.length > 0) {
-      groups.push({ block: null, rooms: unblocked });
-    }
-
+    if (unblocked.length > 0) groups.push({ block: null, rooms: unblocked });
     return groups;
   }, [blocks, rooms]);
 
   const getOccupancy = useCallback((roomId: string): OccupancyInfo => {
     const beds = bedAssignments[roomId] ?? [];
-    const total = beds.length;
+    const total    = beds.length;
     const occupied = beds.filter(b => !!b.guestName).length;
     return { total, occupied, available: total - occupied };
   }, [bedAssignments]);
 
   const getLocationOccupancy = useCallback((locationId: string): LocationOccupancy => {
     const locRooms = rooms.filter(r => r.locationId === locationId && r.isActive);
-    let totalBeds = 0;
-    let occupiedBeds = 0;
+    let totalBeds = 0, occupiedBeds = 0;
     for (const room of locRooms) {
       const beds = bedAssignments[room.id] ?? [];
-      totalBeds += beds.length;
+      totalBeds    += beds.length;
       occupiedBeds += beds.filter(b => !!b.guestName).length;
     }
     return {
@@ -267,26 +354,17 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
     };
   }, [rooms, bedAssignments]);
 
-  // ── Context value ────────────────────────────────────────────────────────────
-
-  const value: RoomsContextValue = {
-    blocks,
-    rooms,
-    bedAssignments,
-    addBlock,
-    updateBlock,
-    deleteBlock,
-    addRoom,
-    updateRoom,
-    deleteRoom,
-    assignGuestToRoom,
-    removeGuestFromRoom,
-    getRoomsByLocation,
-    getOccupancy,
-    getLocationOccupancy,
-  };
-
-  return <RoomsContext.Provider value={value}>{children}</RoomsContext.Provider>;
+  return (
+    <RoomsContext.Provider value={{
+      blocks, rooms, bedAssignments,
+      addBlock, updateBlock, deleteBlock,
+      addRoom, updateRoom, deleteRoom,
+      assignGuestToRoom, removeGuestFromRoom,
+      getRoomsByLocation, getOccupancy, getLocationOccupancy,
+    }}>
+      {children}
+    </RoomsContext.Provider>
+  );
 }
 
 export function useRooms() {

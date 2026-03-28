@@ -1,4 +1,6 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useState, useEffect, type ReactNode } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/hooks/useAuth';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -32,16 +34,45 @@ export interface AuditEntry2 {
   readBy: string[];
 }
 
+// ── Row mapper ─────────────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToEntry(row: any): AuditEntry2 {
+  return {
+    id: row.id,
+    guestId: row.guest_id,
+    guestName: row.guest_name,
+    guestReference: row.guest_reference,
+    locationId: row.location_id ?? '',
+    locationName: row.location_name ?? '',
+    departmentId: row.department_id ?? '',
+    departmentName: row.department_name ?? '',
+    type: row.type as AuditEntry2Type,
+    action: row.action,
+    comment: row.comment ?? undefined,
+    oldValue: row.old_value ?? undefined,
+    newValue: row.new_value ?? undefined,
+    createdBy: {
+      id: row.created_by_id,
+      name: row.created_by_name,
+      role: row.created_by_role,
+    },
+    createdAt: row.created_at,
+    readBy: (row.read_by as string[]) ?? [],
+  };
+}
+
+// ── Context ────────────────────────────────────────────────────────────────────
+
 interface AuditTrail2ContextValue {
   entries: AuditEntry2[];
-  addEntry: (entry: Omit<AuditEntry2, 'id' | 'readBy'>) => AuditEntry2;
+  addEntry: (entry: Omit<AuditEntry2, 'id' | 'readBy'>) => void;
   addComment: (opts: {
     guestId: string; guestName: string; guestReference: string;
     locationId: string; locationName: string;
     departmentId: string; departmentName: string;
     comment: string;
     createdBy: AuditEntry2['createdBy'];
-  }) => AuditEntry2;
+  }) => void;
   getEntriesByLocation: (locationId: string) => AuditEntry2[];
   getEntriesByDepartment: (departmentId: string) => AuditEntry2[];
   getEntriesByGuest: (guestId: string) => AuditEntry2[];
@@ -49,142 +80,64 @@ interface AuditTrail2ContextValue {
   markGuestEntriesAsRead: (guestId: string, userId: string) => void;
 }
 
-// ── Sample data ────────────────────────────────────────────────────────────────
-
-const SAMPLE: AuditEntry2[] = [
-  {
-    id: 'at2-1',
-    guestId: '1',
-    guestName: 'Klaus Mueller',
-    guestReference: 'MEH-2024-000001',
-    locationId: 'Jamia',
-    locationName: 'Jamia',
-    departmentId: 'Reserve 1 (R1)',
-    departmentName: 'Reserve 1 (R1)',
-    type: 'guest_placed',
-    action: 'Guest placed at Jamia',
-    newValue: 'Jamia',
-    createdBy: { id: 'dh-001', name: 'R1 In-Charge', role: 'department-head' },
-    createdAt: '2024-01-13T09:00:00',
-    readBy: ['dh-001'],
-  },
-  {
-    id: 'at2-2',
-    guestId: '1',
-    guestName: 'Klaus Mueller',
-    guestReference: 'MEH-2024-000001',
-    locationId: 'Jamia',
-    locationName: 'Jamia',
-    departmentId: 'Reserve 1 (R1)',
-    departmentName: 'Reserve 1 (R1)',
-    type: 'comment',
-    action: 'Comment by R1 In-Charge',
-    comment: 'Please assign to Block A if possible.',
-    createdBy: { id: 'dh-001', name: 'R1 In-Charge', role: 'department-head' },
-    createdAt: '2024-01-13T09:10:00',
-    readBy: ['dh-001'],
-  },
-  {
-    id: 'at2-3',
-    guestId: '1',
-    guestName: 'Klaus Mueller',
-    guestReference: 'MEH-2024-000001',
-    locationId: 'Jamia',
-    locationName: 'Jamia',
-    departmentId: 'Reserve 1 (R1)',
-    departmentName: 'Reserve 1 (R1)',
-    type: 'room_assignment',
-    action: 'Assigned to Room A-101, Bed 1',
-    newValue: 'A-101 / Bed 1',
-    createdBy: { id: 'lm-001', name: 'Jamia Manager', role: 'location-manager' },
-    createdAt: '2024-01-14T10:00:00',
-    readBy: ['lm-001'],
-  },
-  {
-    id: 'at2-4',
-    guestId: '1',
-    guestName: 'Klaus Mueller',
-    guestReference: 'MEH-2024-000001',
-    locationId: 'Jamia',
-    locationName: 'Jamia',
-    departmentId: 'Reserve 1 (R1)',
-    departmentName: 'Reserve 1 (R1)',
-    type: 'comment',
-    action: 'Comment by Jamia Manager',
-    comment: 'Noted, Block A it is. Room A-101 confirmed.',
-    createdBy: { id: 'lm-001', name: 'Jamia Manager', role: 'location-manager' },
-    createdAt: '2024-01-14T10:15:00',
-    readBy: ['lm-001'],
-  },
-  {
-    id: 'at2-5',
-    guestId: '1',
-    guestName: 'Klaus Mueller',
-    guestReference: 'MEH-2024-000001',
-    locationId: 'Jamia',
-    locationName: 'Jamia',
-    departmentId: 'Reserve 1 (R1)',
-    departmentName: 'Reserve 1 (R1)',
-    type: 'status_change',
-    action: 'Guest accommodated',
-    newValue: 'Accommodated',
-    createdBy: { id: 'lm-001', name: 'Jamia Manager', role: 'location-manager' },
-    createdAt: '2024-01-14T10:30:00',
-    readBy: ['lm-001'],
-  },
-];
-
-// Also add a Hotels entry for Hans Schmidt (guest '2')
-const HOTELS_SAMPLE: AuditEntry2[] = [
-  {
-    id: 'at2-6',
-    guestId: '2',
-    guestName: 'Hans Schmidt',
-    guestReference: 'MEH-2024-000002',
-    locationId: 'Hotels',
-    locationName: 'Hotels',
-    departmentId: 'Reserve 1 (R1)',
-    departmentName: 'Reserve 1 (R1)',
-    type: 'guest_placed',
-    action: 'Guest placed at Hotels',
-    newValue: 'Hotels',
-    createdBy: { id: 'dh-001', name: 'R1 In-Charge', role: 'department-head' },
-    createdAt: '2024-01-15T10:00:00',
-    readBy: ['dh-001', 'lm-001'],
-  },
-  {
-    id: 'at2-7',
-    guestId: '2',
-    guestName: 'Hans Schmidt',
-    guestReference: 'MEH-2024-000002',
-    locationId: 'Hotels',
-    locationName: 'Hotels',
-    departmentId: 'Reserve 1 (R1)',
-    departmentName: 'Reserve 1 (R1)',
-    type: 'room_assignment',
-    action: 'Assigned to Room H-101, Bed 1',
-    newValue: 'H-101 / Bed 1',
-    createdBy: { id: 'lm-001', name: 'Jamia Manager', role: 'location-manager' },
-    createdAt: '2024-01-15T13:00:00',
-    readBy: ['dh-001', 'lm-001'],
-  },
-];
-
-const INITIAL_ENTRIES: AuditEntry2[] = [...SAMPLE, ...HOTELS_SAMPLE];
-
-let nextId = 100;
-
-// ── Context ────────────────────────────────────────────────────────────────────
-
 const AuditTrail2Context = createContext<AuditTrail2ContextValue | null>(null);
 
 export function AuditTrail2Provider({ children }: { children: ReactNode }) {
-  const [entries, setEntries] = useState<AuditEntry2[]>(INITIAL_ENTRIES);
+  const { user } = useAuth();
+  const [entries, setEntries] = useState<AuditEntry2[]>([]);
 
-  const addEntry = useCallback((entry: Omit<AuditEntry2, 'id' | 'readBy'>): AuditEntry2 => {
-    const newEntry: AuditEntry2 = { ...entry, id: `at2-${nextId++}`, readBy: [entry.createdBy.id] };
-    setEntries(prev => [newEntry, ...prev]);
-    return newEntry;
+  // Fetch all entries on mount / login
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from('audit_trail_2')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (data) setEntries(data.map(rowToEntry));
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  const addEntry = useCallback((entry: Omit<AuditEntry2, 'id' | 'readBy'>) => {
+    const optimisticId = `at2-opt-${Date.now()}-${Math.random()}`;
+    const optimistic: AuditEntry2 = {
+      ...entry,
+      id: optimisticId,
+      readBy: [entry.createdBy.id],
+    };
+    setEntries(prev => [optimistic, ...prev]);
+
+    supabase
+      .from('audit_trail_2')
+      .insert({
+        guest_id: entry.guestId,
+        guest_name: entry.guestName,
+        guest_reference: entry.guestReference,
+        location_id: entry.locationId || null,
+        location_name: entry.locationName || null,
+        department_id: entry.departmentId || null,
+        department_name: entry.departmentName || null,
+        type: entry.type,
+        action: entry.action,
+        comment: entry.comment ?? null,
+        old_value: entry.oldValue ?? null,
+        new_value: entry.newValue ?? null,
+        created_by_id: entry.createdBy.id,
+        created_by_name: entry.createdBy.name,
+        created_by_role: entry.createdBy.role,
+        read_by: [entry.createdBy.id],
+        created_at: entry.createdAt,
+      })
+      .select()
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setEntries(prev =>
+            prev.map(e => (e.id === optimisticId ? rowToEntry(data) : e))
+          );
+        }
+      });
   }, []);
 
   const addComment = useCallback((opts: {
@@ -193,11 +146,12 @@ export function AuditTrail2Provider({ children }: { children: ReactNode }) {
     departmentId: string; departmentName: string;
     comment: string;
     createdBy: AuditEntry2['createdBy'];
-  }): AuditEntry2 => {
-    return addEntry({
+  }) => {
+    addEntry({
       ...opts,
       type: 'comment',
       action: `Comment by ${opts.createdBy.name}`,
+      createdAt: new Date().toISOString(),
     });
   }, [addEntry]);
 
@@ -217,19 +171,33 @@ export function AuditTrail2Provider({ children }: { children: ReactNode }) {
   );
 
   const markAsRead = useCallback((entryId: string, userId: string) => {
-    setEntries(prev => prev.map(e =>
-      e.id === entryId && !e.readBy.includes(userId)
-        ? { ...e, readBy: [...e.readBy, userId] }
-        : e,
-    ));
+    setEntries(prev =>
+      prev.map(e => {
+        if (e.id !== entryId || e.readBy.includes(userId)) return e;
+        const updated = { ...e, readBy: [...e.readBy, userId] };
+        supabase
+          .from('audit_trail_2')
+          .update({ read_by: updated.readBy })
+          .eq('id', entryId)
+          .then(() => {});
+        return updated;
+      })
+    );
   }, []);
 
   const markGuestEntriesAsRead = useCallback((guestId: string, userId: string) => {
-    setEntries(prev => prev.map(e =>
-      e.guestId === guestId && !e.readBy.includes(userId)
-        ? { ...e, readBy: [...e.readBy, userId] }
-        : e,
-    ));
+    setEntries(prev =>
+      prev.map(e => {
+        if (e.guestId !== guestId || e.readBy.includes(userId)) return e;
+        const updated = { ...e, readBy: [...e.readBy, userId] };
+        supabase
+          .from('audit_trail_2')
+          .update({ read_by: updated.readBy })
+          .eq('id', e.id)
+          .then(() => {});
+        return updated;
+      })
+    );
   }, []);
 
   return (

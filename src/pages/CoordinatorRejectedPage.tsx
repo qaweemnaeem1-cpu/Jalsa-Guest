@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
+import { useAuditTrail } from '@/hooks/useAuditTrail';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -25,6 +26,7 @@ export default function CoordinatorRejectedPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { guests, updateGuest } = useGuests();
+  const { addEntry } = useAuditTrail();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
@@ -47,6 +49,16 @@ export default function CoordinatorRejectedPage() {
       appealStatus: 'pending',
       appealReason: appealText.trim(),
       appealedAt: new Date().toISOString(),
+    });
+    addEntry({
+      guestId: appealGuest.id,
+      guestName: appealGuest.fullName,
+      guestReference: appealGuest.referenceNumber,
+      type: 'appeal',
+      action: 'Appeal submitted to Super Admin',
+      comment: appealText.trim(),
+      createdBy: { id: user.id, name: user.name, role: 'coordinator' },
+      createdAt: new Date().toISOString(),
     });
     setAppealGuestId(null);
     setAppealText('');

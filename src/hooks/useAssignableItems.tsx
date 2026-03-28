@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import { ALL_COUNTRIES, CONTINENT_ORDER } from '@/data/countries';
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { supabase } from '@/lib/supabase';
+import { CONTINENT_ORDER } from '@/data/countries';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -7,8 +8,8 @@ export interface AssignableItem {
   id: string;
   name: string;
   type: 'country' | 'department';
-  continent?: string;   // present for countries
-  description?: string; // present for departments
+  continent?: string;
+  description?: string;
   isActive: boolean;
 }
 
@@ -19,33 +20,26 @@ function stripHtml(raw: string): string {
   return raw.replace(/<[^>]*>/g, '').trim();
 }
 
-// ── Seed data ─────────────────────────────────────────────────────────────────
+// ── Static departments (not yet in a DB table) ─────────────────────────────────
 
-const INITIAL_DEPARTMENTS: AssignableItem[] = [
-  { id: 'dept-001', name: 'MTA Africa',      type: 'department', description: 'Muslim Television Ahmadiyya - Africa',                                       isActive: true },
-  { id: 'dept-002', name: 'MTA Europe',      type: 'department', description: 'Muslim Television Ahmadiyya - Europe',                                       isActive: true },
-  { id: 'dept-003', name: 'MTA Asia',        type: 'department', description: 'Muslim Television Ahmadiyya - Asia',                                         isActive: true },
-  { id: 'dept-004', name: 'Humanity First',  type: 'department', description: 'International humanitarian relief organization',                              isActive: true },
-  { id: 'dept-005', name: 'IAAAE',           type: 'department', description: 'International Association of Ahmadi Architects and Engineers',                isActive: true },
+const STATIC_DEPARTMENTS: AssignableItem[] = [
+  { id: 'dept-001', name: 'MTA Africa',      type: 'department', description: 'Muslim Television Ahmadiyya - Africa',                  isActive: true },
+  { id: 'dept-002', name: 'MTA Europe',      type: 'department', description: 'Muslim Television Ahmadiyya - Europe',                  isActive: true },
+  { id: 'dept-003', name: 'MTA Asia',        type: 'department', description: 'Muslim Television Ahmadiyya - Asia',                    isActive: true },
+  { id: 'dept-004', name: 'Humanity First',  type: 'department', description: 'International humanitarian relief organization',         isActive: true },
+  { id: 'dept-005', name: 'IAAAE',           type: 'department', description: 'International Association of Ahmadi Architects and Engineers', isActive: true },
 ];
 
-// De-duplicate ALL_COUNTRIES by name (Tanzania appears twice)
-const _seen = new Set<string>();
-const INITIAL_COUNTRIES: AssignableItem[] = ALL_COUNTRIES
-  .filter(c => {
-    if (_seen.has(c.name)) return false;
-    _seen.add(c.name);
-    return true;
-  })
-  .map((c, i) => ({
-    id: `country-${i}-${c.code}`,
-    name: c.name,
-    type: 'country' as const,
-    continent: c.continent,
-    isActive: true,
-  }));
-
-const INITIAL_ITEMS: AssignableItem[] = [...INITIAL_COUNTRIES, ...INITIAL_DEPARTMENTS];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToCountry(row: any): AssignableItem {
+  return {
+    id: row.id,
+    name: row.name,
+    type: 'country',
+    continent: row.continent ?? undefined,
+    isActive: row.is_active ?? true,
+  };
+}
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
@@ -53,55 +47,113 @@ interface AssignableItemsContextType {
   items: AssignableItem[];
   countries: AssignableItem[];
   departments: AssignableItem[];
-  addItem: (name: string, type: 'country' | 'department', description?: string) => AssignableItem;
-  updateItem: (id: string, updates: Partial<Omit<AssignableItem, 'id'>>) => void;
-  deleteItem: (id: string) => void;
-  toggleItemStatus: (id: string) => void;
+  addItem: (name: string, type: 'country' | 'department', description?: string) => Promise<AssignableItem | null>;
+  updateItem: (id: string, updates: Partial<Omit<AssignableItem, 'id'>>) => Promise<void>;
+  deleteItem: (id: string) => Promise<void>;
+  toggleItemStatus: (id: string) => Promise<void>;
 }
 
 const AssignableItemsContext = createContext<AssignableItemsContextType | undefined>(undefined);
 
 export function AssignableItemsProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<AssignableItem[]>(INITIAL_ITEMS);
+  const [countryItems, setCountryItems] = useState<AssignableItem[]>([]);
+  const [deptItems, setDeptItems] = useState<AssignableItem[]>(STATIC_DEPARTMENTS);
 
-  const countries = items.filter(i => i.type === 'country');
-  const departments = items.filter(i => i.type === 'department');
+  // Fetch countries from Supabase on mount
+  useEffect(() => {
+    supabase
+      .from('countries')
+      .select('*')
+      .order('name')
+      .then(({ data, error }) => {
+        if (error) { console.error('useAssignableItems countries fetch:', error); return; }
+        if (data) setCountryItems(data.map(rowToCountry));
+      });
+  }, []);
 
-  const addItem = useCallback(
-    (name: string, type: 'country' | 'department', description?: string): AssignableItem => {
-      const safeName = stripHtml(name).slice(0, 100);
-      const safeDesc = description ? stripHtml(description).slice(0, 500) : undefined;
-      const newItem: AssignableItem = {
-        id: `item-${Date.now()}`,
-        name: safeName,
-        type,
-        description: safeDesc,
-        isActive: true,
-      };
-      setItems(prev => [...prev, newItem]);
+  const items = [...countryItems, ...deptItems];
+  const countries = countryItems;
+  const departments = deptItems;
+
+  const addItem = useCallback(async (
+    name: string, type: 'country' | 'department', description?: string,
+  ): Promise<AssignableItem | null> => {
+    const safeName = stripHtml(name).slice(0, 100);
+    const safeDesc = description ? stripHtml(description).slice(0, 500) : undefined;
+
+    if (type === 'country') {
+      const { data, error } = await supabase
+        .from('countries')
+        .insert({ name: safeName, is_active: true })
+        .select()
+        .single();
+
+      if (error) { return null; }
+      const newItem = rowToCountry(data);
+      setCountryItems(prev => [...prev, newItem]);
       return newItem;
-    },
-    []
-  );
+    }
 
-  const updateItem = useCallback(
-    (id: string, updates: Partial<Omit<AssignableItem, 'id'>>) => {
-      setItems(prev =>
-        prev.map(item => (item.id === id ? { ...item, ...updates } : item))
+    // Departments are local-only
+    const newItem: AssignableItem = {
+      id: `dept-${Date.now()}`,
+      name: safeName,
+      type,
+      description: safeDesc,
+      isActive: true,
+    };
+    setDeptItems(prev => [...prev, newItem]);
+    return newItem;
+  }, []);
+
+  const updateItem = useCallback(async (
+    id: string, updates: Partial<Omit<AssignableItem, 'id'>>,
+  ) => {
+    const isCountry = countryItems.some(c => c.id === id);
+
+    if (isCountry) {
+      await supabase
+        .from('countries')
+        .update({
+          ...(updates.name     !== undefined ? { name: updates.name }          : {}),
+          ...(updates.isActive !== undefined ? { is_active: updates.isActive } : {}),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+
+      setCountryItems(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+    } else {
+      setDeptItems(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
+    }
+  }, [countryItems]);
+
+  const deleteItem = useCallback(async (id: string) => {
+    const isCountry = countryItems.some(c => c.id === id);
+
+    if (isCountry) {
+      await supabase.from('countries').delete().eq('id', id);
+      setCountryItems(prev => prev.filter(c => c.id !== id));
+    } else {
+      setDeptItems(prev => prev.filter(d => d.id !== id));
+    }
+  }, [countryItems]);
+
+  const toggleItemStatus = useCallback(async (id: string) => {
+    const country = countryItems.find(c => c.id === id);
+    if (country) {
+      await supabase
+        .from('countries')
+        .update({ is_active: !country.isActive, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      setCountryItems(prev =>
+        prev.map(c => c.id === id ? { ...c, isActive: !c.isActive } : c)
       );
-    },
-    []
-  );
-
-  const deleteItem = useCallback((id: string) => {
-    setItems(prev => prev.filter(i => i.id !== id));
-  }, []);
-
-  const toggleItemStatus = useCallback((id: string) => {
-    setItems(prev =>
-      prev.map(item => (item.id === id ? { ...item, isActive: !item.isActive } : item))
-    );
-  }, []);
+    } else {
+      setDeptItems(prev =>
+        prev.map(d => d.id === id ? { ...d, isActive: !d.isActive } : d)
+      );
+    }
+  }, [countryItems]);
 
   return (
     <AssignableItemsContext.Provider

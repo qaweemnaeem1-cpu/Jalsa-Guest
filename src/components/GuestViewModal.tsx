@@ -329,6 +329,15 @@ export function GuestViewModal({
       resubmitCount: (guest.resubmitCount ?? 0) + 1,
       resubmittedAt: new Date().toISOString(),
     });
+    addEntry({
+      guestId: guest.id,
+      guestName: guest.fullName,
+      guestReference: guest.referenceNumber,
+      type: 'resubmission',
+      action: 'Guest re-submitted for review',
+      createdBy: { id: user.id, name: user.name, role: user.role as 'coordinator' | 'super-admin' | 'desk-in-charge' },
+      createdAt: new Date().toISOString(),
+    });
     toast.success(`${guest.fullName} re-submitted for review`);
     onClose();
   };

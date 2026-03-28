@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { useDesignations } from '@/hooks/useDesignations';
+import { useAuditTrail } from '@/hooks/useAuditTrail';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -158,6 +159,7 @@ export default function NewGuestPage() {
   const { user, logout } = useAuth();
   const { addGuest } = useGuests();
   const { activeDesignations } = useDesignations();
+  const { addEntry } = useAuditTrail();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -348,6 +350,15 @@ export default function NewGuestPage() {
       });
 
       if (!result) return; // addGuest already showed an error toast
+      addEntry({
+        guestId: result.id,
+        guestName: result.fullName,
+        guestReference: result.referenceNumber,
+        type: 'submission',
+        action: 'Guest registered and submitted for review',
+        createdBy: { id: user.id, name: user.name, role: user.role as 'coordinator' | 'super-admin' | 'desk-in-charge' },
+        createdAt: new Date().toISOString(),
+      });
       toast.success('Guest registered — awaiting review');
       navigate(user.role === 'coordinator' ? '/coordinator/pending' : '/guests');
     } catch (error) {
