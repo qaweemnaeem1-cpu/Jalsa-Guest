@@ -256,7 +256,7 @@ export default function GuestsPage() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [colsOpen, setColsOpen] = useState(false);
-  const [visibleCols, setVisibleCols] = useState({ dept: true, location: true, room: true });
+  const [visibleCols, setVisibleCols] = useState({ dept: true, passportCountry: false, location: false, room: false, submitted: false });
   const colsRef = useRef<HTMLDivElement>(null);
   // Super-admin filter chips
   const [adminFilter, setAdminFilter] = useState<'all' | 'pending' | 'submitted' | 'rejected'>('all');
@@ -608,8 +608,10 @@ export default function GuestsPage() {
                         <div className="absolute right-0 mt-1 bg-white rounded-lg shadow-lg border border-[#E8E3DB] p-3 z-50 min-w-[160px] space-y-2">
                           {([
                             ['dept', 'Department'],
+                            ['passportCountry', 'Passport Country'],
                             ['location', 'Location'],
                             ['room', 'Room'],
+                            ['submitted', 'Submitted'],
                           ] as [keyof typeof visibleCols, string][]).map(([key, label]) => (
                             <label key={key} className="flex items-center gap-2 cursor-pointer text-sm text-[#1A1A1A]">
                               <input
@@ -733,7 +735,9 @@ export default function GuestsPage() {
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Reference</th>
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Name</th>
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Country</th>
-                        <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Passport Country</th>
+                        {(user.role !== 'super-admin' || visibleCols.passportCountry) && (
+                          <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Passport Country</th>
+                        )}
                         {user.role === 'desk-in-charge' && (
                           <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Coordinator</th>
                         )}
@@ -749,7 +753,9 @@ export default function GuestsPage() {
                         {user.role === 'super-admin' && visibleCols.room && (
                           <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Room</th>
                         )}
-                        <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Submitted</th>
+                        {(user.role !== 'super-admin' || visibleCols.submitted) && (
+                          <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Submitted</th>
+                        )}
                         <th className="text-right px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Actions</th>
                       </tr>
                     </thead>
@@ -783,7 +789,9 @@ export default function GuestsPage() {
                               </div>
                             </td>
                             <td className="px-4 py-3">{guest.country}</td>
-                            <td className="px-4 py-3">{guest.passportCountry || '—'}</td>
+                            {(user.role !== 'super-admin' || visibleCols.passportCountry) && (
+                              <td className="px-4 py-3">{guest.passportCountry || '—'}</td>
+                            )}
                             {user.role === 'desk-in-charge' && (
                               <td className="px-4 py-3">{getCoordinatorName(guest.submittedBy)}</td>
                             )}
@@ -833,9 +841,11 @@ export default function GuestsPage() {
                                 ) : <span className="text-[#4A4A4A]/40">—</span>}
                               </td>
                             )}
-                            <td className="px-4 py-3 text-[#4A4A4A] whitespace-nowrap">{formatDate(guest.submittedAt)}</td>
+                            {(user.role !== 'super-admin' || visibleCols.submitted) && (
+                              <td className="px-4 py-3 text-[#4A4A4A] whitespace-nowrap">{formatDate(guest.submittedAt)}</td>
+                            )}
                             <td className="px-4 py-3">
-                              <div className="flex items-center justify-end gap-2">
+                              <div className="flex items-center justify-end gap-0.5">
                                 {/* Coordinator Actions */}
                                 {user.role === 'coordinator' && activeTab === 'waiting' && (
                                   <>
@@ -898,11 +908,11 @@ export default function GuestsPage() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-8 w-8 text-gray-500 hover:text-gray-700"
+                                  className="h-7 w-7 p-1 text-gray-500 hover:text-gray-700"
                                   title="View guest details"
                                   onClick={(e) => { e.stopPropagation(); setViewGuestId(guest.id); setViewGuestEditMode(false); }}
                                 >
-                                  <Eye className="w-4 h-4" />
+                                  <Eye className="w-3.5 h-3.5" />
                                 </Button>
 
                                 {/* Edit + Delete + status actions — super-admin only */}
@@ -911,44 +921,44 @@ export default function GuestsPage() {
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      className="h-8 w-8 text-green-600 hover:text-green-800 hover:bg-green-50"
+                                      className="h-7 w-7 p-1 text-green-600 hover:text-green-800 hover:bg-green-50"
                                       title="Edit guest"
                                       onClick={(e) => { e.stopPropagation(); setViewGuestId(guest.id); setViewGuestEditMode(true); }}
                                     >
-                                      <Pencil className="w-4 h-4" />
+                                      <Pencil className="w-3.5 h-3.5" />
                                     </Button>
                                     <Button
                                       variant="ghost"
                                       size="icon"
                                       title="Approve"
                                       disabled={guest.status === 'Approved' || guest.status === 'Accommodated'}
-                                      className="h-8 w-8 text-green-600 hover:text-green-800 hover:bg-green-50 disabled:opacity-30"
+                                      className="h-7 w-7 p-1 text-green-600 hover:text-green-800 hover:bg-green-50 disabled:opacity-30"
                                       onClick={(e) => { e.stopPropagation(); updateGuest(guest.id, { status: 'Approved' }); toast.success('Guest approved'); }}
                                     >
-                                      <CheckCircle className="w-4 h-4" />
+                                      <CheckCircle className="w-3.5 h-3.5" />
                                     </Button>
                                     <Button
                                       variant="ghost"
                                       size="icon"
                                       title="Needs Correction"
-                                      className="h-8 w-8 text-amber-500 hover:text-amber-700 hover:bg-amber-50"
+                                      className="h-7 w-7 p-1 text-amber-500 hover:text-amber-700 hover:bg-amber-50"
                                       onClick={(e) => { e.stopPropagation(); openRemarkDialog(guest.id, 'Needs Correction'); }}
                                     >
-                                      <AlertTriangle className="w-4 h-4" />
+                                      <AlertTriangle className="w-3.5 h-3.5" />
                                     </Button>
                                     <Button
                                       variant="ghost"
                                       size="icon"
                                       title="Reject"
-                                      className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                      className="h-7 w-7 p-1 text-red-500 hover:text-red-700 hover:bg-red-50"
                                       onClick={(e) => { e.stopPropagation(); openRemarkDialog(guest.id, 'Rejected'); }}
                                     >
-                                      <XCircle className="w-4 h-4" />
+                                      <XCircle className="w-3.5 h-3.5" />
                                     </Button>
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                      className="h-7 w-7 p-1 text-red-500 hover:text-red-700 hover:bg-red-50"
                                       title="Delete guest"
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -956,7 +966,7 @@ export default function GuestsPage() {
                                         setDeleteGuestId(guest.id);
                                       }}
                                     >
-                                      <Trash2 className="w-4 h-4" />
+                                      <Trash2 className="w-3.5 h-3.5" />
                                     </Button>
                                   </>
                                 )}
