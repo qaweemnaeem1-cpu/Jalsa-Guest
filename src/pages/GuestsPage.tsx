@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { useUsers } from '@/hooks/useUsers';
+import { useDepartments } from '@/hooks/useDepartments';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +17,13 @@ import {
   AlertDialogFooter,
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import {
   LayoutDashboard,
@@ -37,6 +45,7 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  AlertTriangle,
   Clock,
   ScrollText,
   ClipboardList,
@@ -86,6 +95,14 @@ const formatTimeAgo = (dateString: string) => {
   if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
   if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
   return date.toLocaleDateString();
+};
+
+// Format date as "24 Mar 2026"
+const formatDate = (dateString: string) => {
+  if (!dateString) return '—';
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return dateString;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
 // Get status badge styling
@@ -235,11 +252,19 @@ export default function GuestsPage() {
   const { guests, updateGuest, deleteGuest, addRemark, getMyWaitingGuests, getMySubmittedGuests, getNeedsCorrectionCount } = useGuests();
   const { users } = useUsers();
   const { rooms, bedAssignments } = useRooms();
+  const { deptList } = useDepartments();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [colsOpen, setColsOpen] = useState(false);
   const [visibleCols, setVisibleCols] = useState({ dept: true, location: true, room: true });
   const colsRef = useRef<HTMLDivElement>(null);
+  // Super-admin filter chips
+  const [adminFilter, setAdminFilter] = useState<'all' | 'pending' | 'submitted' | 'rejected'>('all');
+  // Super-admin remark/reject dialog
+  const [remarkDialog, setRemarkDialog] = useState<{
+    open: boolean; guestId: string; action: 'Needs Correction' | 'Rejected';
+  }>({ open: false, guestId: '', action: 'Rejected' });
+  const [remarkText, setRemarkText] = useState('');
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -306,6 +331,16 @@ export default function GuestsPage() {
         result = result.filter(g => di.assignedCountries!.includes(g.country));
       }
     }
+    // Apply super-admin status filter chips
+    if (user.role === 'super-admin' && adminFilter !== 'all') {
+      if (adminFilter === 'pending') {
+        result = result.filter(g => g.status === 'Awaiting Review' || g.status === 'Needs Correction');
+      } else if (adminFilter === 'submitted') {
+        result = result.filter(g => g.status === 'Approved' || g.status === 'Accommodated');
+      } else if (adminFilter === 'rejected') {
+        result = result.filter(g => g.status === 'Rejected');
+      }
+    }
     return result;
   };
 
@@ -363,6 +398,35 @@ export default function GuestsPage() {
     updateGuest(guestId, { status: 'Awaiting Review' });
     setExpandedGuestId(null);
     toast.success('Guest resubmitted for review');
+  };
+
+  // Super-admin: open remark dialog for needs correction / reject
+  const openRemarkDialog = (guestId: string, action: 'Needs Correction' | 'Rejected') => {
+    setRemarkText('');
+    setRemarkDialog({ open: true, guestId, action });
+  };
+
+  const handleAdminConfirmAction = () => {
+    if (!remarkDialog.guestId) return;
+    if (remarkText.trim()) {
+      addRemark(remarkDialog.guestId, {
+        authorId: user!.id,
+        authorName: user!.name,
+        authorRole: user!.role,
+        message: remarkText.trim(),
+      });
+    }
+    updateGuest(remarkDialog.guestId, { status: remarkDialog.action });
+    toast.success(`Guest marked as ${remarkDialog.action}`);
+    setRemarkDialog({ open: false, guestId: '', action: 'Rejected' });
+  };
+
+  const handleDeptChange = (guestId: string, dept: string) => {
+    updateGuest(guestId, {
+      assignedDepartment: dept || undefined,
+      assignedDepartmentAt: dept ? new Date().toISOString() : undefined,
+      assignedDepartmentBy: user!.id,
+    });
   };
 
   // Toggle inline panel
@@ -575,6 +639,30 @@ export default function GuestsPage() {
                 </div>
               </CardHeader>
               <CardContent>
+                {/* Filter chips — super-admin only */}
+                {user.role === 'super-admin' && (
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {([
+                      { key: 'all',       label: 'All Guests', count: guests.length },
+                      { key: 'pending',   label: 'Pending',    count: guests.filter(g => g.status === 'Awaiting Review' || g.status === 'Needs Correction').length },
+                      { key: 'submitted', label: 'Submitted',  count: guests.filter(g => g.status === 'Approved' || g.status === 'Accommodated').length },
+                      { key: 'rejected',  label: 'Rejected',   count: guests.filter(g => g.status === 'Rejected').length },
+                    ] as { key: typeof adminFilter; label: string; count: number }[]).map(({ key, label, count }) => (
+                      <button
+                        key={key}
+                        onClick={() => setAdminFilter(key)}
+                        className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                          adminFilter === key
+                            ? 'bg-[#2D5A45] text-white'
+                            : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        {label} ({count})
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* Tabs for Coordinator */}
                 {user.role === 'coordinator' && (
                   <div className="flex gap-2 mb-4">
@@ -667,9 +755,8 @@ export default function GuestsPage() {
                     </thead>
                     <tbody className="divide-y divide-[#E8E3DB]">
                       {filteredGuests.map((guest) => (
-                        <>
+                        <Fragment key={guest.id}>
                           <tr
-                            key={guest.id}
                             className={`${
                               guest.guestType === 'family'
                                 ? `cursor-pointer hover:bg-gray-50 ${expandedFamilyId === guest.id ? 'bg-gray-50' : ''}`
@@ -715,12 +802,17 @@ export default function GuestsPage() {
                               <FamilyStatusCell guest={guest} />
                             </td>
                             {user.role === 'super-admin' && visibleCols.dept && (
-                              <td className="px-4 py-3">
-                                {guest.assignedDepartment ? (
-                                  <span className="text-xs bg-[#E8F5EE] text-[#2D5A45] border border-[#D6E4D9] px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
-                                    {guest.assignedDepartment}
-                                  </span>
-                                ) : <span className="text-[#4A4A4A]/40">—</span>}
+                              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                <select
+                                  value={guest.assignedDepartment || ''}
+                                  onChange={(e) => handleDeptChange(guest.id, e.target.value)}
+                                  className="text-xs border border-[#D4CFC7] rounded-md px-2 py-1 bg-white text-[#1A1A1A] focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] min-w-[130px]"
+                                >
+                                  <option value="">Select dept...</option>
+                                  {deptList.map(d => (
+                                    <option key={d.id} value={d.name}>{d.name}</option>
+                                  ))}
+                                </select>
                               </td>
                             )}
                             {user.role === 'super-admin' && visibleCols.location && (
@@ -741,7 +833,7 @@ export default function GuestsPage() {
                                 ) : <span className="text-[#4A4A4A]/40">—</span>}
                               </td>
                             )}
-                            <td className="px-4 py-3 text-[#4A4A4A]">{guest.submittedAt}</td>
+                            <td className="px-4 py-3 text-[#4A4A4A] whitespace-nowrap">{formatDate(guest.submittedAt)}</td>
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-end gap-2">
                                 {/* Coordinator Actions */}
@@ -813,7 +905,7 @@ export default function GuestsPage() {
                                   <Eye className="w-4 h-4" />
                                 </Button>
 
-                                {/* Edit + Delete — super-admin only */}
+                                {/* Edit + Delete + status actions — super-admin only */}
                                 {user.role === 'super-admin' && (
                                   <>
                                     <Button
@@ -824,6 +916,34 @@ export default function GuestsPage() {
                                       onClick={(e) => { e.stopPropagation(); setViewGuestId(guest.id); setViewGuestEditMode(true); }}
                                     >
                                       <Pencil className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      title="Approve"
+                                      disabled={guest.status === 'Approved' || guest.status === 'Accommodated'}
+                                      className="h-8 w-8 text-green-600 hover:text-green-800 hover:bg-green-50 disabled:opacity-30"
+                                      onClick={(e) => { e.stopPropagation(); updateGuest(guest.id, { status: 'Approved' }); toast.success('Guest approved'); }}
+                                    >
+                                      <CheckCircle className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      title="Needs Correction"
+                                      className="h-8 w-8 text-amber-500 hover:text-amber-700 hover:bg-amber-50"
+                                      onClick={(e) => { e.stopPropagation(); openRemarkDialog(guest.id, 'Needs Correction'); }}
+                                    >
+                                      <AlertTriangle className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      title="Reject"
+                                      className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                      onClick={(e) => { e.stopPropagation(); openRemarkDialog(guest.id, 'Rejected'); }}
+                                    >
+                                      <XCircle className="w-4 h-4" />
                                     </Button>
                                     <Button
                                       variant="ghost"
@@ -904,7 +1024,7 @@ export default function GuestsPage() {
                               </td>
                             </tr>
                           )}
-                        </>
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>
@@ -994,6 +1114,48 @@ export default function GuestsPage() {
       </AlertDialog>
 
       <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} />
+
+      {/* Super-admin: Needs Correction / Reject remark dialog */}
+      <Dialog open={remarkDialog.open} onOpenChange={(o) => !o && setRemarkDialog(d => ({ ...d, open: false }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {remarkDialog.action === 'Needs Correction' ? 'Request Correction' : 'Reject Guest'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-[#4A4A4A]">
+              {remarkDialog.action === 'Needs Correction'
+                ? 'Optionally add a note explaining what needs to be corrected.'
+                : 'Optionally add a reason for rejection.'}
+            </p>
+            <textarea
+              value={remarkText}
+              onChange={(e) => setRemarkText(e.target.value)}
+              placeholder={remarkDialog.action === 'Needs Correction' ? 'What needs to be corrected...' : 'Reason for rejection...'}
+              rows={3}
+              className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] resize-none"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemarkDialog(d => ({ ...d, open: false }))}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAdminConfirmAction}
+              className={remarkDialog.action === 'Needs Correction'
+                ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                : 'bg-red-600 hover:bg-red-700 text-white'}
+            >
+              {remarkDialog.action === 'Needs Correction' ? (
+                <><AlertTriangle className="w-4 h-4 mr-2" />Mark Needs Correction</>
+              ) : (
+                <><XCircle className="w-4 h-4 mr-2" />Reject Guest</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -138,6 +138,7 @@ function updatesToDbRow(updates: Partial<Guest>): Record<string, any> {
     departureTerminal:  'departure_terminal',
     departureTime:      'departure_time',
     specialNeeds:       'special_needs',
+    dietaryRequirements: 'dietary_requirements',
     wheelchairRequired: 'wheelchair_required',
     status:             'status',
     submittedBy:        'submitted_by',
@@ -165,7 +166,7 @@ function updatesToDbRow(updates: Partial<Guest>): Record<string, any> {
   // Fields that must never be sent to the DB (no matching column)
   const skip = new Set([
     'id', 'referenceNumber', 'familyMembers', 'countryCode', 'visaDetails',
-    'dietaryRequirements', 'departureFlightNumber', 'roomAssignment',
+    'departureFlightNumber', 'roomAssignment',
     'assignedDepartmentByName', 'placedByName', 'statusHistory',
     'department',  // read-only profile field, not the assignment column
   ]);
@@ -330,6 +331,7 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
         visa_status:        toNull(guestData.visaStatus) ?? 'Not Required',
         wheelchair_required: toBool(guestData.wheelchairRequired),
         special_needs:      toNull(guestData.specialNeeds),
+        dietary_requirements: toNull(guestData.dietaryRequirements),
         flight_number:      toNull(guestData.arrivalFlightNumber),
         arrival_date:       toNull(guestData.arrivalTime),
         departure_date:     toNull(guestData.departureTime),
@@ -359,7 +361,7 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
 
       if (error || !data) {
         console.error('[addGuest] Error:', error?.message);
-        toast.error('Failed to register guest');
+        toast.error(error?.message ?? 'Failed to register guest');
         return null;
       }
 

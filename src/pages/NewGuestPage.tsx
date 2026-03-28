@@ -167,7 +167,7 @@ export default function NewGuestPage() {
 
   const [formData, setFormData] = useState({
     fullName: '',
-    country: user?.countryCode || '',
+    country: user?.country || '',
     gender: 'male' as 'male' | 'female',
     age: '',
     dateOfBirth: '',
@@ -311,13 +311,12 @@ export default function NewGuestPage() {
     setIsSubmitting(true);
     
     try {
-      const country = COUNTRIES.find(c => c.code === formData.country);
-      // For coordinators, country comes from their profile; addGuest will also enforce this
+      // formData.country holds the country name directly (select value is country.name)
       const resolvedCountry = user?.role === 'coordinator'
         ? (user.country || '')
-        : (country?.name || formData.country);
+        : formData.country;
       const resolvedCountryCode = user?.role === 'coordinator'
-        ? (user.countryCode || formData.country || '')
+        ? (user.countryCode || user.country || '')
         : formData.country;
 
       const result = await addGuest({

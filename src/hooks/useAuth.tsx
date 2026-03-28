@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { User, UserRole } from '@/types';
 
@@ -21,9 +21,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const checkedRef = useRef(false);
 
   // Restore session from localStorage on mount (no DB call)
   useEffect(() => {
+    if (checkedRef.current) return;
+    checkedRef.current = true;
     const stored = localStorage.getItem(SESSION_KEY);
     if (stored) {
       try {
