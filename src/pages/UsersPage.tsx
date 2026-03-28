@@ -165,7 +165,7 @@ export default function UsersPage() {
   });
 
   // Location Managers / nizamat-in-charge (for combined Departmental Users tab)
-  const filteredLocManagers = getUsersByType('nizamat-in-charge').filter(u => {
+  const filteredLocManagers = getUsersByType('location-manager').filter(u => {
     const q = searchQuery.toLowerCase();
     const matchesSearch =
       u.name.toLowerCase().includes(q) ||
@@ -292,7 +292,7 @@ export default function UsersPage() {
         toast.success('Coordinator added successfully');
       }
     } else {
-      if (modalUserType === 'nizamat-in-charge' && (!formData.department || !formData.location)) {
+      if (modalUserType === 'location-manager' && (!formData.department || !formData.location)) {
         toast.error('Please select a department and location');
         return;
       }
@@ -490,7 +490,7 @@ export default function UsersPage() {
                 <span className="text-[#D4CFC7] self-center">|</span>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-                    {getUsersByType('nizamat-in-charge').length}
+                    {getUsersByType('location-manager').length}
                   </Badge>
                   <span className="text-[#4A4A4A]">Location Managers</span>
                 </div>
@@ -661,27 +661,30 @@ export default function UsersPage() {
                                   ) : '—'}
                                 </td>
                                 <td className="px-4 py-3">
-                                  {(u.locations?.length ?? 0) > 0 ? (
-                                    <Popover>
-                                      <PopoverTrigger asChild>
-                                        <button className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-[#D6E4D9] text-[#2D5A45] hover:bg-[#C5D9C9] transition-colors">
-                                          {u.locations!.length} location{u.locations!.length !== 1 ? 's' : ''}
-                                        </button>
-                                      </PopoverTrigger>
-                                      <PopoverContent className="w-64 p-3" align="start">
-                                        <p className="text-xs font-semibold text-[#2D5A45] uppercase tracking-wide mb-2">
-                                          Locations ({u.locations!.length})
-                                        </p>
-                                        <div className="flex flex-wrap gap-1.5">
-                                          {u.locations!.map((loc, i) => (
-                                            <span key={i} className="text-xs bg-[#E8F5EE] text-[#2D5A45] border border-[#D6E4D9] px-2 py-0.5 rounded-full">
-                                              {loc}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      </PopoverContent>
-                                    </Popover>
-                                  ) : '—'}
+                                  {(() => {
+                                    const locs = departments[u.department ?? ''] ?? [];
+                                    return locs.length > 0 ? (
+                                      <Popover>
+                                        <PopoverTrigger asChild>
+                                          <button className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-[#D6E4D9] text-[#2D5A45] hover:bg-[#C5D9C9] transition-colors">
+                                            {locs.length} location{locs.length !== 1 ? 's' : ''}
+                                          </button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-64 p-3" align="start">
+                                          <p className="text-xs font-semibold text-[#2D5A45] uppercase tracking-wide mb-2">
+                                            Locations ({locs.length})
+                                          </p>
+                                          <div className="flex flex-wrap gap-1.5">
+                                            {locs.map((loc, i) => (
+                                              <span key={i} className="text-xs bg-[#E8F5EE] text-[#2D5A45] border border-[#D6E4D9] px-2 py-0.5 rounded-full">
+                                                {loc}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        </PopoverContent>
+                                      </Popover>
+                                    ) : '—';
+                                  })()}
                                 </td>
                                 <td className="px-4 py-3 text-[#4A4A4A]">{u.phone || '—'}</td>
                                 <td className="px-4 py-3">
@@ -776,7 +779,7 @@ export default function UsersPage() {
                                   </button>
                                   <button
                                     onClick={() => {
-                                      const usersInDept = getUsersByType('nizamat-in-charge').filter(u => u.department === dept).length;
+                                      const usersInDept = getUsersByType('location-manager').filter(u => u.department === dept).length;
                                       if (usersInDept > 0) {
                                         toast.error(`Cannot delete "${dept}" — ${usersInDept} user${usersInDept > 1 ? 's' : ''} assigned`);
                                         return;
@@ -861,11 +864,11 @@ export default function UsersPage() {
                         <MapPin className="w-4 h-4 text-[#2D5A45]" />
                         Location Managers
                         <Badge variant="outline" className="ml-1 text-xs bg-purple-50 text-purple-700 border-purple-200">
-                          {getUsersByType('nizamat-in-charge').length}
+                          {getUsersByType('location-manager').length}
                         </Badge>
                       </CardTitle>
                       <Button
-                        onClick={() => openAddModal('nizamat-in-charge')}
+                        onClick={() => openAddModal('location-manager')}
                         className="bg-[#2D5A45] hover:bg-[#234839] text-white h-8 px-3 text-xs"
                       >
                         <Plus className="w-3.5 h-3.5 mr-1.5" />
@@ -1382,7 +1385,7 @@ export default function UsersPage() {
                 </div>
               </div>
 
-              {modalUserType === 'nizamat-in-charge' && (
+              {modalUserType === 'location-manager' && (
                 <>
                   <div className="space-y-2">
                     <Label className="text-[#1A1A1A]">Department *</Label>
