@@ -4,7 +4,7 @@
  */
 import {
   LayoutDashboard, Users, UserCog, List, Globe, BedDouble, ScrollText,
-  ClipboardList, CheckSquare, XCircle, MessageSquare, Clock,
+  ClipboardList, CheckSquare, XCircle, MessageSquare, Clock, Calendar,
 } from 'lucide-react';
 
 export type NavItem = { icon: React.ElementType; label: string; href: string };
@@ -17,6 +17,7 @@ export const SUPER_ADMIN_NAV: NavItem[] = [
   { icon: List,            label: 'Designation List',   href: '/designations' },
   { icon: Globe,           label: 'Countries & Depts',  href: '/countries-departments' },
   { icon: BedDouble,       label: 'Rooms & Capacity',   href: '/admin/rooms' },
+  { icon: Calendar,        label: 'Mulaqat',            href: '/admin/mulaqat' },
   { icon: ScrollText,      label: 'Audit Trail',        href: '/admin/audit-trail' },
 ];
 
@@ -26,6 +27,7 @@ export const DESK_NAV: NavItem[] = [
   { icon: ClipboardList,   label: 'Guests to Review',   href: '/desk/review' },
   { icon: CheckSquare,     label: 'Processed Guests',   href: '/desk/processed' },
   { icon: XCircle,         label: 'Rejected Guests',    href: '/desk/rejected' },
+  { icon: Calendar,        label: 'Mulaqat',            href: '/desk/mulaqat' },
   { icon: MessageSquare,   label: 'Messages & Updates', href: '/desk/messages' },
 ];
 
