@@ -18,7 +18,7 @@ import { useGuests } from '@/hooks/useGuests';
 import { useRooms } from '@/hooks/useRooms';
 import { DeptSidebar } from '@/components/DeptSidebar';
 import { DeptUserMenu } from '@/components/DeptUserMenu';
-import { useDepartments } from '@/hooks/useDepartments';
+import { useDepartments, type DepLocation } from '@/hooks/useDepartments';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,26 +41,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import type { Block, BedAssignment, Room } from '@/types';
-
-// ── DeptLocation interface (unchanged) ────────────────────────────────────────
-
-interface DeptLocation {
-  id: string;
-  name: string;
-  description: string;
-  isActive: boolean;
-}
-
-let nextLocationId = 100;
-
-function seedLocations(dept: string, deptMap: Record<string, string[]>): DeptLocation[] {
-  return (deptMap[dept] ?? []).map((name, i) => ({
-    id: `loc-seed-${i}`,
-    name,
-    description: '',
-    isActive: true,
-  }));
-}
 
 // ── Inline helpers ─────────────────────────────────────────────────────────────
 
@@ -95,7 +75,13 @@ function OccupancyBar({ occupied, total }: OccupancyBarProps) {
 export default function DeptLocationsPage() {
   const { user } = useAuth();
   const { guests } = useGuests();
-  const { departments } = useDepartments();
+  const {
+    deptList,
+    locationsList,
+    addLocation,
+    updateLocation,
+    deleteLocationById,
+  } = useDepartments();
   const {
     blocks,
     bedAssignments,
@@ -111,23 +97,23 @@ export default function DeptLocationsPage() {
   } = useRooms();
 
   const dept = user?.department ?? '';
-
-  // ── Location state ──────────────────────────────────────────────────────────
-
-  const [locations, setLocations] = useState<DeptLocation[]>(() => seedLocations(dept, departments));
+  const deptId = deptList.find(d => d.name === dept)?.id;
+  const locations: DepLocation[] = deptId
+    ? locationsList.filter(l => l.departmentId === deptId)
+    : [];
 
   // Location dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<DeptLocation | null>(null);
+  const [editTarget, setEditTarget] = useState<DepLocation | null>(null);
   const [formName, setFormName] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formError, setFormError] = useState('');
 
   // Location delete state
-  const [deleteTarget, setDeleteTarget] = useState<DeptLocation | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DepLocation | null>(null);
 
   // Selected location for room view
-  const [selectedLocation, setSelectedLocation] = useState<DeptLocation | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<DepLocation | null>(null);
 
   // ── Room view state ─────────────────────────────────────────────────────────
 
@@ -178,10 +164,10 @@ export default function DeptLocationsPage() {
     setDialogOpen(true);
   }, []);
 
-  const openEdit = useCallback((loc: DeptLocation) => {
+  const openEdit = useCallback((loc: DepLocation) => {
     setEditTarget(loc);
     setFormName(loc.name);
-    setFormDesc(loc.description);
+    setFormDesc(loc.description ?? '');
     setFormError('');
     setDialogOpen(true);
   }, []);
@@ -208,23 +194,19 @@ export default function DeptLocationsPage() {
     }
 
     if (editTarget) {
-      setLocations(prev =>
-        prev.map(l => l.id === editTarget.id ? { ...l, name: trimmedName, description: trimmedDesc } : l),
-      );
+      updateLocation(editTarget.id, { name: trimmedName, description: trimmedDesc || undefined });
       toast.success('Location updated');
     } else {
-      setLocations(prev => [
-        ...prev,
-        { id: `loc-${nextLocationId++}`, name: trimmedName, description: trimmedDesc, isActive: true },
-      ]);
+      addLocation(dept, trimmedName, trimmedDesc || undefined);
       toast.success('Location added successfully');
     }
     setDialogOpen(false);
-  }, [formName, formDesc, editTarget, locations]);
+  }, [formName, formDesc, editTarget, locations, dept, addLocation, updateLocation]);
 
   const handleToggleActive = useCallback((id: string) => {
-    setLocations(prev => prev.map(l => l.id === id ? { ...l, isActive: !l.isActive } : l));
-  }, []);
+    const loc = locations.find(l => l.id === id);
+    if (loc) updateLocation(id, { isActive: !loc.isActive });
+  }, [locations, updateLocation]);
 
   const handleDeleteClick = useCallback((loc: DeptLocation) => {
     const count = guestCountByLocation[loc.name] ?? 0;
@@ -237,10 +219,10 @@ export default function DeptLocationsPage() {
 
   const handleConfirmDelete = useCallback(() => {
     if (!deleteTarget) return;
-    setLocations(prev => prev.filter(l => l.id !== deleteTarget.id));
+    deleteLocationById(deleteTarget.id);
     toast.success('Location deleted');
     setDeleteTarget(null);
-  }, [deleteTarget]);
+  }, [deleteTarget, deleteLocationById]);
 
   // ── Block CRUD ──────────────────────────────────────────────────────────────
 

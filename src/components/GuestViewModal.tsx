@@ -14,9 +14,10 @@ import { AuditTimeline } from '@/components/AuditTimeline';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { useAuditTrail } from '@/hooks/useAuditTrail';
+import { useDesignations } from '@/hooks/useDesignations';
+import { useAssignableItems } from '@/hooks/useAssignableItems';
 import {
   GUEST_STATUS_LABELS, ROLE_LABELS, VISA_STATUS_LABELS,
-  DEFAULT_DESIGNATIONS, COUNTRIES,
 } from '@/lib/constants';
 import { useDepartments } from '@/hooks/useDepartments';
 import { useRooms } from '@/hooks/useRooms';
@@ -204,6 +205,8 @@ export function GuestViewModal({
   const { getEntriesForGuest, addEntry } = useAuditTrail();
   const { departments, getDeptBadgeCls, getLocPillCls } = useDepartments();
   const { rooms, bedAssignments, assignGuestToRoom } = useRooms();
+  const { activeDesignations } = useDesignations();
+  const { countries: assignableCountries } = useAssignableItems();
 
   const [commentText, setCommentText] = useState('');
   const [roomInput, setRoomInput] = useState('');
@@ -635,8 +638,8 @@ export function GuestViewModal({
                           className={`${selectCls} ${errors.country ? 'border-red-500' : ''}`}
                         >
                           <option value="">Select country…</option>
-                          {COUNTRIES.map(c => (
-                            <option key={c.code} value={c.name}>{c.name}</option>
+                          {assignableCountries.filter(c => c.isActive).map(c => (
+                            <option key={c.id} value={c.name}>{c.name}</option>
                           ))}
                         </select>
                       </EditField>
@@ -644,7 +647,7 @@ export function GuestViewModal({
                       <EditField label="Designation" error={errors.designation?.message}>
                         <select {...register('designation')} className={selectCls}>
                           <option value="">Select designation…</option>
-                          {DEFAULT_DESIGNATIONS.map(d => (
+                          {activeDesignations.map(d => (
                             <option key={d} value={d}>{d}</option>
                           ))}
                         </select>

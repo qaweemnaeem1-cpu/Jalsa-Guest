@@ -102,6 +102,34 @@ export function AuditTrailProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  // ── Real-time subscription ───────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('audit-changes')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'audit_trail' },
+        (payload) => {
+          const incoming = rowToEntry(payload.new);
+          setEntries(prev => {
+            // Skip if already present (e.g. our own optimistic entry replaced by real)
+            if (prev.find(e => e.id === incoming.id)) return prev;
+            // Replace matching optimistic entry if same guest+action+timestamp proximity
+            return [incoming, ...prev.filter(e => !e.id.startsWith('optimistic-') ||
+              e.guestId !== incoming.guestId || e.type !== incoming.type)];
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const addEntry = useCallback((entry: Omit<AuditEntry, 'id'>) => {
     const optimisticId = `optimistic-${Date.now()}-${Math.random()}`;
     const optimistic: AuditEntry = { ...entry, id: optimisticId };

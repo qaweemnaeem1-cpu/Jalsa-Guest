@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Users, Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { useUsers, type SystemUser } from '@/hooks/useUsers';
 import { DeptSidebar } from '@/components/DeptSidebar';
 import { DeptUserMenu } from '@/components/DeptUserMenu';
 import { useDepartments } from '@/hooks/useDepartments';
@@ -26,48 +27,21 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-interface SubUser {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  location: string;
-  isActive: boolean;
-}
-
-const SEED_USERS: Record<string, SubUser[]> = {
-  'Reserve 1 (R1)': [
-    { id: 'su-r1-1', name: 'Jamia Manager',      email: 'jamia.r1@tabshir.org',      phone: '+44 7000 100001', location: 'Jamia',      isActive: true },
-    { id: 'su-r1-2', name: 'University Manager', email: 'university.r1@tabshir.org', phone: '+44 7000 100002', location: 'University', isActive: true },
-    { id: 'su-r1-3', name: 'Hotels Manager',     email: 'hotels.r1@tabshir.org',     phone: '+44 7000 100003', location: 'Hotels',     isActive: true },
-  ],
-  'UK Jamaat': [
-    { id: 'su-ukj-1', name: 'Bait Ul Futuh Manager', email: 'baitulfutuh.ukj@tabshir.org', phone: '+44 7000 200001', location: 'Bait Ul Futuh', isActive: true },
-    { id: 'su-ukj-2', name: 'Bait Ul Ehsan Manager', email: 'baitulehsan.ukj@tabshir.org', phone: '+44 7000 200002', location: 'Bait Ul Ehsan', isActive: true },
-  ],
-  'Central Guests': [
-    { id: 'su-cg-1', name: 'VIP Manager',               email: 'vip.central@tabshir.org',     phone: '+44 7000 300001', location: 'Bait Ul Futuh VIP',    isActive: true },
-    { id: 'su-cg-2', name: 'Islamabad Inside Manager',  email: 'inside.central@tabshir.org',  phone: '+44 7000 300002', location: 'Islamabad Inside',     isActive: true },
-    { id: 'su-cg-3', name: 'Islamabad Suburbs Manager', email: 'suburbs.central@tabshir.org', phone: '+44 7000 300003', location: 'Islamabad Suburbs',    isActive: true },
-  ],
-};
-
-let nextSubUserId = 200;
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function DeptSubUsersPage() {
   const { user } = useAuth();
   const { departments, getLocPillCls } = useDepartments();
+  const { users, addUser, updateUser, deleteUser, toggleUserStatus } = useUsers();
 
   const dept = user?.department ?? '';
   const locations = departments[dept] ?? [];
 
-  const [subUsers, setSubUsers] = useState<SubUser[]>(() => SEED_USERS[dept] ?? []);
+  const subUsers = users.filter(u => u.userType === 'location-manager' && u.department === dept);
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<SubUser | null>(null);
+  const [editTarget, setEditTarget] = useState<SystemUser | null>(null);
   const [formName, setFormName] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formPhone, setFormPhone] = useState('');
@@ -77,7 +51,7 @@ export default function DeptSubUsersPage() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // Delete state
-  const [deleteTarget, setDeleteTarget] = useState<SubUser | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SystemUser | null>(null);
 
   const openAdd = () => {
     setEditTarget(null);
@@ -91,12 +65,12 @@ export default function DeptSubUsersPage() {
     setDialogOpen(true);
   };
 
-  const openEdit = (su: SubUser) => {
+  const openEdit = (su: SystemUser) => {
     setEditTarget(su);
     setFormName(su.name);
     setFormEmail(su.email);
-    setFormPhone(su.phone);
-    setFormLocation(su.location);
+    setFormPhone(su.phone ?? '');
+    setFormLocation(su.location ?? '');
     setFormPassword('');
     setShowPassword(false);
     setFormErrors({});
@@ -118,7 +92,7 @@ export default function DeptSubUsersPage() {
 
     // Duplicate email check
     const dupEmail = subUsers.find(
-      su => su.email.toLowerCase() === email.toLowerCase() && su.id !== editTarget?.id,
+      su => su.email?.toLowerCase() === email.toLowerCase() && su.id !== editTarget?.id,
     );
     if (dupEmail) errors.email = 'A sub user with this email already exists';
 
@@ -134,31 +108,30 @@ export default function DeptSubUsersPage() {
     const phone = formPhone.trim().replace(/<[^>]*>/g, '');
 
     if (editTarget) {
-      setSubUsers(prev =>
-        prev.map(su =>
-          su.id === editTarget.id
-            ? { ...su, name, email, phone, location: formLocation }
-            : su,
-        ),
-      );
+      updateUser(editTarget.id, { name, phone, location: formLocation });
       toast.success('Sub user updated');
     } else {
-      setSubUsers(prev => [
-        ...prev,
-        { id: `su-${nextSubUserId++}`, name, email, phone, location: formLocation, isActive: true },
-      ]);
+      addUser({
+        name,
+        email,
+        phone,
+        password: formPassword,
+        userType: 'location-manager',
+        department: dept,
+        location: formLocation,
+      });
       toast.success('Sub user added successfully');
     }
     setDialogOpen(false);
   };
 
   const handleToggleActive = (id: string) => {
-    setSubUsers(prev => prev.map(su => su.id === id ? { ...su, isActive: !su.isActive } : su));
+    toggleUserStatus(id);
   };
 
   const handleConfirmDelete = () => {
     if (!deleteTarget) return;
-    setSubUsers(prev => prev.filter(su => su.id !== deleteTarget.id));
+    deleteUser(deleteTarget.id);
     toast.success('Sub user removed');
     setDeleteTarget(null);
   };
@@ -231,11 +204,11 @@ export default function DeptSubUsersPage() {
                         </td>
                         <td className="px-4 py-3 text-[#4A4A4A]">{su.email}</td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getLocPillCls(dept, su.location)}`}>
-                            {su.location}
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getLocPillCls(dept, su.location ?? '')}`}>
+                            {su.location ?? '—'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-[#4A4A4A]">{su.phone}</td>
+                        <td className="px-4 py-3 text-[#4A4A4A]">{su.phone ?? '—'}</td>
                         <td className="px-4 py-3">
                           <button
                             onClick={() => handleToggleActive(su.id)}

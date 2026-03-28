@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { useDesignations } from '@/hooks/useDesignations';
+import { useAssignableItems } from '@/hooks/useAssignableItems';
 import { useAuditTrail } from '@/hooks/useAuditTrail';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,7 +37,6 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import {
-  COUNTRIES,
   AIRPORTS,
   VISA_STATUS_OPTIONS,
   VISA_TYPE_OPTIONS,
@@ -159,6 +159,7 @@ export default function NewGuestPage() {
   const { user, logout } = useAuth();
   const { addGuest } = useGuests();
   const { activeDesignations } = useDesignations();
+  const { countries: assignableCountries } = useAssignableItems();
   const { addEntry } = useAuditTrail();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -514,8 +515,8 @@ export default function NewGuestPage() {
                           className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] h-11"
                         >
                           <option value="">Select country</option>
-                          {COUNTRIES.map((country) => (
-                            <option key={country.code} value={country.code}>{country.name}</option>
+                          {assignableCountries.filter(c => c.isActive).map((country) => (
+                            <option key={country.id} value={country.name}>{country.name}</option>
                           ))}
                         </select>
                       )}

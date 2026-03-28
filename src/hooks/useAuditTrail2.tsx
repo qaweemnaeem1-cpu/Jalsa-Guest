@@ -99,6 +99,32 @@ export function AuditTrail2Provider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  // ── Real-time subscription ───────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('audit2-changes')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'audit_trail_2' },
+        (payload) => {
+          const incoming = rowToEntry(payload.new);
+          setEntries(prev => {
+            if (prev.find(e => e.id === incoming.id)) return prev;
+            return [incoming, ...prev.filter(e => !e.id.startsWith('at2-opt-') ||
+              e.guestId !== incoming.guestId || e.type !== incoming.type)];
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const addEntry = useCallback((entry: Omit<AuditEntry2, 'id' | 'readBy'>) => {
     const optimisticId = `at2-opt-${Date.now()}-${Math.random()}`;
     const optimistic: AuditEntry2 = {

@@ -245,6 +245,44 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
     }
   }, [user?.id, fetchGuests]);
 
+  // ── Real-time subscription ───────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('guests-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'guests' },
+        (payload) => {
+          console.log('[realtime] Guest change:', payload.eventType);
+
+          if (payload.eventType === 'INSERT') {
+            const newGuest = rowToGuest(payload.new);
+            setGuests(prev => {
+              if (prev.find(g => g.id === newGuest.id)) return prev;
+              return [newGuest, ...prev];
+            });
+          }
+
+          if (payload.eventType === 'UPDATE') {
+            const updated = rowToGuest(payload.new);
+            setGuests(prev => prev.map(g => g.id === updated.id ? updated : g));
+          }
+
+          if (payload.eventType === 'DELETE') {
+            setGuests(prev => prev.filter(g => g.id !== String(payload.old.id)));
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Reference number ────────────────────────────────────────────────────────
 
   const generateReferenceNumber = useCallback(() => {

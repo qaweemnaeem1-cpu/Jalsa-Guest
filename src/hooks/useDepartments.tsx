@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import { DEPT_LOCATIONS } from '@/lib/constants';
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 
 // ─── Color palettes ───────────────────────────────────────────────────────────
 
@@ -24,16 +25,53 @@ const LOC_COLORS = [
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export interface Department {
+  id: string;
+  name: string;
+}
+
+export interface DepLocation {
+  id: string;
+  name: string;
+  departmentId: string;
+  description?: string;
+  isActive: boolean;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToDept(row: any): Department {
+  return { id: row.id, name: row.name };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToLocation(row: any): DepLocation {
+  return {
+    id: row.id,
+    name: row.name,
+    departmentId: row.department_id,
+    description: row.description ?? undefined,
+    isActive: row.is_active ?? true,
+  };
+}
+
 interface DepartmentsContextType {
-  /** Map of department name → ordered list of locations */
+  /** Backward-compatible: department name → ordered location names */
   departments: Record<string, string[]>;
-  /** Ordered list of department names */
+  /** Backward-compatible: ordered list of department names */
   departmentList: string[];
-  addDepartment: (name: string) => void;
-  renameDepartment: (oldName: string, newName: string) => void;
-  deleteDepartment: (name: string) => void;
-  addLocation: (dept: string, location: string) => void;
-  deleteLocation: (dept: string, location: string) => void;
+  /** Structured departments with IDs */
+  deptList: Department[];
+  /** Structured locations with IDs */
+  locationsList: DepLocation[];
+  // Department CRUD
+  addDepartment: (name: string) => Promise<void>;
+  renameDepartment: (oldName: string, newName: string) => Promise<void>;
+  deleteDepartment: (name: string) => Promise<void>;
+  // Location CRUD
+  addLocation: (deptName: string, locationName: string, description?: string) => Promise<DepLocation | null>;
+  updateLocation: (id: string, updates: Partial<Pick<DepLocation, 'name' | 'description' | 'isActive'>>) => Promise<void>;
+  deleteLocation: (deptName: string, locationName: string) => Promise<void>;
+  deleteLocationById: (id: string) => Promise<void>;
   /** Tailwind classes for a department badge */
   getDeptBadgeCls: (dept: string) => string;
   /** Tailwind classes for a location pill within a department */
@@ -47,61 +85,142 @@ const DepartmentsContext = createContext<DepartmentsContextType | undefined>(und
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function DepartmentsProvider({ children }: { children: ReactNode }) {
-  const [departments, setDepartments] = useState<Record<string, string[]>>(DEPT_LOCATIONS);
-  // Maintain insertion order separately
-  const [order, setOrder] = useState<string[]>(Object.keys(DEPT_LOCATIONS));
+  const [deptList, setDeptList] = useState<Department[]>([]);
+  const [locationsList, setLocationsList] = useState<DepLocation[]>([]);
 
-  const departmentList = order.filter(d => d in departments);
+  // Fetch departments and locations on mount
+  useEffect(() => {
+    supabase
+      .from('departments')
+      .select('*')
+      .order('name')
+      .then(({ data, error }) => {
+        if (error) { console.error('useDepartments fetch:', error); return; }
+        if (data) setDeptList(data.map(rowToDept));
+      });
 
-  const addDepartment = useCallback((name: string) => {
+    supabase
+      .from('locations')
+      .select('*')
+      .order('name')
+      .then(({ data, error }) => {
+        if (error) { console.error('useDepartments locations fetch:', error); return; }
+        if (data) setLocationsList(data.map(rowToLocation));
+      });
+  }, []);
+
+  // ── Computed backward-compat values ─────────────────────────────────────────
+
+  const departmentList = deptList.map(d => d.name);
+
+  const departments: Record<string, string[]> = {};
+  for (const dept of deptList) {
+    departments[dept.name] = locationsList
+      .filter(l => l.departmentId === dept.id && l.isActive)
+      .map(l => l.name);
+  }
+
+  // ── Department CRUD ──────────────────────────────────────────────────────────
+
+  const addDepartment = useCallback(async (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    setDepartments(prev => {
-      if (trimmed in prev) return prev;
-      return { ...prev, [trimmed]: [] };
-    });
-    setOrder(prev => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
+    const { data, error } = await supabase
+      .from('departments')
+      .insert({ name: trimmed })
+      .select()
+      .single();
+
+    if (error) { toast.error('Failed to add department'); return; }
+    setDeptList(prev => [...prev, rowToDept(data)].sort((a, b) => a.name.localeCompare(b.name)));
   }, []);
 
-  const renameDepartment = useCallback((oldName: string, newName: string) => {
+  const renameDepartment = useCallback(async (oldName: string, newName: string) => {
     const trimmed = newName.trim();
     if (!trimmed || oldName === trimmed) return;
-    setDepartments(prev => {
-      if (!(oldName in prev)) return prev;
-      const next: Record<string, string[]> = {};
-      for (const [k, v] of Object.entries(prev)) {
-        next[k === oldName ? trimmed : k] = v;
-      }
-      return next;
-    });
-    setOrder(prev => prev.map(d => (d === oldName ? trimmed : d)));
+    const dept = deptList.find(d => d.name === oldName);
+    if (!dept) return;
+
+    const { error } = await supabase
+      .from('departments')
+      .update({ name: trimmed, updated_at: new Date().toISOString() })
+      .eq('id', dept.id);
+
+    if (error) { toast.error('Failed to rename department'); return; }
+    setDeptList(prev => prev.map(d => d.id === dept.id ? { ...d, name: trimmed } : d));
+  }, [deptList]);
+
+  const deleteDepartment = useCallback(async (name: string) => {
+    const dept = deptList.find(d => d.name === name);
+    if (!dept) return;
+
+    const { error } = await supabase.from('departments').delete().eq('id', dept.id);
+    if (error) { toast.error('Failed to delete department'); return; }
+    setDeptList(prev => prev.filter(d => d.id !== dept.id));
+    setLocationsList(prev => prev.filter(l => l.departmentId !== dept.id));
+  }, [deptList]);
+
+  // ── Location CRUD ────────────────────────────────────────────────────────────
+
+  const addLocation = useCallback(async (
+    deptName: string,
+    locationName: string,
+    description?: string,
+  ): Promise<DepLocation | null> => {
+    const dept = deptList.find(d => d.name === deptName);
+    if (!dept) return null;
+    const trimmed = locationName.trim();
+    if (!trimmed) return null;
+
+    const { data, error } = await supabase
+      .from('locations')
+      .insert({
+        name: trimmed,
+        department_id: dept.id,
+        description: description?.trim() ?? null,
+        is_active: true,
+      })
+      .select()
+      .single();
+
+    if (error) { toast.error('Failed to add location'); return null; }
+    const loc = rowToLocation(data);
+    setLocationsList(prev => [...prev, loc]);
+    return loc;
+  }, [deptList]);
+
+  const updateLocation = useCallback(async (
+    id: string,
+    updates: Partial<Pick<DepLocation, 'name' | 'description' | 'isActive'>>,
+  ) => {
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (updates.name      !== undefined) patch.name        = updates.name;
+    if (updates.description !== undefined) patch.description = updates.description ?? null;
+    if (updates.isActive  !== undefined) patch.is_active   = updates.isActive;
+
+    const { error } = await supabase.from('locations').update(patch).eq('id', id);
+    if (error) { toast.error('Failed to update location'); return; }
+    setLocationsList(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
   }, []);
 
-  const deleteDepartment = useCallback((name: string) => {
-    setDepartments(prev => {
-      const next = { ...prev };
-      delete next[name];
-      return next;
-    });
-    setOrder(prev => prev.filter(d => d !== name));
+  const deleteLocation = useCallback(async (deptName: string, locationName: string) => {
+    const dept = deptList.find(d => d.name === deptName);
+    if (!dept) return;
+    const loc = locationsList.find(l => l.departmentId === dept.id && l.name === locationName);
+    if (!loc) return;
+
+    const { error } = await supabase.from('locations').delete().eq('id', loc.id);
+    if (error) { toast.error('Failed to delete location'); return; }
+    setLocationsList(prev => prev.filter(l => l.id !== loc.id));
+  }, [deptList, locationsList]);
+
+  const deleteLocationById = useCallback(async (id: string) => {
+    const { error } = await supabase.from('locations').delete().eq('id', id);
+    if (error) { toast.error('Failed to delete location'); return; }
+    setLocationsList(prev => prev.filter(l => l.id !== id));
   }, []);
 
-  const addLocation = useCallback((dept: string, location: string) => {
-    const trimmed = location.trim();
-    if (!trimmed) return;
-    setDepartments(prev => {
-      if (!(dept in prev)) return prev;
-      if (prev[dept].includes(trimmed)) return prev;
-      return { ...prev, [dept]: [...prev[dept], trimmed] };
-    });
-  }, []);
-
-  const deleteLocation = useCallback((dept: string, location: string) => {
-    setDepartments(prev => {
-      if (!(dept in prev)) return prev;
-      return { ...prev, [dept]: prev[dept].filter(l => l !== location) };
-    });
-  }, []);
+  // ── Color helpers ────────────────────────────────────────────────────────────
 
   const getDeptBadgeCls = useCallback((dept: string) => {
     const idx = departmentList.indexOf(dept);
@@ -118,11 +237,15 @@ export function DepartmentsProvider({ children }: { children: ReactNode }) {
     <DepartmentsContext.Provider value={{
       departments,
       departmentList,
+      deptList,
+      locationsList,
       addDepartment,
       renameDepartment,
       deleteDepartment,
       addLocation,
+      updateLocation,
       deleteLocation,
+      deleteLocationById,
       getDeptBadgeCls,
       getLocPillCls,
     }}>

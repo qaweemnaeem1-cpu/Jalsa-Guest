@@ -1,73 +1,3 @@
-import type { Designation } from '@/types';
-
-// Default designations - these can be managed by Admin
-export const DEFAULT_DESIGNATIONS: string[] = [
-  'Central Missionary',
-  'National Amir',
-  'National Sadr',
-  'Local Missionary',
-  'National Amla Member',
-  'Jamaat Member',
-  'Missionary Incharge',
-  'National Sadr and Missionary Incharge',
-  'National Amir and Missionary Incharge',
-  'Government Official',
-  'Member of Parliament',
-  'Mayor',
-  'Banker',
-  'Member Family',
-  'Doctor',
-  'Waqf Doctor',
-  'Waqf Teacher',
-  'Chief Imam',
-  'Journalist',
-  'King',
-  'IAAAE Member',
-  'Police Official',
-  'Jamaat Employee',
-  'EXTERNAL GUEST',
-  'Waqf Zindagi',
-  'Other',
-  'Naib Nazir',
-  'Jamaat Official',
-  'Additional Nazir',
-  'Khuddam',
-  'Naib Wakil',
-  'Nazim Waqf-e-Jadid',
-  'Principal Jamia Ahmadiyya',
-  'Sadr Majlis Khuddamul Ahmadiyya (MKA)',
-  'Sadr Majlis Ansarullah',
-  'Sadr Majlis Lajna Imaillah',
-  'Nazir',
-  'Wakil',
-  'Sadr Anjuman Ahmadiyya Rabwah or Qadian',
-];
-
-// Initial designations data for storage
-export const INITIAL_DESIGNATIONS: Designation[] = DEFAULT_DESIGNATIONS.map((name, index) => ({
-  id: `desig-${index + 1}`,
-  name,
-  isActive: true,
-  createdAt: new Date().toISOString(),
-}));
-
-export const COUNTRIES = [
-  { code: 'GB', name: 'United Kingdom' },
-  { code: 'PK', name: 'Pakistan' },
-  { code: 'IN', name: 'India' },
-  { code: 'US', name: 'United States' },
-  { code: 'NG', name: 'Nigeria' },
-  { code: 'DE', name: 'Germany' },
-  { code: 'CA', name: 'Canada' },
-  { code: 'AU', name: 'Australia' },
-  { code: 'BD', name: 'Bangladesh' },
-  { code: 'ID', name: 'Indonesia' },
-  { code: 'MY', name: 'Malaysia' },
-  { code: 'ZA', name: 'South Africa' },
-  { code: 'GH', name: 'Ghana' },
-  { code: 'KE', name: 'Kenya' },
-  { code: 'TZ', name: 'Tanzania' },
-];
 
 export const ALL_COUNTRIES = [
   { code: 'AF', name: 'Afghanistan' }, { code: 'AL', name: 'Albania' }, { code: 'DZ', name: 'Algeria' },
@@ -227,11 +157,6 @@ export const ROLE_LABELS: Record<string, string> = {
   'viewer': 'Viewer',
 };
 
-export const DEPT_LOCATIONS: Record<string, string[]> = {
-  'Reserve 1 (R1)': ['Jamia', 'University', 'Hotels'],
-  'UK Jamaat': ['Bait Ul Futuh', 'Bait Ul Ehsan'],
-  'Central Guests': ['Bait Ul Futuh VIP', 'Islamabad Inside', 'Islamabad Suburbs'],
-};
 
 export const LOCATION_PILL_COLORS = [
   'bg-blue-50 text-blue-700 border-blue-200',

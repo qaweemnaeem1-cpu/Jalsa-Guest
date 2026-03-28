@@ -41,7 +41,7 @@ import {
   Pencil,
   BedDouble,
 } from 'lucide-react';
-import { COUNTRIES, ROLE_LABELS } from '@/lib/constants';
+import { ROLE_LABELS } from '@/lib/constants';
 import { useDepartments } from '@/hooks/useDepartments';
 import { useRooms } from '@/hooks/useRooms';
 import { CountryAssignmentPanel } from '@/components/CountryAssignmentPanel';
@@ -292,7 +292,6 @@ export default function UsersPage() {
         toast.success('Coordinator added successfully');
       }
     } else {
-      const country = COUNTRIES.find(c => c.code === formData.countryCode);
       if (modalUserType === 'nizamat-in-charge' && (!formData.department || !formData.location)) {
         toast.error('Please select a department and location');
         return;
@@ -300,14 +299,14 @@ export default function UsersPage() {
       if (editingUser) {
         updateUser(editingUser.id, {
           ...formData,
-          country: country?.name || formData.country,
+          country: formData.country,
         });
         toast.success('User updated successfully');
       } else {
         addUser({
           ...formData,
           userType: modalUserType,
-          country: country?.name || formData.country,
+          country: formData.country,
         });
         toast.success('User added successfully');
       }
