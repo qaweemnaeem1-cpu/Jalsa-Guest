@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { useUsers } from '@/hooks/useUsers';
-import { useDepartments } from '@/hooks/useDepartments';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -60,6 +59,7 @@ import { useRooms } from '@/hooks/useRooms';
 import { GUEST_STATUS_LABELS, ROLE_LABELS } from '@/lib/constants';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { FamilyStatusCell } from '@/components/FamilyStatusCell';
+import { DepartmentSelect } from '@/components/DepartmentSelect';
 import type { UserRole, Guest } from '@/types';
 import { SUPER_ADMIN_NAV, DESK_NAV, COORD_NAV } from '@/lib/navItems';
 
@@ -252,7 +252,6 @@ export default function GuestsPage() {
   const { guests, updateGuest, deleteGuest, addRemark, getMyWaitingGuests, getMySubmittedGuests, getNeedsCorrectionCount } = useGuests();
   const { users } = useUsers();
   const { rooms, bedAssignments } = useRooms();
-  const { deptList } = useDepartments();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [colsOpen, setColsOpen] = useState(false);
@@ -810,17 +809,14 @@ export default function GuestsPage() {
                               <FamilyStatusCell guest={guest} />
                             </td>
                             {user.role === 'super-admin' && visibleCols.dept && (
-                              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                                <select
+                              <td className="px-4 py-3">
+                                <DepartmentSelect
                                   value={guest.assignedDepartment || ''}
-                                  onChange={(e) => handleDeptChange(guest.id, e.target.value)}
-                                  className="text-xs border border-[#D4CFC7] rounded-md px-2 py-1 bg-white text-[#1A1A1A] focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] min-w-[130px]"
-                                >
-                                  <option value="">Select dept...</option>
-                                  {deptList.map(d => (
-                                    <option key={d.id} value={d.name}>{d.name}</option>
-                                  ))}
-                                </select>
+                                  onValueChange={(v) => handleDeptChange(guest.id, v)}
+                                  placeholder="Select dept..."
+                                  stopPropagation
+                                  className="min-w-[180px]"
+                                />
                               </td>
                             )}
                             {user.role === 'super-admin' && visibleCols.location && (
