@@ -1,16 +1,35 @@
 import { useState } from 'react';
-import { Settings } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Plus, Settings } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { ProfileDialog, getRoleDisplayLabel } from '@/components/ProfileDialog';
 
 export function SidebarUserFooter() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);
 
   if (!user) return null;
 
+  const isDeskInCharge = user.role === 'desk-in-charge';
+  const onRegisterPage = location.pathname === '/desk/register';
+
   return (
     <>
+      {isDeskInCharge && (
+        <div className="px-4 mb-2">
+          <button
+            type="button"
+            onClick={() => !onRegisterPage && navigate('/desk/register')}
+            disabled={onRegisterPage}
+            className={`w-full bg-[#2D5A45] text-white rounded-lg py-3 px-4 flex items-center justify-center gap-2 text-sm font-medium transition-colors ${onRegisterPage ? 'opacity-50 cursor-default' : 'hover:bg-[#234a38] cursor-pointer'}`}
+          >
+            <Plus className="w-5 h-5" />
+            New Registration
+          </button>
+        </div>
+      )}
       <div className="border-t border-[#E8E3DB] p-3 mt-auto">
         <button
           onClick={() => setProfileOpen(true)}

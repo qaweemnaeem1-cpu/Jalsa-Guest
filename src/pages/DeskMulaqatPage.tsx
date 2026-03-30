@@ -620,16 +620,6 @@ export default function DeskMulaqatPage() {
               </button>
             ))}
           </nav>
-          <div className="px-4 mb-2">
-            <button
-              type="button"
-              onClick={() => navigate('/desk/register')}
-              className="w-full bg-[#2D5A45] hover:bg-[#234a38] text-white rounded-lg py-3 px-4 flex items-center justify-center gap-2 text-sm font-medium transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-              New Registration
-            </button>
-          </div>
           <SidebarUserFooter />
         </aside>
 

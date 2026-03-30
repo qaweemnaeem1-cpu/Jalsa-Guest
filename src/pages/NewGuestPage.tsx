@@ -411,7 +411,7 @@ export default function NewGuestPage() {
             ))}
           </nav>
 
-          {(user.role === 'coordinator' || user.role === 'desk-in-charge') && (
+          {user.role === 'coordinator' && (
             <div className="px-4 mb-2">
               <button
                 type="button"
