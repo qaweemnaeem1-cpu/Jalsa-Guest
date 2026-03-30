@@ -22,6 +22,12 @@ import { useDelegations } from '@/hooks/useDelegations';
 import type { Guest } from '@/types';
 import { DESK_NAV } from '@/lib/navItems';
 
+function shortRef(ref: string) {
+  const parts = ref.split('-');
+  if (parts.length < 2) return ref;
+  return `${parts[0]}-..${parts[parts.length - 1].slice(-3)}`;
+}
+
 export default function ApprovedGuestsPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -283,19 +289,19 @@ export default function ApprovedGuestsPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
+                  <div className="overflow-hidden">
+                    <table className="w-full table-auto">
                       <thead className="bg-[#F9F8F6]">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Type</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Status</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Approved Date</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat Type</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Delegation</th>
+                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Ref</th>
+                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Name</th>
+                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Country</th>
+                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Type</th>
+                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Approved</th>
+                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
+                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Mulaqat</th>
+                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Delegation</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#E8E3DB]">
@@ -318,48 +324,49 @@ export default function ApprovedGuestsPage() {
                                 className={`hover:bg-[#FAFAFA] ${isFamily ? 'cursor-pointer select-none' : ''}`}
                                 onClick={isFamily ? () => toggleRow(g.id) : undefined}
                               >
-                                <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">{g.referenceNumber}</td>
-                                <td className="px-4 py-3 font-medium text-[#1A1A1A]">
-                                  <div className="flex items-center gap-1.5">
-                                    {g.fullName}
+                                <td className="px-2 py-2 max-w-[80px]">
+                                  <span className="font-mono text-xs text-[#4A4A4A]" title={g.referenceNumber}>{shortRef(g.referenceNumber)}</span>
+                                </td>
+                                <td className="px-2 py-2 max-w-[110px]">
+                                  <div className="flex items-center gap-1 min-w-0">
+                                    <span className="font-medium text-xs text-[#1A1A1A] truncate">{g.fullName}</span>
                                     {isFamily && (
                                       isExpanded
-                                        ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                                        : <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                        ? <ChevronDown className="w-3 h-3 text-gray-400 shrink-0" />
+                                        : <ChevronRight className="w-3 h-3 text-gray-400 shrink-0" />
                                     )}
                                   </div>
                                 </td>
-                                <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.country}</td>
-                                <td className="px-4 py-3">
-                                  <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200 capitalize">
+                                <td className="px-2 py-2 max-w-[80px]">
+                                  <span className="text-xs text-[#4A4A4A] truncate block" title={g.country}>{g.country}</span>
+                                </td>
+                                <td className="px-2 py-2">
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-gray-50 text-gray-700 border-gray-200 capitalize whitespace-nowrap">
                                     {g.guestType}{isFamily && ` (${g.familyMembers.length + 1})`}
                                   </Badge>
                                 </td>
-                                <td className="px-4 py-3">
+                                <td className="px-2 py-2">
                                   <FamilyStatusCell guest={g} />
                                 </td>
-                                <td className="px-4 py-3 text-sm text-[#4A4A4A]">{getApprovedDate(g)}</td>
-                                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                                  <button
-                                    onClick={() => setViewGuestId(g.id)}
-                                    title="View details"
-                                    className="p-1.5 rounded-md text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors"
-                                  >
-                                    <Eye className="w-4 h-4" />
+                                <td className="px-2 py-2 text-xs text-[#4A4A4A] whitespace-nowrap">{getApprovedDate(g)}</td>
+                                <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
+                                  <button onClick={() => setViewGuestId(g.id)} title="View details" className="p-1 rounded text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors">
+                                    <Eye className="w-3.5 h-3.5" />
                                   </button>
                                 </td>
 
                                 {/* Mulaqat Type */}
-                                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                                <td className="px-2 py-2 w-[96px]" onClick={e => e.stopPropagation()}>
                                   <MulaqatTypeSelect
                                     value={g.mulaqatType ?? 'No'}
                                     onValueChange={v => setMulaqatType(g, v)}
                                     stopPropagation
+                                    className="min-w-0 w-24"
                                   />
                                 </td>
 
                                 {/* Delegation */}
-                                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                                <td className="px-2 py-2 w-[110px]" onClick={e => e.stopPropagation()}>
                                   {(g.mulaqatType === 'Delegation' || g.mulaqatType === 'Both') ? (
                                     <CountryCombobox
                                       compact
@@ -368,7 +375,7 @@ export default function ApprovedGuestsPage() {
                                       onChange={v => changeDelegationCountry(g, v)}
                                     />
                                   ) : (
-                                    <span className="text-gray-300 text-xs">—</span>
+                                    <span className="text-gray-400 text-xs">—</span>
                                   )}
                                 </td>
                               </tr>

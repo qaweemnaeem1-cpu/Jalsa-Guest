@@ -63,6 +63,7 @@ import { useDelegations } from '@/hooks/useDelegations';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { FamilyStatusCell } from '@/components/FamilyStatusCell';
 import { DepartmentSelect } from '@/components/DepartmentSelect';
+import { supabase } from '@/lib/supabase';
 import type { UserRole, Guest } from '@/types';
 import { SUPER_ADMIN_NAV, DESK_NAV, COORD_NAV } from '@/lib/navItems';
 
@@ -424,12 +425,31 @@ export default function GuestsPage() {
     setRemarkDialog({ open: false, guestId: '', action: 'Rejected' });
   };
 
-  const handleDeptChange = (guestId: string, dept: string) => {
+  const handleDeptChange = async (guestId: string, dept: string) => {
+    const g = guests.find(x => x.id === guestId);
+    if (!g) return;
+    const isChange = !!g.assignedDepartment && g.assignedDepartment !== dept;
+    const now = new Date().toISOString();
+    const update: Record<string, unknown> = {
+      assigned_department: dept || null,
+      assigned_department_at: dept ? now : null,
+      assigned_department_by: user!.id,
+      updated_at: now,
+    };
+    if (isChange) {
+      update.placed_location = null;
+      update.placed_at = null;
+      update.placed_by = null;
+      update.placed_by_name = null;
+    }
+    await supabase.from('guests').update(update).eq('id', guestId);
     updateGuest(guestId, {
       assignedDepartment: dept || undefined,
-      assignedDepartmentAt: dept ? new Date().toISOString() : undefined,
+      assignedDepartmentAt: dept ? now : undefined,
       assignedDepartmentBy: user!.id,
+      ...(isChange ? { placedLocation: undefined, placedAt: undefined, placedBy: undefined, placedByName: undefined } : {}),
     });
+    if (dept) toast.success(isChange ? `Department changed to ${dept}` : `Assigned to ${dept}`);
   };
 
   // Toggle inline panel
@@ -761,8 +781,8 @@ export default function GuestsPage() {
                         )}
                         {user.role === 'super-admin' && (
                           <>
-                            <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Mulaqat Type</th>
-                            <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Delegation</th>
+                            <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A] min-w-[140px]">Mulaqat Type</th>
+                            <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A] min-w-[160px]">Delegation</th>
                           </>
                         )}
                         <th className="text-right px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Actions</th>
@@ -861,7 +881,7 @@ export default function GuestsPage() {
                                     stopPropagation
                                   />
                                 </td>
-                                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                <td className="px-4 py-3 min-w-[160px]" onClick={(e) => e.stopPropagation()}>
                                   {(guest.mulaqatType === 'Delegation' || guest.mulaqatType === 'Both') ? (
                                     <CountryCombobox
                                       compact
@@ -870,7 +890,7 @@ export default function GuestsPage() {
                                       onChange={v => changeDelegationCountry(guest, v)}
                                     />
                                   ) : (
-                                    <span className="text-gray-300 text-xs">—</span>
+                                    <span className="text-gray-400 text-xs">—</span>
                                   )}
                                 </td>
                               </>

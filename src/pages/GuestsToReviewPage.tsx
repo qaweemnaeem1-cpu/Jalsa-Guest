@@ -26,6 +26,7 @@ import {
   Search, ChevronDown, LogOut,
   CheckCircle, AlertCircle, Eye, Pencil, ChevronLeft, ChevronRight, Building2, User,
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import { useDepartments } from '@/hooks/useDepartments';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
@@ -36,6 +37,7 @@ import type { Guest, GuestStatus, FamilyMemberStatus } from '@/types';
 import { DESK_NAV } from '@/lib/navItems';
 
 const PAGE_SIZE = 15;
+
 
 export default function GuestsToReviewPage() {
   const navigate = useNavigate();
@@ -140,27 +142,45 @@ export default function GuestsToReviewPage() {
     });
   };
 
-  const handleDeptAssignById = (guestId: string, dept: string) => {
+  const handleDeptAssignById = async (guestId: string, dept: string) => {
     const g = guests.find(x => x.id === guestId);
     if (!g) return;
+    const isChange = !!g.assignedDepartment && g.assignedDepartment !== dept;
+    const now = new Date().toISOString();
+    const update: Record<string, unknown> = {
+      assigned_department: dept,
+      assigned_department_at: now,
+      assigned_department_by: user.id,
+      assigned_department_by_name: user.name,
+      updated_at: now,
+    };
+    if (isChange) {
+      update.placed_location = null;
+      update.placed_at = null;
+      update.placed_by = null;
+      update.placed_by_name = null;
+    }
+    await supabase.from('guests').update(update).eq('id', guestId);
     updateGuest(guestId, {
       assignedDepartment: dept,
-      assignedDepartmentAt: new Date().toISOString(),
+      assignedDepartmentAt: now,
       assignedDepartmentBy: user.id,
       assignedDepartmentByName: user.name,
+      ...(isChange ? { placedLocation: undefined, placedAt: undefined, placedBy: undefined, placedByName: undefined } : {}),
     });
     addEntry({
       guestId: g.id,
       guestName: g.fullName,
       guestReference: g.referenceNumber,
       type: 'assignment',
-      action: 'Department assigned',
-      details: `Assigned to ${dept}`,
+      action: isChange ? 'Department changed' : 'Department assigned',
+      details: isChange ? `Changed from ${g.assignedDepartment} to ${dept}` : `Assigned to ${dept}`,
+      oldValue: isChange ? g.assignedDepartment : undefined,
       newValue: dept,
       createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
-      createdAt: new Date().toISOString(),
+      createdAt: now,
     });
-    toast.success(`${g.fullName} assigned to ${dept}`);
+    toast.success(isChange ? `Department changed to ${dept}` : `${g.fullName} assigned to ${dept}`);
   };
 
   const handleDeptAssign = () => {
@@ -525,20 +545,20 @@ export default function GuestsToReviewPage() {
                   </div>
                 ) : (
                   <>
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
+                    <div className="w-full overflow-x-auto rounded-lg">
+                      <table className="w-full table-auto">
                         <thead className="bg-[#F9F8F6]">
                           <tr>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Designation</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Type</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Status</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Department</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat Type</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Delegation</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-32">Reference</th>
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-36">Name</th>
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-28">Country</th>
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-36">Designation</th>
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Type</th>
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-32">Status</th>
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-36">Department</th>
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-32">Mulaqat</th>
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-36">Delegation</th>
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-32">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#E8E3DB]">
@@ -562,51 +582,50 @@ export default function GuestsToReviewPage() {
                                   className={`hover:bg-[#FAFAFA] ${isFamily ? 'cursor-pointer select-none' : ''}`}
                                   onClick={isFamily ? () => toggleRow(g.id) : undefined}
                                 >
-                                  <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A] w-24">{g.referenceNumber}</td>
-                                  <td className="px-4 py-3">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="font-medium text-[#1A1A1A]">{g.fullName}</span>
+                                  <td className="px-3 py-3">
+                                    <span className="font-mono text-sm text-[#4A4A4A]">{g.referenceNumber}</span>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-medium text-sm text-[#1A1A1A]">{g.fullName}</span>
                                       {isFamily && (
                                         isExpanded
-                                          ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                                          : <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                          ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                                          : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
                                       )}
                                       {(g.resubmitCount ?? 0) > 0 && (
-                                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">
-                                          Re-submitted
+                                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs px-2 py-0.5 shrink-0">
+                                          R
                                         </Badge>
                                       )}
                                     </div>
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.country}</td>
-                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.designation || '—'}</td>
+                                  <td className="px-3 py-3">
+                                    <span className="text-sm text-[#4A4A4A]">{g.country}</span>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <span className="text-sm text-[#4A4A4A]">{g.designation || '—'}</span>
+                                  </td>
 
-                                  <td className="px-4 py-3 w-20">
-                                    <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200 capitalize">
+                                  <td className="px-3 py-3">
+                                    <Badge variant="outline" className="text-xs px-2 py-0.5 bg-gray-50 text-gray-700 border-gray-200 capitalize whitespace-nowrap">
                                       {g.guestType}{isFamily && ` (${g.familyMembers.length + 1})`}
                                     </Badge>
                                   </td>
-                                  <td className="px-4 py-3">
+                                  <td className="px-3 py-3">
                                     <FamilyStatusCell guest={g} />
                                   </td>
-                                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                                    {g.assignedDepartment ? (
-                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getDeptBadgeCls(g.assignedDepartment)}`}>
-                                        {g.assignedDepartment}
-                                      </span>
-                                    ) : (
-                                      <DepartmentSelect
-                                        value=""
-                                        onValueChange={v => { if (v) setDeptAssign({ guestId: g.id, dept: v }); }}
-                                        placeholder="Select..."
-                                        stopPropagation
-                                        className="text-xs min-w-[130px]"
-                                      />
-                                    )}
+                                  <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                                    <DepartmentSelect
+                                      value={g.assignedDepartment ?? ''}
+                                      onValueChange={v => { if (v) handleDeptAssignById(g.id, v); }}
+                                      placeholder="Select..."
+                                      stopPropagation
+                                    />
                                   </td>
 
                                   {/* Mulaqat Type */}
-                                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                                  <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                                     <MulaqatTypeSelect
                                       value={g.mulaqatType ?? 'No'}
                                       onValueChange={v => setMulaqatType(g, v)}
@@ -615,7 +634,7 @@ export default function GuestsToReviewPage() {
                                   </td>
 
                                   {/* Delegation */}
-                                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                                  <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                                     {(g.mulaqatType === 'Delegation' || g.mulaqatType === 'Both') ? (
                                       <CountryCombobox
                                         compact
@@ -624,45 +643,25 @@ export default function GuestsToReviewPage() {
                                         onChange={v => changeDelegationCountry(g, v)}
                                       />
                                     ) : (
-                                      <span className="text-gray-300 text-xs">—</span>
+                                      <span className="text-sm text-gray-400">—</span>
                                     )}
                                   </td>
 
-                                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                                    <div className="flex items-center gap-1.5">
-                                      <button
-                                        onClick={() => setViewGuestId(g.id)}
-                                        title="View details"
-                                        className="p-1.5 rounded-md text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors"
-                                      >
+                                  <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                                    <div className="flex items-center gap-1">
+                                      <button onClick={() => setViewGuestId(g.id)} title="View details" className="p-1.5 rounded text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors">
                                         <Eye className="w-4 h-4" />
                                       </button>
-                                      <button
-                                        onClick={() => setEditGuestId(g.id)}
-                                        title="Edit guest"
-                                        className="p-1.5 rounded-md text-green-600 hover:bg-green-50 transition-colors"
-                                      >
+                                      <button onClick={() => setEditGuestId(g.id)} title="Edit guest" className="p-1.5 rounded text-green-600 hover:bg-green-50 transition-colors">
                                         <Pencil className="w-4 h-4" />
                                       </button>
-                                      <button
-                                        onClick={() => handleApproveClick(g)}
-                                        title={isFamily ? 'Approve all members' : 'Approve'}
-                                        className="p-1.5 rounded-md text-green-600 hover:bg-green-50 transition-colors"
-                                      >
+                                      <button onClick={() => handleApproveClick(g)} title={isFamily ? 'Approve all members' : 'Approve'} className="p-1.5 rounded text-green-600 hover:bg-green-50 transition-colors">
                                         <CheckCircle className="w-4 h-4" />
                                       </button>
-                                      <button
-                                        onClick={() => setCorrectionDialog({ open: true, guest: g, reason: '' })}
-                                        title="Needs Correction"
-                                        className="p-1.5 rounded-md text-orange-500 hover:bg-orange-50 transition-colors"
-                                      >
+                                      <button onClick={() => setCorrectionDialog({ open: true, guest: g, reason: '' })} title="Needs Correction" className="p-1.5 rounded text-orange-500 hover:bg-orange-50 transition-colors">
                                         <AlertCircle className="w-4 h-4" />
                                       </button>
-                                      <button
-                                        onClick={() => setRejectDialog({ open: true, guest: g, reason: '' })}
-                                        title="Reject"
-                                        className="p-1.5 rounded-md text-red-500 hover:bg-red-50 transition-colors"
-                                      >
+                                      <button onClick={() => setRejectDialog({ open: true, guest: g, reason: '' })} title="Reject" className="p-1.5 rounded text-red-500 hover:bg-red-50 transition-colors">
                                         <XCircle className="w-4 h-4" />
                                       </button>
                                     </div>
