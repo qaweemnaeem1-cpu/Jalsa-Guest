@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Search, X } from 'lucide-react';
 import { ALL_COUNTRIES } from '@/lib/constants';
 
 interface Props {
-  value: string;           // country name (e.g. "Pakistan")
+  value: string;
   onChange: (name: string) => void;
   placeholder?: string;
   disabled?: boolean;
@@ -25,12 +26,32 @@ export function CountryCombobox({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Dropdown position state (for portal)
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
+
+  // Recompute position when opening
+  useEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setCoords({
+      top: rect.bottom + window.scrollY + 4,
+      left: rect.left + window.scrollX,
+      width: Math.max(rect.width, 220),
+    });
+  }, [open]);
+
+  // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        triggerRef.current && !triggerRef.current.contains(target) &&
+        dropdownRef.current && !dropdownRef.current.contains(target)
+      ) {
         setOpen(false);
         setSearch('');
       }
@@ -51,9 +72,61 @@ export function CountryCombobox({
     ? 'bg-[#F5F0E8] border-[#D4CFC7] text-[#4A4A4A] cursor-not-allowed'
     : 'bg-white border-gray-200 cursor-pointer hover:border-[#2D5A45] focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] transition-colors';
 
+  const dropdown = open ? createPortal(
+    <div
+      ref={dropdownRef}
+      style={{ position: 'absolute', top: coords.top, left: coords.left, width: coords.width, zIndex: 9999 }}
+      className="bg-white border border-gray-200 rounded-lg shadow-lg"
+    >
+      {/* Search */}
+      <div className="p-2 border-b border-gray-100">
+        <div className="flex items-center gap-2 px-2 py-1.5 border border-gray-200 rounded-md">
+          <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+          <input
+            autoFocus
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search country..."
+            className="flex-1 text-sm outline-none bg-transparent text-[#1A1A1A] placeholder:text-gray-400"
+          />
+        </div>
+      </div>
+
+      {/* Options */}
+      <div className="max-h-60 overflow-y-auto py-1">
+        {filtered.length === 0 ? (
+          <p className="px-3 py-2 text-sm text-gray-400">No countries found</p>
+        ) : (
+          filtered.map(c => {
+            const isSelected = value === c.name;
+            return (
+              <button
+                key={c.code}
+                type="button"
+                onClick={() => { onChange(c.name); setOpen(false); setSearch(''); }}
+                className={[
+                  'w-[calc(100%-8px)] mx-1 my-0.5 flex items-center justify-between text-left px-3 py-2 text-sm rounded-md cursor-pointer transition-colors',
+                  isSelected
+                    ? 'bg-[#D6E4D9] text-[#2D5A45] font-medium'
+                    : 'text-gray-700 hover:bg-[#D6E4D9] hover:text-[#2D5A45]',
+                ].join(' ')}
+              >
+                <span>{c.name}</span>
+                {isSelected && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>,
+    document.body
+  ) : null;
+
   return (
-    <div ref={ref} className={`relative ${className ?? ''}`}>
+    <div className={`relative ${className ?? ''}`}>
       <div
+        ref={triggerRef}
         tabIndex={disabled ? -1 : 0}
         role="combobox"
         aria-expanded={open}
@@ -82,52 +155,7 @@ export function CountryCombobox({
         </div>
       </div>
 
-      {open && (
-        <div className="absolute z-50 mt-1 w-full min-w-[200px] bg-white border border-gray-200 rounded-lg shadow-lg">
-          {/* Search */}
-          <div className="p-2 border-b border-gray-100">
-            <div className="flex items-center gap-2 px-2 py-1.5 border border-gray-200 rounded-md">
-              <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-              <input
-                autoFocus
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search country..."
-                className="flex-1 text-sm outline-none bg-transparent text-[#1A1A1A] placeholder:text-gray-400"
-              />
-            </div>
-          </div>
-
-          {/* Options */}
-          <div className="max-h-60 overflow-y-auto py-1">
-            {filtered.length === 0 ? (
-              <p className="px-3 py-2 text-sm text-gray-400">No countries found</p>
-            ) : (
-              filtered.map(c => {
-                const isSelected = value === c.name;
-                return (
-                  <button
-                    key={c.code}
-                    type="button"
-                    onClick={() => { onChange(c.name); setOpen(false); setSearch(''); }}
-                    className={[
-                      'w-full flex items-center justify-between text-left px-3 py-2 text-sm rounded-md mx-1 my-0.5 cursor-pointer transition-colors',
-                      'w-[calc(100%-8px)]',
-                      isSelected
-                        ? 'bg-[#D6E4D9] text-[#2D5A45] font-medium'
-                        : 'text-gray-700 hover:bg-[#D6E4D9] hover:text-[#2D5A45]',
-                    ].join(' ')}
-                  >
-                    <span>{c.name}</span>
-                    {isSelected && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
+      {dropdown}
     </div>
   );
 }
