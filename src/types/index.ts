@@ -131,6 +131,7 @@ export interface Guest {
   remarks?: GuestRemark[];
   statusHistory?: GuestStatusEvent[];
   mulaqat?: boolean;
+  mulaqatType?: 'No' | 'Delegation' | 'Daftari' | 'Both';
   delegationId?: string | null;
 }
 

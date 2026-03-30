@@ -124,6 +124,7 @@ function rowToGuest(row: any): Guest {
     remarks: Array.isArray(row.remarks) ? row.remarks : [],
     statusHistory: Array.isArray(row.status_history) ? row.status_history : [],
     mulaqat: row.mulaqat ?? false,
+    mulaqatType: row.mulaqat_type ?? 'No',
     delegationId: row.delegation_id ?? null,
   };
 }
@@ -178,6 +179,7 @@ function updatesToDbRow(updates: Partial<Guest>): Record<string, any> {
     placedBy:           'placed_by',
     remarks:            'remarks',
     mulaqat:            'mulaqat',
+    mulaqatType:        'mulaqat_type',
     delegationId:       'delegation_id',
   };
 

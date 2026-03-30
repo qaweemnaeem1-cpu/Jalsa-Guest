@@ -105,5 +105,46 @@ export function useDelegations() {
     toast.success(`Moved to ${newCountry} delegation`);
   }, [findOrCreate, updateGuest]);
 
-  return { delegations, getDelegationCountry, enableMulaqat, disableMulaqat, changeDelegationCountry };
+  /** Set mulaqat type and handle delegation membership accordingly. */
+  const setMulaqatType = useCallback(async (guest: Guest, type: 'No' | 'Delegation' | 'Daftari' | 'Both') => {
+    const removeFromDelegation = async () => {
+      if (guest.delegationId) {
+        await supabase
+          .from('delegation_members')
+          .delete()
+          .eq('delegation_id', guest.delegationId)
+          .eq('guest_id', guest.id);
+      }
+    };
+
+    const addToDelegation = async () => {
+      const delegation = await findOrCreate(guest.country);
+      if (!delegation) return null;
+      await supabase.from('delegation_members').upsert(
+        { delegation_id: delegation.id, guest_id: guest.id, guest_name: guest.fullName, is_head: false },
+        { onConflict: 'guest_id' },
+      );
+      return delegation;
+    };
+
+    if (type === 'No') {
+      await removeFromDelegation();
+      await updateGuest(guest.id, { mulaqat: false, mulaqatType: 'No', delegationId: null });
+      toast.success('Removed from Mulaqat');
+    } else if (type === 'Delegation') {
+      const delegation = await addToDelegation();
+      await updateGuest(guest.id, { mulaqat: true, mulaqatType: 'Delegation', delegationId: delegation?.id ?? guest.delegationId });
+      toast.success('Added to Delegation');
+    } else if (type === 'Daftari') {
+      await removeFromDelegation();
+      await updateGuest(guest.id, { mulaqat: true, mulaqatType: 'Daftari', delegationId: null });
+      toast.success('Set as Daftari');
+    } else if (type === 'Both') {
+      const delegation = await addToDelegation();
+      await updateGuest(guest.id, { mulaqat: true, mulaqatType: 'Both', delegationId: delegation?.id ?? guest.delegationId });
+      toast.success('Added to Delegation and Daftari');
+    }
+  }, [findOrCreate, updateGuest]);
+
+  return { delegations, getDelegationCountry, enableMulaqat, disableMulaqat, changeDelegationCountry, setMulaqatType };
 }

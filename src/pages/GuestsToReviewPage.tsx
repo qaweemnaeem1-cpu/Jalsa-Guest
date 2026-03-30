@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { DepartmentSelect } from '@/components/DepartmentSelect';
+import { MulaqatTypeSelect } from '@/components/MulaqatTypeSelect';
 import { useDelegations } from '@/hooks/useDelegations';
 import { CountryCombobox } from '@/components/CountryCombobox';
 import { toast } from 'sonner';
@@ -42,7 +43,7 @@ export default function GuestsToReviewPage() {
   const { guests, updateGuest, updateFamilyMemberStatus, assignFamilyMemberDepartment } = useGuests();
   const { addEntry, addComment } = useAuditTrail();
   const { getDeptBadgeCls } = useDepartments();
-  const { getDelegationCountry, enableMulaqat, disableMulaqat, changeDelegationCountry } = useDelegations();
+  const { getDelegationCountry, changeDelegationCountry, setMulaqatType } = useDelegations();
 
   const [search, setSearch] = useState('');
   const [countryFilter, setCountryFilter] = useState('all');
@@ -475,7 +476,7 @@ export default function GuestsToReviewPage() {
             </div>
           </header>
 
-          <div className="p-6 max-w-7xl mx-auto space-y-5">
+          <div className="p-4 space-y-5">
             {/* Search + country filter */}
             <Card className="shadow-sm">
               <CardContent className="p-4 flex flex-wrap items-center gap-3">
@@ -531,10 +532,11 @@ export default function GuestsToReviewPage() {
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Designation</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Type</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Status</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Department</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat Type</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Delegation</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
                           </tr>
@@ -560,7 +562,7 @@ export default function GuestsToReviewPage() {
                                   className={`hover:bg-[#FAFAFA] ${isFamily ? 'cursor-pointer select-none' : ''}`}
                                   onClick={isFamily ? () => toggleRow(g.id) : undefined}
                                 >
-                                  <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">{g.referenceNumber}</td>
+                                  <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A] w-24">{g.referenceNumber}</td>
                                   <td className="px-4 py-3">
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <span className="font-medium text-[#1A1A1A]">{g.fullName}</span>
@@ -577,8 +579,9 @@ export default function GuestsToReviewPage() {
                                     </div>
                                   </td>
                                   <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.country}</td>
+                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.designation || '—'}</td>
 
-                                  <td className="px-4 py-3">
+                                  <td className="px-4 py-3 w-20">
                                     <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200 capitalize">
                                       {g.guestType}{isFamily && ` (${g.familyMembers.length + 1})`}
                                     </Badge>
@@ -602,24 +605,18 @@ export default function GuestsToReviewPage() {
                                     )}
                                   </td>
 
-                                  {/* Mulaqat toggle */}
+                                  {/* Mulaqat Type */}
                                   <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                                    <button
-                                      onClick={() => g.mulaqat ? disableMulaqat(g) : enableMulaqat(g)}
-                                      title={g.mulaqat ? 'Remove from Mulaqat' : 'Add to Mulaqat'}
-                                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ${
-                                        g.mulaqat ? 'bg-green-500' : 'bg-gray-300'
-                                      }`}
-                                    >
-                                      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                                        g.mulaqat ? 'translate-x-4' : 'translate-x-0.5'
-                                      }`} />
-                                    </button>
+                                    <MulaqatTypeSelect
+                                      value={g.mulaqatType ?? 'No'}
+                                      onValueChange={v => setMulaqatType(g, v)}
+                                      stopPropagation
+                                    />
                                   </td>
 
                                   {/* Delegation */}
                                   <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                                    {g.mulaqat ? (
+                                    {(g.mulaqatType === 'Delegation' || g.mulaqatType === 'Both') ? (
                                       <CountryCombobox
                                         compact
                                         hideClear
@@ -675,7 +672,7 @@ export default function GuestsToReviewPage() {
                                 {/* ── Family member drawer ── */}
                                 {isFamily && isExpanded && (
                                   <tr>
-                                    <td colSpan={9} className="p-0 bg-[#F9F8F6] border-b border-[#E8E3DB]">
+                                    <td colSpan={10} className="p-0 bg-[#F9F8F6] border-b border-[#E8E3DB]">
                                       <div className="px-6 py-4 space-y-2">
                                         <p className="text-[10px] font-semibold text-[#4A4A4A] uppercase tracking-widest mb-3">
                                           Family Members · {drawerMembers.length} total

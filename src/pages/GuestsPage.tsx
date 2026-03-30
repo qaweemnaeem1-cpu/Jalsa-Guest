@@ -58,6 +58,7 @@ import { useMemo, useRef, useEffect } from 'react';
 import { useRooms } from '@/hooks/useRooms';
 import { GUEST_STATUS_LABELS, ROLE_LABELS } from '@/lib/constants';
 import { CountryCombobox } from '@/components/CountryCombobox';
+import { MulaqatTypeSelect } from '@/components/MulaqatTypeSelect';
 import { useDelegations } from '@/hooks/useDelegations';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { FamilyStatusCell } from '@/components/FamilyStatusCell';
@@ -254,7 +255,7 @@ export default function GuestsPage() {
   const { guests, updateGuest, deleteGuest, addRemark, getMyWaitingGuests, getMySubmittedGuests, getNeedsCorrectionCount } = useGuests();
   const { users } = useUsers();
   const { rooms, bedAssignments } = useRooms();
-  const { getDelegationCountry, enableMulaqat, disableMulaqat, changeDelegationCountry } = useDelegations();
+  const { getDelegationCountry, changeDelegationCountry, setMulaqatType } = useDelegations();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [colsOpen, setColsOpen] = useState(false);
@@ -760,7 +761,7 @@ export default function GuestsPage() {
                         )}
                         {user.role === 'super-admin' && (
                           <>
-                            <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Mulaqat</th>
+                            <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Mulaqat Type</th>
                             <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Delegation</th>
                           </>
                         )}
@@ -850,24 +851,18 @@ export default function GuestsPage() {
                               <td className="px-4 py-3 text-[#4A4A4A] whitespace-nowrap">{formatDate(guest.submittedAt)}</td>
                             )}
 
-                            {/* Mulaqat + Delegation — super-admin only */}
+                            {/* Mulaqat Type + Delegation — super-admin only */}
                             {user.role === 'super-admin' && (
                               <>
                                 <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                                  <button
-                                    onClick={() => guest.mulaqat ? disableMulaqat(guest) : enableMulaqat(guest)}
-                                    title={guest.mulaqat ? 'Remove from Mulaqat' : 'Add to Mulaqat'}
-                                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ${
-                                      guest.mulaqat ? 'bg-green-500' : 'bg-gray-300'
-                                    }`}
-                                  >
-                                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                                      guest.mulaqat ? 'translate-x-4' : 'translate-x-0.5'
-                                    }`} />
-                                  </button>
+                                  <MulaqatTypeSelect
+                                    value={guest.mulaqatType ?? 'No'}
+                                    onValueChange={v => setMulaqatType(guest, v)}
+                                    stopPropagation
+                                  />
                                 </td>
                                 <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                                  {guest.mulaqat ? (
+                                  {(guest.mulaqatType === 'Delegation' || guest.mulaqatType === 'Both') ? (
                                     <CountryCombobox
                                       compact
                                       hideClear

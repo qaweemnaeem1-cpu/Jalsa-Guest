@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
 import { CountryCombobox } from '@/components/CountryCombobox';
+import { MulaqatTypeSelect } from '@/components/MulaqatTypeSelect';
 import { useDelegations } from '@/hooks/useDelegations';
 import type { Guest } from '@/types';
 import { DESK_NAV } from '@/lib/navItems';
@@ -27,7 +28,7 @@ export default function ApprovedGuestsPage() {
   const { guests, assignFamilyMemberDepartment, updateGuest } = useGuests();
   const { addEntry } = useAuditTrail();
   const { getDeptBadgeCls } = useDepartments();
-  const { getDelegationCountry, enableMulaqat, disableMulaqat, changeDelegationCountry } = useDelegations();
+  const { getDelegationCountry, changeDelegationCountry, setMulaqatType } = useDelegations();
 
   const [search, setSearch] = useState('');
   const [countryFilter, setCountryFilter] = useState('all');
@@ -204,7 +205,7 @@ export default function ApprovedGuestsPage() {
             </div>
           </header>
 
-          <div className="p-6 max-w-7xl mx-auto space-y-5">
+          <div className="p-4 space-y-5">
             {/* Stats summary bar */}
             <div className="grid grid-cols-3 gap-4">
               <div className="bg-white border border-[#E8E3DB] rounded-xl p-4 flex items-center gap-3">
@@ -293,7 +294,7 @@ export default function ApprovedGuestsPage() {
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Status</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Approved Date</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat Type</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Delegation</th>
                         </tr>
                       </thead>
@@ -348,24 +349,18 @@ export default function ApprovedGuestsPage() {
                                   </button>
                                 </td>
 
-                                {/* Mulaqat toggle */}
+                                {/* Mulaqat Type */}
                                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                                  <button
-                                    onClick={() => g.mulaqat ? disableMulaqat(g) : enableMulaqat(g)}
-                                    title={g.mulaqat ? 'Remove from Mulaqat' : 'Add to Mulaqat'}
-                                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ${
-                                      g.mulaqat ? 'bg-green-500' : 'bg-gray-300'
-                                    }`}
-                                  >
-                                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                                      g.mulaqat ? 'translate-x-4' : 'translate-x-0.5'
-                                    }`} />
-                                  </button>
+                                  <MulaqatTypeSelect
+                                    value={g.mulaqatType ?? 'No'}
+                                    onValueChange={v => setMulaqatType(g, v)}
+                                    stopPropagation
+                                  />
                                 </td>
 
                                 {/* Delegation */}
                                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                                  {g.mulaqat ? (
+                                  {(g.mulaqatType === 'Delegation' || g.mulaqatType === 'Both') ? (
                                     <CountryCombobox
                                       compact
                                       hideClear

@@ -168,7 +168,7 @@ export default function DeskRejectedPage() {
             </div>
           </header>
 
-          <div className="p-6 max-w-7xl mx-auto space-y-5">
+          <div className="p-4 space-y-5">
             {/* Search */}
             <Card className="shadow-sm">
               <CardContent className="p-4">
