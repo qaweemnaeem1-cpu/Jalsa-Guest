@@ -80,10 +80,7 @@ interface DaftariScheduleRow {
   dayLabel: string | null;
   slotId: string;
   slotName: string;
-  guestId: string | null;
-  guestName: string | null;
-  guestCountry: string | null;
-  guestDesignation: string | null;
+  slotGuests: { id: string; name: string; country: string | null; designation: string | null }[];
   assignedByName: string | null;
   isFirstSlotOfDay: boolean;
   daySlotCount: number;
@@ -150,6 +147,17 @@ export default function DeskMulaqatPage() {
 
   // ── Daftari Section A state ───────────────────────────────────────────────────
   const [daftariSearch, setDaftariSearch] = useState('');
+  const [guestSlotIds, setGuestSlotIds] = useState<Record<string, string>>({});
+
+  // ── Daftari flat-table state ──────────────────────────────────────────────
+  const [daftariSelectedGuests, setDaftariSelectedGuests] = useState<Set<string>>(new Set());
+  const [daftariAssignDialog, setDaftariAssignDialog] = useState<'assign' | 'join' | null>(null);
+  const [daftariBulkDay, setDaftariBulkDay] = useState('');
+  const [daftariBulkSlot, setDaftariBulkSlot] = useState('');
+  const [daftariChangeSlotDialog, setDaftariChangeSlotDialog] = useState<{ guestId: string; guestName: string; currentSlotId: string | null } | null>(null);
+  const [daftariChangeSlotDay, setDaftariChangeSlotDay] = useState('');
+  const [daftariChangeSlotSlot, setDaftariChangeSlotSlot] = useState('');
+  const [daftariRemoveDialog, setDaftariRemoveDialog] = useState<{ guest: Guest } | null>(null);
 
   // ── UI state ──────────────────────────────────────────────────────────────────
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -180,7 +188,12 @@ export default function DeskMulaqatPage() {
     if (dayData) setDays(dayData as MulaqatDay[]);
     if (slotData) setSlots(slotData as MulaqatSlot[]);
     if (dDayData) setDaftariDays(dDayData as DaftariDay[]);
-    if (dSlotData) setDaftariSlots(dSlotData as DaftariSlot[]);
+    if (dSlotData) {
+      setDaftariSlots(dSlotData as DaftariSlot[]);
+      const slotMap: Record<string, string> = {};
+      (dSlotData as DaftariSlot[]).forEach(s => { if (s.guest_id) slotMap[s.guest_id] = s.id; });
+      setGuestSlotIds(slotMap);
+    }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -229,11 +242,30 @@ export default function DeskMulaqatPage() {
   const getDaftariSlotsForDay = (dayId: string) =>
     daftariSlots.filter(s => s.day_id === dayId).sort((a, b) => a.name.localeCompare(b.name));
 
-  const getAssignedDaftariSlot = (guestId: string): DaftariSlot | null =>
-    daftariSlots.find(s => s.guest_id === guestId) ?? null;
+  const getAssignedDaftariSlot = (guestId: string): DaftariSlot | null => {
+    const slotId = guestSlotIds[guestId];
+    return slotId ? (daftariSlots.find(s => s.id === slotId) ?? null) : null;
+  };
 
   const getAssignedDaftariDay = (guestId: string): DaftariDay | null => {
     const slot = getAssignedDaftariSlot(guestId);
+    if (!slot?.day_id) return null;
+    return daftariDays.find(d => d.id === slot.day_id) ?? null;
+  };
+
+  const getDaftariGuestsForCountry = (country: string): Guest[] =>
+    guests.filter(g => g.country === country && (g.mulaqatType === 'Daftari' || g.mulaqatType === 'Both'));
+
+  const getCountryDaftariSlot = (country: string): DaftariSlot | null => {
+    const cGuests = getDaftariGuestsForCountry(country);
+    if (cGuests.length === 0) return null;
+    const slotIds = [...new Set(cGuests.map(g => guestSlotIds[g.id]).filter((id): id is string => !!id))];
+    if (slotIds.length === 1) return daftariSlots.find(s => s.id === slotIds[0]) ?? null;
+    return null;
+  };
+
+  const getCountryDaftariDay = (country: string): DaftariDay | null => {
+    const slot = getCountryDaftariSlot(country);
     if (!slot?.day_id) return null;
     return daftariDays.find(d => d.id === slot.day_id) ?? null;
   };
@@ -377,27 +409,105 @@ export default function DeskMulaqatPage() {
         ? { ...s, guest_id: guest.id, guest_name: guest.fullName, assigned_by: user.id, assigned_by_name: user.name }
         : s
     ));
+    setGuestSlotIds(prev => ({ ...prev, [guest.id]: slotId }));
     toast.success(`${guest.fullName} assigned to ${slot.name}`);
   };
 
   const handleUnassignDaftariSlot = async (guest: Guest) => {
-    const currentSlot = daftariSlots.find(s => s.guest_id === guest.id);
-    if (currentSlot) {
+    const slotId = guestSlotIds[guest.id];
+    if (slotId) {
+      const otherGuestIds = Object.entries(guestSlotIds)
+        .filter(([gId, sId]) => gId !== guest.id && sId === slotId)
+        .map(([gId]) => gId);
+      const newGuestId = otherGuestIds.length > 0 ? otherGuestIds[otherGuestIds.length - 1] : null;
       await supabase.from('daftari_slots')
-        .update({ guest_id: null, guest_name: null, assigned_by: null, assigned_by_name: null })
-        .eq('id', currentSlot.id);
+        .update({ guest_id: newGuestId, guest_name: null, assigned_by: null, assigned_by_name: null })
+        .eq('id', slotId);
       setDaftariSlots(prev => prev.map(s =>
-        s.id === currentSlot.id
-          ? { ...s, guest_id: null, guest_name: null, assigned_by: null, assigned_by_name: null }
-          : s
+        s.id === slotId ? { ...s, guest_id: newGuestId } : s
       ));
     }
     await supabase.from('guests').update({ daftari_slot_id: null }).eq('id', guest.id);
+    setGuestSlotIds(prev => {
+      const next = { ...prev };
+      delete next[guest.id];
+      return next;
+    });
   };
 
   const handleRemoveFromDaftari = async (guest: Guest) => {
     await handleUnassignDaftariSlot(guest);
     await setMulaqatType(guest, guest.mulaqatType === 'Both' ? 'Delegation' : 'No');
+  };
+
+  // ── Daftari bulk/change/remove handlers ──────────────────────────────────────
+
+  const handleDaftariBulkAssign = async () => {
+    if (!daftariBulkSlot || daftariSelectedGuestList.length === 0) return;
+    const slot = daftariSlots.find(s => s.id === daftariBulkSlot);
+    const guestList = daftariSelectedGuestList;
+
+    await Promise.all(guestList.map(g =>
+      supabase.from('guests').update({ daftari_slot_id: daftariBulkSlot }).eq('id', g.id)
+    ));
+    await supabase.from('daftari_slots').update({
+      guest_id: guestList[guestList.length - 1].id,
+      guest_name: guestList[guestList.length - 1].fullName,
+      assigned_by: user.id,
+      assigned_by_name: user.name,
+    }).eq('id', daftariBulkSlot);
+
+    setGuestSlotIds(prev => {
+      const next = { ...prev };
+      for (const g of guestList) next[g.id] = daftariBulkSlot;
+      return next;
+    });
+    setDaftariSlots(prev => prev.map(s =>
+      s.id === daftariBulkSlot
+        ? { ...s, guest_id: guestList[guestList.length - 1].id, guest_name: guestList[guestList.length - 1].fullName, assigned_by: user.id, assigned_by_name: user.name }
+        : s
+    ));
+
+    toast.success(`${guestList.length} guest${guestList.length !== 1 ? 's' : ''} assigned to ${slot?.name ?? 'slot'}`);
+    setDaftariAssignDialog(null);
+    setDaftariBulkDay('');
+    setDaftariBulkSlot('');
+    setDaftariSelectedGuests(new Set());
+  };
+
+  const handleDaftariOpenChangeSlot = (guest: Guest) => {
+    const currentSlotId = guestSlotIds[guest.id] ?? null;
+    const dayId = currentSlotId ? (daftariSlots.find(s => s.id === currentSlotId)?.day_id ?? '') : '';
+    setDaftariChangeSlotDay(dayId);
+    setDaftariChangeSlotSlot(currentSlotId ?? '');
+    setDaftariChangeSlotDialog({ guestId: guest.id, guestName: guest.fullName, currentSlotId });
+  };
+
+  const handleDaftariConfirmChangeSlot = async () => {
+    if (!daftariChangeSlotDialog || !daftariChangeSlotSlot) return;
+    const slot = daftariSlots.find(s => s.id === daftariChangeSlotSlot);
+    const guest = guests.find(g => g.id === daftariChangeSlotDialog.guestId);
+    if (!guest) return;
+
+    await supabase.from('guests').update({ daftari_slot_id: daftariChangeSlotSlot }).eq('id', guest.id);
+    await supabase.from('daftari_slots').update({
+      guest_id: guest.id,
+      guest_name: guest.fullName,
+      assigned_by: user.id,
+      assigned_by_name: user.name,
+    }).eq('id', daftariChangeSlotSlot);
+
+    setGuestSlotIds(prev => ({ ...prev, [guest.id]: daftariChangeSlotSlot }));
+    setDaftariSlots(prev => prev.map(s =>
+      s.id === daftariChangeSlotSlot
+        ? { ...s, guest_id: guest.id, guest_name: guest.fullName, assigned_by: user.id, assigned_by_name: user.name }
+        : s
+    ));
+
+    toast.success(`${guest.fullName} assigned to ${slot?.name ?? 'slot'}`);
+    setDaftariChangeSlotDialog(null);
+    setDaftariChangeSlotDay('');
+    setDaftariChangeSlotSlot('');
   };
 
   // ── Grouped slot selects ──────────────────────────────────────────────────────
@@ -431,32 +541,6 @@ export default function DeskMulaqatPage() {
     </select>
   );
 
-  const DaftariSlotSelect = ({ guestId, onChange }: { guestId: string; onChange: (slotId: string) => void }) => {
-    const sortedDDays = [...daftariDays].sort((a, b) => a.date.localeCompare(b.date));
-    return (
-      <select
-        defaultValue=""
-        onChange={e => { if (e.target.value) onChange(e.target.value); }}
-        className="w-full px-2 py-1.5 border border-[#D4CFC7] rounded-md text-xs bg-white focus:border-[#2D5A45] focus:outline-none"
-      >
-        <option value="">Assign slot...</option>
-        {sortedDDays.map(day => {
-          const daySlots = getDaftariSlotsForDay(day.id).filter(s => !s.guest_id || s.guest_id === guestId);
-          if (daySlots.length === 0) return null;
-          return (
-            <optgroup key={day.id} label={dayHeader(day)}>
-              {daySlots.map(s => (
-                <option key={s.id} value={s.id}>{s.name} ✓</option>
-              ))}
-            </optgroup>
-          );
-        })}
-        {daftariSlots.filter(s => !s.day_id && (!s.guest_id || s.guest_id === guestId)).map(s => (
-          <option key={s.id} value={s.id}>{s.name} ✓</option>
-        ))}
-      </select>
-    );
-  };
 
   // ── Delegation Section B: table rows ─────────────────────────────────────────
 
@@ -520,24 +604,59 @@ export default function DeskMulaqatPage() {
     [guests, assignedCountries]
   );
 
+  // ── Daftari flat-table computed values ───────────────────────────────────────
+
   const filteredDaftariGuests = useMemo(() => {
     const search = daftariSearch.toLowerCase();
-    const list = search
-      ? daftariGuests.filter(g =>
-          g.fullName.toLowerCase().includes(search) ||
-          g.country.toLowerCase().includes(search) ||
-          (g.designation ?? '').toLowerCase().includes(search)
-        )
-      : daftariGuests;
-
+    const list = daftariGuests.filter(g =>
+      !search ||
+      g.fullName.toLowerCase().includes(search) ||
+      g.country.toLowerCase().includes(search) ||
+      (g.designation ?? '').toLowerCase().includes(search)
+    );
     return [...list].sort((a, b) => {
-      const aSlot = daftariSlots.find(s => s.guest_id === a.id);
-      const bSlot = daftariSlots.find(s => s.guest_id === b.id);
-      if (aSlot && !bSlot) return 1;
-      if (!aSlot && bSlot) return -1;
-      return a.fullName.localeCompare(b.fullName);
+      const cmp = a.country.localeCompare(b.country);
+      return cmp !== 0 ? cmp : a.fullName.localeCompare(b.fullName);
     });
-  }, [daftariGuests, daftariSlots, daftariSearch]);
+  }, [daftariGuests, daftariSearch]);
+
+  const daftariAllGuestsSelected = filteredDaftariGuests.length > 0 && filteredDaftariGuests.every(g => daftariSelectedGuests.has(g.id));
+  const daftariSomeGuestsSelected = filteredDaftariGuests.some(g => daftariSelectedGuests.has(g.id)) && !daftariAllGuestsSelected;
+
+  const toggleDaftariGuest = (guestId: string) => {
+    setDaftariSelectedGuests(prev => {
+      const next = new Set(prev);
+      if (next.has(guestId)) next.delete(guestId); else next.add(guestId);
+      return next;
+    });
+  };
+
+  const toggleDaftariSelectAll = () => {
+    if (daftariAllGuestsSelected) setDaftariSelectedGuests(new Set());
+    else setDaftariSelectedGuests(new Set(filteredDaftariGuests.map(g => g.id)));
+  };
+
+  const daftariSelectedGuestList = filteredDaftariGuests.filter(g => daftariSelectedGuests.has(g.id));
+  const daftariSelectedGuestTotal = daftariSelectedGuestList.length;
+
+  // Sorted unique slot IDs used by daftari guests → group numbering
+  const daftariGroupsOrder = useMemo(() => {
+    const slotIds = new Set<string>();
+    assignedCountries.forEach(c => {
+      guests.filter(g => g.country === c && (g.mulaqatType === 'Daftari' || g.mulaqatType === 'Both'))
+        .forEach(g => { if (guestSlotIds[g.id]) slotIds.add(guestSlotIds[g.id]); });
+    });
+    return [...slotIds].sort();
+  }, [assignedCountries, guests, guestSlotIds]);
+
+  const DAFTARI_GROUP_COLORS = [
+    'bg-blue-50 text-blue-700 border-blue-200',
+    'bg-emerald-50 text-emerald-700 border-emerald-200',
+    'bg-purple-50 text-purple-700 border-purple-200',
+    'bg-orange-50 text-orange-700 border-orange-200',
+    'bg-pink-50 text-pink-700 border-pink-200',
+    'bg-cyan-50 text-cyan-700 border-cyan-200',
+  ];
 
   // ── Daftari Section B: schedule rows ─────────────────────────────────────────
 
@@ -548,23 +667,23 @@ export default function DeskMulaqatPage() {
       const daySlots = getDaftariSlotsForDay(day.id);
       for (let i = 0; i < daySlots.length; i++) {
         const slot = daySlots[i];
-        const assignedGuest = slot.guest_id
-          ? guests.find(g => g.id === slot.guest_id) ?? null
-          : null;
+        const slotGuestIds = Object.entries(guestSlotIds)
+          .filter(([, sId]) => sId === slot.id)
+          .map(([gId]) => gId);
+        const slotGuests = slotGuestIds.map(gId => {
+          const g = guests.find(guest => guest.id === gId);
+          return { id: gId, name: g?.fullName ?? '—', country: g?.country ?? null, designation: g?.designation ?? null };
+        });
         rows.push({
           dayId: day.id, dayDate: day.date, dayLabel: day.label,
           slotId: slot.id, slotName: slot.name,
-          guestId: slot.guest_id,
-          guestName: slot.guest_name,
-          guestCountry: assignedGuest?.country ?? null,
-          guestDesignation: assignedGuest?.designation ?? null,
+          slotGuests,
           assignedByName: slot.assigned_by_name,
           isFirstSlotOfDay: i === 0,
           daySlotCount: daySlots.length,
         });
       }
     }
-    // Recompute rowSpan
     const dayCount: Record<string, number> = {};
     rows.forEach(r => { dayCount[r.dayId] = (dayCount[r.dayId] ?? 0) + 1; });
     const dayFirst = new Set<string>();
@@ -574,10 +693,10 @@ export default function DeskMulaqatPage() {
       return { ...row, isFirstSlotOfDay: isFirst, daySlotCount: dayCount[row.dayId] ?? 1 };
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [daftariDays, daftariSlots, guests]);
+  }, [daftariDays, daftariSlots, guests, guestSlotIds]);
 
   const daftariTotalSlots = daftariScheduleRows.length;
-  const daftariAvailableSlots = daftariScheduleRows.filter(r => !r.guestId).length;
+  const daftariAvailableSlots = daftariScheduleRows.filter(r => r.slotGuests.length === 0).length;
 
   // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1105,23 +1224,44 @@ export default function DeskMulaqatPage() {
             ══════════════════════════════════════════════════════════════════ */}
             {activeTab === 'daftari' && (
               <>
-                {/* ── Section A: Daftari Guests ── */}
+                {/* ── Section A: My Daftari Guests (flat per-guest table) ── */}
                 <section>
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="mb-4 space-y-3">
                     <div className="flex items-center gap-2">
                       <Users className="w-5 h-5 text-[#2D5A45]" />
-                      <h2 className="text-lg font-semibold text-[#1A1A1A]">Daftari Mulaqat Guests</h2>
+                      <h2 className="text-lg font-semibold text-[#1A1A1A]">My Daftari Guests</h2>
                       <span className="text-sm text-[#4A4A4A]">({daftariGuests.length})</span>
                     </div>
                     {daftariGuests.length > 0 && (
-                      <div className="relative w-64">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
-                        <Input
-                          value={daftariSearch}
-                          onChange={e => setDaftariSearch(e.target.value)}
-                          placeholder="Search guests..."
-                          className="pl-9 border-[#D4CFC7] focus:border-[#2D5A45] h-9"
-                        />
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <button
+                          onClick={() => { setDaftariBulkDay(''); setDaftariBulkSlot(''); setDaftariAssignDialog('assign'); }}
+                          disabled={daftariSelectedGuestTotal === 0}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-[#2D5A45] text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#234839] transition-colors"
+                        >
+                          Assign Mulaqat
+                        </button>
+                        <button
+                          onClick={() => { setDaftariBulkDay(''); setDaftariBulkSlot(''); setDaftariAssignDialog('join'); }}
+                          disabled={daftariSelectedGuestTotal < 2}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-white text-[#2D5A45] border border-[#2D5A45] rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#F0F7F4] transition-colors"
+                        >
+                          Join &amp; Assign Mulaqat
+                        </button>
+                        {daftariSelectedGuestTotal > 0 && (
+                          <span className="text-sm text-gray-500">
+                            Selected: {daftariSelectedGuestTotal} guest{daftariSelectedGuestTotal !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                        <div className="ml-auto relative w-64">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
+                          <Input
+                            value={daftariSearch}
+                            onChange={e => setDaftariSearch(e.target.value)}
+                            placeholder="Search guests..."
+                            className="pl-9 border-[#D4CFC7] focus:border-[#2D5A45] h-9"
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1140,59 +1280,81 @@ export default function DeskMulaqatPage() {
                           <p className="text-sm text-[#4A4A4A]">No guests match your search.</p>
                         </div>
                       ) : (
-                        <div className="overflow-x-auto">
+                        <div className="w-full overflow-x-auto">
                           <table className="w-full text-sm border-collapse">
                             <thead>
                               <tr className="bg-[#F9F8F6]">
-                                {['#', 'Guest Name', 'Country', 'Designation', 'Assigned Day', 'Assigned Slot', 'Actions'].map(h => (
+                                <th className="px-4 py-3 w-10">
+                                  <Checkbox
+                                    checked={daftariAllGuestsSelected}
+                                    data-state={daftariSomeGuestsSelected ? 'indeterminate' : daftariAllGuestsSelected ? 'checked' : 'unchecked'}
+                                    onCheckedChange={toggleDaftariSelectAll}
+                                    className="border-gray-300 data-[state=checked]:bg-[#2D5A45] data-[state=checked]:border-[#2D5A45] data-[state=indeterminate]:bg-[#2D5A45] data-[state=indeterminate]:border-[#2D5A45]"
+                                  />
+                                </th>
+                                {['Country', 'Name', 'Designation', 'Departure Date', 'Departure Flight', 'Assigned Day', 'Assigned Slot', 'Group', 'Actions'].map(h => (
                                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider whitespace-nowrap">{h}</th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody>
-                              {filteredDaftariGuests.map((g, idx) => {
-                                const assignedSlot = getAssignedDaftariSlot(g.id);
-                                const assignedDay = getAssignedDaftariDay(g.id);
-                                const hasSlot = !!assignedSlot;
-                                const borderCls = hasSlot ? 'border-l-4 border-l-[#2D5A45]' : 'border-l-4 border-l-amber-400';
+                              {filteredDaftariGuests.map((g) => {
+                                const gSlotId = guestSlotIds[g.id];
+                                const assignedSlot = gSlotId ? daftariSlots.find(s => s.id === gSlotId) : null;
+                                const assignedDay = assignedSlot?.day_id ? daftariDays.find(d => d.id === assignedSlot.day_id) : null;
+                                const gGroupNum = gSlotId ? (daftariGroupsOrder.indexOf(gSlotId) + 1) : null;
+                                const hasSlot = !!gSlotId;
+                                const borderCls = hasSlot ? '' : 'border-l-4 border-l-amber-300';
                                 return (
                                   <tr key={g.id} className={`border-b border-[#E8E3DB] bg-white hover:bg-[#FAFAFA] ${borderCls}`}>
-                                    <td className="px-4 py-3 text-xs text-gray-400 tabular-nums w-8">{idx + 1}</td>
-                                    <td className="px-4 py-3 font-medium text-[#1A1A1A]">{g.fullName}</td>
-                                    <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.country}</td>
+                                    <td className="px-4 py-3 w-10">
+                                      <Checkbox
+                                        checked={daftariSelectedGuests.has(g.id)}
+                                        onCheckedChange={() => toggleDaftariGuest(g.id)}
+                                        className="border-gray-300 data-[state=checked]:bg-[#2D5A45] data-[state=checked]:border-[#2D5A45]"
+                                      />
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-[#4A4A4A] whitespace-nowrap">{g.country}</td>
+                                    <td className="px-4 py-3 font-medium text-[#1A1A1A] whitespace-nowrap">{g.fullName}</td>
                                     <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.designation || '—'}</td>
+                                    <td className="px-4 py-3 text-sm text-[#4A4A4A] whitespace-nowrap">{fmtDate(g.departureTime)}</td>
+                                    <td className="px-4 py-3 text-sm text-[#4A4A4A] whitespace-nowrap">
+                                      {g.departureFlightNumber
+                                        ? g.departureAirport
+                                          ? `${g.departureFlightNumber} (${g.departureAirport})`
+                                          : g.departureFlightNumber
+                                        : '—'}
+                                    </td>
                                     <td className="px-4 py-3 whitespace-nowrap">
                                       {assignedDay
                                         ? <span className="text-[#1A1A1A] text-sm">{fmt(assignedDay.date)}</span>
-                                        : <span className="text-gray-400 text-sm">—</span>}
+                                        : <span className="text-gray-400">—</span>}
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap">
                                       {assignedSlot
-                                        ? <span className="text-[#1A1A1A] text-sm font-medium">{assignedSlot.name}</span>
-                                        : <span className="text-gray-400 text-sm">—</span>}
+                                        ? <span className="text-[#1A1A1A] font-medium">{assignedSlot.name}</span>
+                                        : <span className="text-gray-400">—</span>}
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      {gGroupNum && gGroupNum > 0
+                                        ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border font-medium ${DAFTARI_GROUP_COLORS[(gGroupNum - 1) % DAFTARI_GROUP_COLORS.length]}`}>Group {gGroupNum}</span>
+                                        : <span className="text-gray-400 text-xs">—</span>}
                                     </td>
                                     <td className="px-4 py-3">
-                                      <div className="flex items-center gap-2">
-                                        {daftariDays.length > 0 && (
-                                          <div className="w-44">
-                                            <DaftariSlotSelect guestId={g.id} onChange={slotId => handleAssignDaftariSlot(g, slotId)} />
-                                          </div>
-                                        )}
-                                        {hasSlot && (
-                                          <button
-                                            onClick={() => handleUnassignDaftariSlot(g)}
-                                            title="Remove slot assignment"
-                                            className="p-1.5 rounded-md text-orange-400 hover:bg-orange-50 hover:text-orange-600 transition-colors flex-shrink-0"
-                                          >
-                                            <X className="w-4 h-4" />
-                                          </button>
-                                        )}
+                                      <div className="flex items-center gap-1">
                                         <button
-                                          onClick={() => handleRemoveFromDaftari(g)}
-                                          title="Remove from Daftari"
-                                          className="p-1.5 rounded-md text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors flex-shrink-0"
+                                          onClick={() => handleDaftariOpenChangeSlot(g)}
+                                          className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-[#2D5A45] hover:bg-[#D6E4D9] transition-colors"
                                         >
-                                          <UserMinus className="w-4 h-4" />
+                                          <CalendarDays className="w-3.5 h-3.5" />
+                                          {hasSlot ? 'Change' : 'Assign'}
+                                        </button>
+                                        <button
+                                          onClick={() => setDaftariRemoveDialog({ guest: g })}
+                                          className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-red-500 hover:bg-red-50 transition-colors"
+                                        >
+                                          <X className="w-3.5 h-3.5" />
+                                          Remove
                                         </button>
                                       </div>
                                     </td>
@@ -1238,16 +1400,17 @@ export default function DeskMulaqatPage() {
                           <table className="w-full text-sm border-collapse">
                             <thead>
                               <tr className="bg-[#F9F8F6]">
-                                {['Day', 'Slot', 'Guest Name', 'Country', 'Designation', 'Managed By', 'Status'].map(h => (
+                                {['Day', 'Slot', 'Guest(s)', 'Country', 'Group', 'Managed By', 'Status'].map(h => (
                                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider whitespace-nowrap">{h}</th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody>
                               {daftariScheduleRows.map((row, i) => {
-                                const isEmpty = !row.guestId;
-                                const isMine = row.assignedByName === user.name;
+                                const isEmpty = row.slotGuests.length === 0;
+                                const hasMine = row.slotGuests.some(sg => assignedCountries.includes(sg.country ?? ''));
                                 const isNewDay = row.isFirstSlotOfDay && i > 0;
+                                const groupNum = !isEmpty ? (daftariGroupsOrder.indexOf(row.slotId) + 1) : null;
                                 return (
                                   <tr key={row.slotId} className={['border-b border-[#E8E3DB]', isEmpty ? 'bg-green-50/40' : 'bg-white hover:bg-[#FAFAFA]', isNewDay ? 'border-t-2 border-t-[#E8E3DB]' : ''].join(' ')}>
                                     {row.isFirstSlotOfDay && (
@@ -1257,23 +1420,44 @@ export default function DeskMulaqatPage() {
                                       </td>
                                     )}
                                     <td className="px-4 py-3 font-medium text-[#1A1A1A] whitespace-nowrap">{row.slotName}</td>
-                                    <td className={`px-4 py-3 ${isEmpty ? 'text-gray-400' : isMine ? 'text-[#1A1A1A]' : 'text-gray-400'}`}>
-                                      {row.guestName ?? '—'}
+                                    <td className="px-4 py-3">
+                                      {isEmpty ? <span className="text-gray-400">—</span> : (
+                                        <div className="space-y-0.5">
+                                          {row.slotGuests.map(sg => {
+                                            const isMineGuest = assignedCountries.includes(sg.country ?? '');
+                                            return (
+                                              <div key={sg.id} className={`text-xs ${isMineGuest ? 'text-[#1A1A1A] font-medium' : 'text-gray-400'}`}>{sg.name}</div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
                                     </td>
-                                    <td className={`px-4 py-3 text-sm ${isEmpty || !isMine ? 'text-gray-400' : 'text-[#4A4A4A]'}`}>
-                                      {row.guestCountry ?? '—'}
+                                    <td className="px-4 py-3 text-sm">
+                                      {isEmpty ? <span className="text-gray-400">—</span> : (
+                                        <div className="space-y-0.5">
+                                          {row.slotGuests.map(sg => {
+                                            const isMineGuest = assignedCountries.includes(sg.country ?? '');
+                                            return (
+                                              <div key={sg.id} className={`text-xs ${isMineGuest ? 'text-[#4A4A4A]' : 'text-gray-400'}`}>{sg.country ?? '—'}</div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
                                     </td>
-                                    <td className={`px-4 py-3 text-sm ${isEmpty || !isMine ? 'text-gray-400' : 'text-[#4A4A4A]'}`}>
-                                      {row.guestDesignation ?? '—'}
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      {isEmpty || !groupNum || groupNum <= 0
+                                        ? <span className="text-gray-400">—</span>
+                                        : <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border font-medium ${DAFTARI_GROUP_COLORS[(groupNum - 1) % DAFTARI_GROUP_COLORS.length]}`}>Group {groupNum}</span>
+                                      }
                                     </td>
-                                    <td className={`px-4 py-3 text-sm ${isEmpty ? 'text-gray-400' : isMine ? 'font-medium text-[#1A1A1A]' : 'text-gray-400'}`}>
+                                    <td className={`px-4 py-3 text-sm ${isEmpty ? 'text-gray-400' : hasMine ? 'font-medium text-[#1A1A1A]' : 'text-gray-400'}`}>
                                       {row.assignedByName ?? '—'}
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap">
                                       {isEmpty
                                         ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-green-50 text-green-700 border border-green-200">Available</span>
-                                        : <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border ${isMine ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
-                                            {isMine ? 'Assigned (me)' : 'Assigned'}
+                                        : <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border ${hasMine ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                                            {hasMine ? `Assigned (${row.slotGuests.length})` : 'Assigned'}
                                           </span>
                                       }
                                     </td>
@@ -1467,6 +1651,168 @@ export default function DeskMulaqatPage() {
               className="bg-[#2D5A45] hover:bg-[#234839] text-white"
             >
               {assignDialog === 'join' ? 'Join & Assign' : 'Assign to Slot'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Daftari: Remove from Daftari confirm ── */}
+      <Dialog open={!!daftariRemoveDialog} onOpenChange={open => { if (!open) setDaftariRemoveDialog(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Remove from Daftari</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-[#4A4A4A] py-2">
+            Remove <span className="font-semibold">{daftariRemoveDialog?.guest.fullName}</span> from Daftari Mulaqat?
+            {daftariRemoveDialog?.guest.mulaqatType === 'Both' && (
+              <span className="block mt-1 text-xs text-gray-500">They will remain in the Delegation list.</span>
+            )}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDaftariRemoveDialog(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (!daftariRemoveDialog) return;
+                await handleRemoveFromDaftari(daftariRemoveDialog.guest);
+                setDaftariRemoveDialog(null);
+              }}
+            >
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Daftari: Change / Assign Slot (per-guest) ── */}
+      {daftariChangeSlotDialog && (() => {
+        const isChange = !!daftariChangeSlotDialog.currentSlotId;
+        const currentSlot = daftariSlots.find(s => s.id === daftariChangeSlotDialog.currentSlotId);
+        const currentDay = currentSlot?.day_id ? daftariDays.find(d => d.id === currentSlot.day_id) : null;
+        return (
+          <Dialog open onOpenChange={open => { if (!open) { setDaftariChangeSlotDialog(null); setDaftariChangeSlotDay(''); setDaftariChangeSlotSlot(''); } }}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>{isChange ? 'Change Daftari Slot' : 'Assign Daftari Slot'}</DialogTitle>
+                {isChange && currentSlot && (
+                  <p className="text-sm text-[#4A4A4A] mt-1">
+                    Currently: <span className="font-medium text-[#1A1A1A]">{currentDay ? fmt(currentDay.date) : ''}{currentDay ? ' — ' : ''}{currentSlot.name}</span>
+                  </p>
+                )}
+                <p className="text-sm text-[#4A4A4A]">{daftariChangeSlotDialog.guestName}</p>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Daftari Day</label>
+                  <select
+                    value={daftariChangeSlotDay}
+                    onChange={e => { setDaftariChangeSlotDay(e.target.value); setDaftariChangeSlotSlot(''); }}
+                    className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
+                  >
+                    <option value="">Select a day...</option>
+                    {[...daftariDays].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
+                      <option key={d.id} value={d.id}>{fmt(d.date)}{d.label ? ` — ${d.label}` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Slot</label>
+                  <select
+                    value={daftariChangeSlotSlot}
+                    onChange={e => setDaftariChangeSlotSlot(e.target.value)}
+                    disabled={!daftariChangeSlotDay}
+                    className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none disabled:opacity-50"
+                  >
+                    <option value="">Select a slot...</option>
+                    {getDaftariSlotsForDay(daftariChangeSlotDay).map(s => {
+                      const isCurrent = s.id === daftariChangeSlotDialog.currentSlotId;
+                      const occupants = Object.values(guestSlotIds).filter(sId => sId === s.id).length;
+                      return (
+                        <option key={s.id} value={s.id}>
+                          {s.name}{isCurrent ? ' (current)' : occupants === 0 ? ' — Available' : ` — ${occupants} guest${occupants !== 1 ? 's' : ''}`}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setDaftariChangeSlotDialog(null); setDaftariChangeSlotDay(''); setDaftariChangeSlotSlot(''); }}>Cancel</Button>
+                <Button
+                  onClick={handleDaftariConfirmChangeSlot}
+                  disabled={!daftariChangeSlotSlot || daftariChangeSlotSlot === daftariChangeSlotDialog.currentSlotId}
+                  className="bg-[#2D5A45] hover:bg-[#234839] text-white"
+                >
+                  {isChange ? 'Change Slot' : 'Assign Slot'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
+
+      {/* ── Daftari: Assign / Join & Assign Dialog ── */}
+      <Dialog open={daftariAssignDialog === 'assign' || daftariAssignDialog === 'join'} onOpenChange={open => { if (!open) { setDaftariAssignDialog(null); setDaftariBulkDay(''); setDaftariBulkSlot(''); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {daftariAssignDialog === 'join' ? 'Join & Assign Daftari Slot' : 'Assign Daftari Slot'}
+            </DialogTitle>
+            <p className="text-sm text-[#4A4A4A] mt-1">
+              {daftariAssignDialog === 'join'
+                ? `${daftariSelectedGuestTotal} guests will share one slot and form a group`
+                : `Assign ${daftariSelectedGuestTotal} selected guest${daftariSelectedGuestTotal !== 1 ? 's' : ''} to a slot`}
+            </p>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="flex flex-wrap gap-1.5">
+              {daftariSelectedGuestList.map(g => (
+                <span key={g.id} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs bg-[#EBF4EE] text-[#2D5A45] border border-[#C8E0D0] font-medium">
+                  {g.fullName}
+                </span>
+              ))}
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Daftari Day</label>
+              <select
+                value={daftariBulkDay}
+                onChange={e => { setDaftariBulkDay(e.target.value); setDaftariBulkSlot(''); }}
+                className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
+              >
+                <option value="">Select a day...</option>
+                {[...daftariDays].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
+                  <option key={d.id} value={d.id}>{fmt(d.date)}{d.label ? ` — ${d.label}` : ''}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Slot</label>
+              <select
+                value={daftariBulkSlot}
+                onChange={e => setDaftariBulkSlot(e.target.value)}
+                disabled={!daftariBulkDay}
+                className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none disabled:opacity-50"
+              >
+                <option value="">Select a slot...</option>
+                {getDaftariSlotsForDay(daftariBulkDay).map(s => {
+                  const occupants = Object.values(guestSlotIds).filter(sId => sId === s.id).length;
+                  return (
+                    <option key={s.id} value={s.id}>
+                      {s.name} — {occupants === 0 ? 'Available' : `${occupants} guest${occupants !== 1 ? 's' : ''} assigned`}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDaftariAssignDialog(null); setDaftariBulkDay(''); setDaftariBulkSlot(''); }}>Cancel</Button>
+            <Button
+              onClick={handleDaftariBulkAssign}
+              disabled={!daftariBulkSlot}
+              className="bg-[#2D5A45] hover:bg-[#234839] text-white"
+            >
+              {daftariAssignDialog === 'join' ? 'Join & Assign' : 'Assign to Slot'}
             </Button>
           </DialogFooter>
         </DialogContent>
