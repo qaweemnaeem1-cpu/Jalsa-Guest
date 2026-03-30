@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -60,10 +60,33 @@ export function GuestEditModal({ guest, open, onClose, onSaveAndResubmit }: Gues
     reset,
     trigger,
     getValues,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<EditFormData>({
     resolver: zodResolver(editSchema),
   });
+
+  const calculateAge = useCallback((dob: string): number | null => {
+    if (!dob) return null;
+    const today = new Date();
+    const birth = new Date(dob);
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age >= 0 ? age : null;
+  }, []);
+
+  const watchedDob = watch('dateOfBirth');
+
+  useEffect(() => {
+    if (watchedDob) {
+      const computed = calculateAge(watchedDob);
+      if (computed !== null) setValue('age', computed, { shouldValidate: false });
+    }
+  }, [watchedDob, calculateAge, setValue]);
 
   // Reset form whenever a different guest is opened
   useEffect(() => {
@@ -244,7 +267,13 @@ export function GuestEditModal({ guest, open, onClose, onSaveAndResubmit }: Gues
 
                 <div>
                   <Label htmlFor="ge-age" className="text-sm">Age</Label>
-                  <Input id="ge-age" type="number" {...register('age')} className="mt-1" />
+                  <Input
+                    id="ge-age"
+                    type="number"
+                    {...register('age')}
+                    readOnly
+                    className="mt-1 bg-white cursor-not-allowed"
+                  />
                 </div>
 
                 <div>

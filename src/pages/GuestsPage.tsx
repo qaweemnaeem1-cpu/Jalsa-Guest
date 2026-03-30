@@ -56,7 +56,8 @@ import {
 import { ProfileDialog } from '@/components/ProfileDialog';
 import { useMemo, useRef, useEffect } from 'react';
 import { useRooms } from '@/hooks/useRooms';
-import { GUEST_STATUS_LABELS, ROLE_LABELS, ALL_COUNTRIES } from '@/lib/constants';
+import { GUEST_STATUS_LABELS, ROLE_LABELS } from '@/lib/constants';
+import { CountryCombobox } from '@/components/CountryCombobox';
 import { useDelegations } from '@/hooks/useDelegations';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { FamilyStatusCell } from '@/components/FamilyStatusCell';
@@ -867,15 +868,12 @@ export default function GuestsPage() {
                                 </td>
                                 <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                                   {guest.mulaqat ? (
-                                    <select
+                                    <CountryCombobox
+                                      compact
+                                      hideClear
                                       value={getDelegationCountry(guest.delegationId) ?? guest.country}
-                                      onChange={(e) => changeDelegationCountry(guest, e.target.value)}
-                                      className="text-xs border border-blue-200 rounded-md px-2 py-1 bg-blue-50 text-blue-700 focus:border-blue-400 focus:ring-1 focus:ring-blue-300 min-w-[140px]"
-                                    >
-                                      {ALL_COUNTRIES.map(c => (
-                                        <option key={c.code} value={c.name}>{c.name}</option>
-                                      ))}
-                                    </select>
+                                      onChange={v => changeDelegationCountry(guest, v)}
+                                    />
                                   ) : (
                                     <span className="text-gray-300 text-xs">—</span>
                                   )}

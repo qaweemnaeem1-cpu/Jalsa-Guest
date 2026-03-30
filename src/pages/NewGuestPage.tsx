@@ -203,8 +203,24 @@ export default function NewGuestPage() {
 
   const navItems = NAV_ITEMS[user.role] || [];
 
+  const calculateAge = (dob: string): string => {
+    if (!dob) return '';
+    const today = new Date();
+    const birth = new Date(dob);
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age >= 0 ? String(age) : '';
+  };
+
   const handleInputChange = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    if (field === 'dateOfBirth') {
+      setFormData(prev => ({ ...prev, dateOfBirth: value, age: calculateAge(value) }));
+    } else {
+      setFormData(prev => ({ ...prev, [field]: value }));
+    }
   };
 
   const handleVisaDetailChange = (field: keyof VisaDetails, value: any) => {
@@ -279,10 +295,7 @@ export default function NewGuestPage() {
       toast.error('Country is required');
       return;
     }
-    if (!formData.age) {
-      toast.error('Age is required');
-      return;
-    }
+
     if (!formData.passportNumber.trim()) {
       toast.error('Passport number is required');
       return;
@@ -502,8 +515,8 @@ export default function NewGuestPage() {
                           <input
                             type="text"
                             value={user.country || ''}
-                            disabled
-                            className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-[#F5F0E8] text-[#4A4A4A] h-11 cursor-not-allowed"
+                            readOnly
+                            className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white text-[#4A4A4A] h-11 cursor-not-allowed"
                           />
                           <p className="text-xs text-[#4A4A4A] mt-1">Auto-assigned based on your coordinator role</p>
                         </div>
@@ -535,23 +548,23 @@ export default function NewGuestPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-[#1A1A1A] font-medium">Age *</Label>
-                      <Input
-                        type="number"
-                        value={formData.age}
-                        onChange={(e) => handleInputChange('age', e.target.value)}
-                        placeholder="Enter age"
-                        className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11"
-                      />
-                    </div>
-
-                    <div className="space-y-2 md:col-span-2">
                       <Label className="text-[#1A1A1A] font-medium">Date of Birth</Label>
                       <Input
                         type="date"
                         value={formData.dateOfBirth}
                         onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
-                        className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11 max-w-md"
+                        className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-[#1A1A1A] font-medium">Age</Label>
+                      <Input
+                        type="number"
+                        value={formData.age}
+                        readOnly
+                        placeholder="Auto-calculated from date of birth"
+                        className="border-[#D4CFC7] h-11 bg-white text-[#1A1A1A] cursor-not-allowed"
                       />
                     </div>
                   </div>

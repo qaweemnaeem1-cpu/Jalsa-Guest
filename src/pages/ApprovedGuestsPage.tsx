@@ -15,7 +15,8 @@ import {
   LayoutDashboard, ClipboardList, CheckSquare,
   Search, ChevronDown, LogOut, Eye, CheckCircle, MessageSquare, ChevronRight,
 } from 'lucide-react';
-import { ROLE_LABELS, GUEST_STATUS_LABELS, ALL_COUNTRIES } from '@/lib/constants';
+import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
+import { CountryCombobox } from '@/components/CountryCombobox';
 import { useDelegations } from '@/hooks/useDelegations';
 import type { Guest } from '@/types';
 import { DESK_NAV } from '@/lib/navItems';
@@ -365,15 +366,12 @@ export default function ApprovedGuestsPage() {
                                 {/* Delegation */}
                                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                                   {g.mulaqat ? (
-                                    <select
+                                    <CountryCombobox
+                                      compact
+                                      hideClear
                                       value={getDelegationCountry(g.delegationId) ?? g.country}
-                                      onChange={e => changeDelegationCountry(g, e.target.value)}
-                                      className="text-xs border border-blue-200 rounded-md px-2 py-1 bg-blue-50 text-blue-700 focus:border-blue-400 focus:ring-1 focus:ring-blue-300 min-w-[140px]"
-                                    >
-                                      {ALL_COUNTRIES.map(c => (
-                                        <option key={c.code} value={c.name}>{c.name}</option>
-                                      ))}
-                                    </select>
+                                      onChange={v => changeDelegationCountry(g, v)}
+                                    />
                                   ) : (
                                     <span className="text-gray-300 text-xs">—</span>
                                   )}

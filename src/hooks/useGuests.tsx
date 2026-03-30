@@ -4,6 +4,20 @@ import { toast } from 'sonner';
 import type { Guest, GuestStatus, GuestRemark, FamilyMember, FamilyMemberStatus } from '@/types';
 import { useAuth } from './useAuth';
 
+// ── Age calculation ────────────────────────────────────────────────────────────
+
+function calculateAge(dob: string): number | null {
+  if (!dob) return null;
+  const today = new Date();
+  const birth = new Date(dob);
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age >= 0 ? age : null;
+}
+
 // ── Context type ───────────────────────────────────────────────────────────────
 
 interface GuestsContextType {
@@ -321,7 +335,7 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
         full_name:          toNull(guestData.fullName),
         gender:             toNull(guestData.gender),
         date_of_birth:      toNull(guestData.dateOfBirth),
-        age:                toInt(guestData.age),
+        age:                guestData.dateOfBirth ? calculateAge(guestData.dateOfBirth) : toInt(guestData.age),
         guest_type:         toNull(guestData.guestType) ?? 'Individual',
         designation:        toNull(guestData.designation),
         // Coordinators always use their own country so guests are always visible to them
@@ -405,10 +419,16 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
   // ── Update guest ────────────────────────────────────────────────────────────
 
   const updateGuest = useCallback(async (id: string, updates: Partial<Guest>): Promise<void> => {
-    // Optimistic update so the UI responds instantly
-    setGuests(prev => prev.map(g => (g.id === id ? { ...g, ...updates } : g)));
+    // If dateOfBirth is being updated, recalculate age from it
+    const resolvedUpdates =
+      updates.dateOfBirth !== undefined
+        ? { ...updates, age: calculateAge(updates.dateOfBirth) ?? updates.age }
+        : updates;
 
-    const row = updatesToDbRow(updates);
+    // Optimistic update so the UI responds instantly
+    setGuests(prev => prev.map(g => (g.id === id ? { ...g, ...resolvedUpdates } : g)));
+
+    const row = updatesToDbRow(resolvedUpdates);
     row.updated_at = new Date().toISOString();
 
     const { data, error } = await supabase

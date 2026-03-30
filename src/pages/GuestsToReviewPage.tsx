@@ -18,7 +18,7 @@ import {
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { DepartmentSelect } from '@/components/DepartmentSelect';
 import { useDelegations } from '@/hooks/useDelegations';
-import { ALL_COUNTRIES } from '@/lib/constants';
+import { CountryCombobox } from '@/components/CountryCombobox';
 import { toast } from 'sonner';
 import {
   LayoutDashboard, ClipboardList, CheckSquare, MessageSquare, XCircle,
@@ -531,14 +531,12 @@ export default function GuestsToReviewPage() {
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Passport Country</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Type</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Submitted</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Status</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Department</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Delegation</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#E8E3DB]">
@@ -579,16 +577,60 @@ export default function GuestsToReviewPage() {
                                     </div>
                                   </td>
                                   <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.country}</td>
-                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.passportCountry || '—'}</td>
+
                                   <td className="px-4 py-3">
                                     <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200 capitalize">
                                       {g.guestType}{isFamily && ` (${g.familyMembers.length + 1})`}
                                     </Badge>
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.submittedAt ?? '—'}</td>
                                   <td className="px-4 py-3">
                                     <FamilyStatusCell guest={g} />
                                   </td>
+                                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                                    {g.assignedDepartment ? (
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getDeptBadgeCls(g.assignedDepartment)}`}>
+                                        {g.assignedDepartment}
+                                      </span>
+                                    ) : (
+                                      <DepartmentSelect
+                                        value=""
+                                        onValueChange={v => { if (v) setDeptAssign({ guestId: g.id, dept: v }); }}
+                                        placeholder="Select..."
+                                        stopPropagation
+                                        className="text-xs min-w-[130px]"
+                                      />
+                                    )}
+                                  </td>
+
+                                  {/* Mulaqat toggle */}
+                                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                                    <button
+                                      onClick={() => g.mulaqat ? disableMulaqat(g) : enableMulaqat(g)}
+                                      title={g.mulaqat ? 'Remove from Mulaqat' : 'Add to Mulaqat'}
+                                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ${
+                                        g.mulaqat ? 'bg-green-500' : 'bg-gray-300'
+                                      }`}
+                                    >
+                                      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                                        g.mulaqat ? 'translate-x-4' : 'translate-x-0.5'
+                                      }`} />
+                                    </button>
+                                  </td>
+
+                                  {/* Delegation */}
+                                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                                    {g.mulaqat ? (
+                                      <CountryCombobox
+                                        compact
+                                        hideClear
+                                        value={getDelegationCountry(g.delegationId) ?? g.country}
+                                        onChange={v => changeDelegationCountry(g, v)}
+                                      />
+                                    ) : (
+                                      <span className="text-gray-300 text-xs">—</span>
+                                    )}
+                                  </td>
+
                                   <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                                     <div className="flex items-center gap-1.5">
                                       <button
@@ -628,59 +670,12 @@ export default function GuestsToReviewPage() {
                                       </button>
                                     </div>
                                   </td>
-                                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                                    {g.assignedDepartment ? (
-                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getDeptBadgeCls(g.assignedDepartment)}`}>
-                                        {g.assignedDepartment}
-                                      </span>
-                                    ) : (
-                                      <DepartmentSelect
-                                        value=""
-                                        onValueChange={v => { if (v) setDeptAssign({ guestId: g.id, dept: v }); }}
-                                        placeholder="Select..."
-                                        stopPropagation
-                                        className="text-xs min-w-[130px]"
-                                      />
-                                    )}
-                                  </td>
-
-                                  {/* Mulaqat toggle */}
-                                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                                    <button
-                                      onClick={() => g.mulaqat ? disableMulaqat(g) : enableMulaqat(g)}
-                                      title={g.mulaqat ? 'Remove from Mulaqat' : 'Add to Mulaqat'}
-                                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ${
-                                        g.mulaqat ? 'bg-green-500' : 'bg-gray-300'
-                                      }`}
-                                    >
-                                      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                                        g.mulaqat ? 'translate-x-4' : 'translate-x-0.5'
-                                      }`} />
-                                    </button>
-                                  </td>
-
-                                  {/* Delegation */}
-                                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                                    {g.mulaqat ? (
-                                      <select
-                                        value={getDelegationCountry(g.delegationId) ?? g.country}
-                                        onChange={e => changeDelegationCountry(g, e.target.value)}
-                                        className="text-xs border border-blue-200 rounded-md px-2 py-1 bg-blue-50 text-blue-700 focus:border-blue-400 focus:ring-1 focus:ring-blue-300 min-w-[140px]"
-                                      >
-                                        {ALL_COUNTRIES.map(c => (
-                                          <option key={c.code} value={c.name}>{c.name}</option>
-                                        ))}
-                                      </select>
-                                    ) : (
-                                      <span className="text-gray-300 text-xs">—</span>
-                                    )}
-                                  </td>
                                 </tr>
 
                                 {/* ── Family member drawer ── */}
                                 {isFamily && isExpanded && (
                                   <tr>
-                                    <td colSpan={11} className="p-0 bg-[#F9F8F6] border-b border-[#E8E3DB]">
+                                    <td colSpan={9} className="p-0 bg-[#F9F8F6] border-b border-[#E8E3DB]">
                                       <div className="px-6 py-4 space-y-2">
                                         <p className="text-[10px] font-semibold text-[#4A4A4A] uppercase tracking-widest mb-3">
                                           Family Members · {drawerMembers.length} total
