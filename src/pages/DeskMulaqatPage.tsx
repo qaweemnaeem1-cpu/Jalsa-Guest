@@ -740,7 +740,7 @@ export default function DeskMulaqatPage() {
                                                 <table className="w-full text-sm border-collapse">
                                                   <thead>
                                                     <tr className="bg-[#F9F8F6]">
-                                                      {['#', 'Name', 'Designation', 'Departure Date', 'Departure Flight', 'Role', 'Actions'].map(h => (
+                                                      {['#', 'Name', 'Designation', 'Departure Date', 'Departure Flight', 'Actions'].map(h => (
                                                         <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider whitespace-nowrap">{h}</th>
                                                       ))}
                                                     </tr>
@@ -751,7 +751,12 @@ export default function DeskMulaqatPage() {
                                                       return (
                                                         <tr key={g.id} className="border-t border-[#E8E3DB] bg-white hover:bg-[#FAFAFA]">
                                                           <td className="px-4 py-2.5 text-xs text-gray-400 tabular-nums w-8">{idx + 1}</td>
-                                                          <td className="px-4 py-2.5 font-medium text-[#1A1A1A]">{g.fullName}</td>
+                                                          <td className="px-4 py-2.5 font-medium text-[#1A1A1A]">
+                                                            <div className="flex items-center gap-1.5">
+                                                              {isHead && <Star className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />}
+                                                              {g.fullName}
+                                                            </div>
+                                                          </td>
                                                           <td className="px-4 py-2.5 text-xs text-[#4A4A4A]">{g.designation || '—'}</td>
                                                           <td className="px-4 py-2.5 text-xs text-[#4A4A4A] whitespace-nowrap">{fmtDate(g.departureTime)}</td>
                                                           <td className="px-4 py-2.5 text-xs text-[#4A4A4A] whitespace-nowrap">
@@ -760,11 +765,6 @@ export default function DeskMulaqatPage() {
                                                                 ? `${g.departureFlightNumber} (${g.departureAirport})`
                                                                 : g.departureFlightNumber
                                                               : '—'}
-                                                          </td>
-                                                          <td className="px-4 py-2.5">
-                                                            {isHead
-                                                              ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-amber-50 text-amber-700 border border-amber-200 font-medium"><Star className="w-3 h-3" />Head of Delegation</span>
-                                                              : <span className="text-xs text-[#4A4A4A]">Member</span>}
                                                           </td>
                                                           <td className="px-4 py-2.5">
                                                             <div className="flex items-center gap-1.5">

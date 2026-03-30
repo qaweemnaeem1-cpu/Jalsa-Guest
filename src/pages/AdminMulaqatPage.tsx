@@ -1316,7 +1316,7 @@ export default function AdminMulaqatPage() {
                   <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr className="bg-[#F9F8F6]">
-                        {['Name', 'Departure Date', 'Departure Flight', 'Role'].map(h => (
+                        {['Name', 'Departure Date', 'Departure Flight'].map(h => (
                           <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -1343,7 +1343,6 @@ export default function AdminMulaqatPage() {
                                   : guestInfo.departureFlightNumber
                                 : '—'}
                             </td>
-                            <td className="px-3 py-2.5 text-xs text-[#4A4A4A]">{isHead ? 'Head of Delegation' : 'Member'}</td>
                           </tr>
                         );
                       })}
