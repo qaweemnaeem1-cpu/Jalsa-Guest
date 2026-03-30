@@ -289,7 +289,13 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
 
           if (payload.eventType === 'UPDATE') {
             const updated = rowToGuest(payload.new);
-            setGuests(prev => prev.map(g => g.id === updated.id ? updated : g));
+            // Merge updated fields but preserve family_members — they come from a separate
+            // table and are not included in the real-time guests row payload.
+            setGuests(prev => prev.map(g =>
+              g.id === updated.id
+                ? { ...updated, familyMembers: g.familyMembers }
+                : g,
+            ));
           }
 
           if (payload.eventType === 'DELETE') {
