@@ -1297,7 +1297,7 @@ export default function AdminMulaqatPage() {
 
       {/* View Delegation Members */}
       <Dialog open={!!viewDelegation} onOpenChange={open => { if (!open) { setViewDelegation(null); setChangeHeadValue(''); } }}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Users className="w-5 h-5 text-[#2D5A45]" />{viewDelegation?.country} Delegation</DialogTitle>
           </DialogHeader>
@@ -1309,14 +1309,22 @@ export default function AdminMulaqatPage() {
                   {viewDelegation.slot_id ? slotDisplayLabel(viewDelegation.slot_id) : 'Unassigned'}
                 </span></p>
               </div>
-              <div className="border border-[#E8E3DB] rounded-lg overflow-hidden">
+              <div className="border border-[#E8E3DB] rounded-lg overflow-x-auto">
                 {viewDelegation.delegation_members.length === 0 ? (
                   <p className="text-sm text-gray-400 italic p-4 text-center">No members</p>
                 ) : (
-                  <table className="w-full text-sm">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-[#F9F8F6]">
+                        {['Name', 'Departure Date', 'Departure Flight', 'Role'].map(h => (
+                          <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
                     <tbody className="divide-y divide-[#E8E3DB]">
                       {viewDelegation.delegation_members.map(m => {
                         const isHead = viewDelegation.head_of_delegation_id === m.guest_id;
+                        const guestInfo = guests.find(g => g.id === m.guest_id);
                         return (
                           <tr key={m.id} className="hover:bg-[#FAFAFA]">
                             <td className="px-3 py-2.5">
@@ -1324,6 +1332,16 @@ export default function AdminMulaqatPage() {
                                 {isHead && <Star className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />}
                                 <span className={`font-medium ${isHead ? 'text-[#1A1A1A]' : 'text-[#4A4A4A]'}`}>{m.guest_name}</span>
                               </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-xs text-[#4A4A4A] whitespace-nowrap">
+                              {guestInfo?.departureTime ? fmt(guestInfo.departureTime) : '—'}
+                            </td>
+                            <td className="px-3 py-2.5 text-xs text-[#4A4A4A] whitespace-nowrap">
+                              {guestInfo?.departureFlightNumber
+                                ? guestInfo.departureAirport
+                                  ? `${guestInfo.departureFlightNumber} (${guestInfo.departureAirport})`
+                                  : guestInfo.departureFlightNumber
+                                : '—'}
                             </td>
                             <td className="px-3 py-2.5 text-xs text-[#4A4A4A]">{isHead ? 'Head of Delegation' : 'Member'}</td>
                           </tr>
