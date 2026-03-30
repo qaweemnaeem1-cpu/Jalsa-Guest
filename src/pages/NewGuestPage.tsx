@@ -372,8 +372,8 @@ export default function NewGuestPage() {
         createdBy: { id: user.id, name: user.name, role: user.role as 'coordinator' | 'super-admin' | 'desk-in-charge' },
         createdAt: new Date().toISOString(),
       });
-      toast.success('Guest registered — awaiting review');
-      navigate(user.role === 'coordinator' ? '/coordinator/pending' : '/guests');
+      toast.success('Guest registered successfully');
+      navigate(user.role === 'coordinator' ? '/coordinator/pending' : user.role === 'desk-in-charge' ? '/desk/review' : '/guests');
     } catch (error) {
       toast.error('Failed to register guest. Please try again.');
     } finally {
@@ -411,7 +411,7 @@ export default function NewGuestPage() {
             ))}
           </nav>
 
-          {user.role === 'coordinator' && (
+          {(user.role === 'coordinator' || user.role === 'desk-in-charge') && (
             <div className="px-4 mb-2">
               <button
                 type="button"
@@ -433,7 +433,7 @@ export default function NewGuestPage() {
               <div className="flex items-center gap-4">
                 <Button
                   variant="outline"
-                  onClick={() => navigate(user.role === 'coordinator' ? '/coordinator/pending' : '/guests')}
+                  onClick={() => navigate(user.role === 'coordinator' ? '/coordinator/pending' : user.role === 'desk-in-charge' ? '/desk/review' : '/guests')}
                   className="border-[#D4CFC7]"
                 >
                   <ArrowLeft className="w-4 h-4 mr-2" />
@@ -519,6 +519,14 @@ export default function NewGuestPage() {
                             className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white text-[#4A4A4A] h-11 cursor-not-allowed"
                           />
                           <p className="text-xs text-[#4A4A4A] mt-1">Auto-assigned based on your coordinator role</p>
+                        </div>
+                      ) : user?.role === 'desk-in-charge' ? (
+                        <div>
+                          <CountryCombobox
+                            value={formData.country}
+                            onChange={(v) => handleInputChange('country', v)}
+                          />
+                          <p className="text-xs text-[#4A4A4A] mt-1">Select the country this guest is being registered under</p>
                         </div>
                       ) : (
                         <select

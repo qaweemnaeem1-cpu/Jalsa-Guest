@@ -108,6 +108,14 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/desk/register"
+        element={
+          <ProtectedRoute requiredRoles={['desk-in-charge']}>
+            <NewGuestPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/users"
         element={
           <ProtectedRoute requiredRoles={['super-admin']}>
