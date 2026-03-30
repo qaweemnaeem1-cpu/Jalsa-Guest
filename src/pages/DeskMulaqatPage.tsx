@@ -138,6 +138,11 @@ export default function DeskMulaqatPage() {
   const [bulkDay, setBulkDay] = useState('');
   const [bulkSlot, setBulkSlot] = useState('');
 
+  // ── Change-slot dialog state ──────────────────────────────────────────────────
+  const [changeSlotDialog, setChangeSlotDialog] = useState<{ country: string; currentSlotId: string | null } | null>(null);
+  const [changeSlotDay, setChangeSlotDay] = useState('');
+  const [changeSlotSlot, setChangeSlotSlot] = useState('');
+
   // ── Delegation Section B state ─────────────────────────────────────────────────
   const [tableSearch, setTableSearch] = useState('');
   const [tableFilter, setTableFilter] = useState<'all' | 'available' | 'mine'>('all');
@@ -310,6 +315,23 @@ export default function DeskMulaqatPage() {
   };
 
   const handleRemoveSlot = async (country: string) => handleSlotChange(country, '__none__');
+
+  const handleOpenChangeSlot = (country: string, currentSlotId: string | null) => {
+    const dayId = currentSlotId ? (slots.find(s => s.id === currentSlotId)?.day_id ?? '') : '';
+    setChangeSlotDay(dayId);
+    setChangeSlotSlot(currentSlotId ?? '');
+    setChangeSlotDialog({ country, currentSlotId });
+  };
+
+  const handleConfirmChangeSlot = async () => {
+    if (!changeSlotDialog || !changeSlotSlot) return;
+    const slot = slots.find(s => s.id === changeSlotSlot);
+    await handleSlotChange(changeSlotDialog.country, changeSlotSlot);
+    toast.success(`${changeSlotDialog.country} delegation moved to ${slot?.name ?? 'slot'}`);
+    setChangeSlotDialog(null);
+    setChangeSlotDay('');
+    setChangeSlotSlot('');
+  };
 
   // ── Delegation member actions ─────────────────────────────────────────────────
 
@@ -796,22 +818,27 @@ export default function DeskMulaqatPage() {
                                         {assignedSlot ? <span className="text-[#1A1A1A]">{assignedSlot.name}</span> : <span className="text-gray-400">—</span>}
                                       </td>
                                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                                        <div className="flex items-center gap-2">
-                                          {days.length > 0 && del && (
-                                            <div className="w-44">
-                                              <SlotGroupedSelect value={del.slot_id ?? '__none__'} onChange={v => handleSlotChange(country, v)} />
-                                            </div>
-                                          )}
-                                          {hasSlot && (
+                                        {days.length > 0 && (
+                                          <div className="flex items-center gap-1.5">
                                             <button
-                                              onClick={() => handleRemoveSlot(country)}
-                                              title="Remove slot assignment"
-                                              className="p-1.5 rounded-md text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors flex-shrink-0"
+                                              onClick={() => handleOpenChangeSlot(country, del?.slot_id ?? null)}
+                                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-[#2D5A45] hover:bg-[#D6E4D9] transition-colors"
                                             >
-                                              <X className="w-4 h-4" />
+                                              <Calendar className="w-3.5 h-3.5" />
+                                              {hasSlot ? 'Change' : 'Assign'}
                                             </button>
-                                          )}
-                                        </div>
+                                            {hasSlot && (
+                                              <button
+                                                onClick={() => handleRemoveSlot(country)}
+                                                title="Remove slot assignment"
+                                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-red-500 hover:bg-red-50 transition-colors"
+                                              >
+                                                <X className="w-3.5 h-3.5" />
+                                                Remove
+                                              </button>
+                                            )}
+                                          </div>
+                                        )}
                                       </td>
                                     </tr>
 
@@ -820,6 +847,21 @@ export default function DeskMulaqatPage() {
                                       <tr>
                                         <td colSpan={7} className="p-0 border-b border-[#E8E3DB]">
                                           <div className="border-l-4 border-l-[#2D5A45] bg-gray-50/50 pl-8 pr-6 py-4 space-y-3">
+                                            {/* Slot info */}
+                                            {days.length > 0 && (
+                                              <div className="flex items-center gap-2 text-sm">
+                                                <Calendar className="w-3.5 h-3.5 text-[#2D5A45] flex-shrink-0" />
+                                                {assignedSlot
+                                                  ? <span className="text-[#4A4A4A]"><span className="font-medium text-[#1A1A1A]">{assignedDay ? fmt(assignedDay.date) : ''}</span>{assignedDay ? ' — ' : ''}{assignedSlot.name}</span>
+                                                  : <span className="text-amber-600 font-medium">No slot assigned</span>}
+                                                <button
+                                                  onClick={() => handleOpenChangeSlot(country, del?.slot_id ?? null)}
+                                                  className="text-xs text-[#2D5A45] hover:underline font-medium"
+                                                >
+                                                  {assignedSlot ? 'Change' : 'Assign slot'}
+                                                </button>
+                                              </div>
+                                            )}
                                             {/* Members sub-table */}
                                             {members.length === 0 ? (
                                               <div className="flex items-center gap-2 py-4 text-sm text-gray-400">
@@ -1254,6 +1296,76 @@ export default function DeskMulaqatPage() {
           </div>
         </main>
       </div>
+
+      {/* ── Change / Assign Slot Dialog ── */}
+      {changeSlotDialog && (() => {
+        const cDel = getDelegationForCountry(changeSlotDialog.country);
+        const currentSlot = slots.find(s => s.id === changeSlotDialog.currentSlotId);
+        const currentDay = getAssignedDay(changeSlotDialog.currentSlotId);
+        const isChange = !!changeSlotDialog.currentSlotId;
+        return (
+          <Dialog open onOpenChange={open => { if (!open) { setChangeSlotDialog(null); setChangeSlotDay(''); setChangeSlotSlot(''); } }}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>{isChange ? 'Change Mulaqat Slot' : 'Assign Mulaqat Slot'}</DialogTitle>
+                {isChange && currentSlot && (
+                  <p className="text-sm text-[#4A4A4A] mt-1">
+                    Currently assigned: <span className="font-medium text-[#1A1A1A]">{currentDay ? fmt(currentDay.date) : ''}{currentDay ? ' — ' : ''}{currentSlot.name}</span>
+                  </p>
+                )}
+                <p className="text-sm text-[#4A4A4A]">
+                  {changeSlotDialog.country} delegation
+                </p>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat Day</label>
+                  <select
+                    value={changeSlotDay}
+                    onChange={e => { setChangeSlotDay(e.target.value); setChangeSlotSlot(''); }}
+                    className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
+                  >
+                    <option value="">Select a day...</option>
+                    {[...days].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
+                      <option key={d.id} value={d.id}>{fmt(d.date)}{d.label ? ` — ${d.label}` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Slot</label>
+                  <select
+                    value={changeSlotSlot}
+                    onChange={e => setChangeSlotSlot(e.target.value)}
+                    disabled={!changeSlotDay}
+                    className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none disabled:opacity-50"
+                  >
+                    <option value="">Select a slot...</option>
+                    {getSlotsForDay(changeSlotDay).map(s => {
+                      const isCurrent = s.id === changeSlotDialog.currentSlotId;
+                      const taken = delegationDetails.filter(d => d.slot_id === s.id && d.id !== cDel?.id).length;
+                      return (
+                        <option key={s.id} value={s.id}>
+                          {s.name}{isCurrent ? ' (current)' : taken === 0 ? ' — Available' : ` — ${taken} delegation${taken !== 1 ? 's' : ''} assigned`}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setChangeSlotDialog(null); setChangeSlotDay(''); setChangeSlotSlot(''); }}>Cancel</Button>
+                <Button
+                  onClick={handleConfirmChangeSlot}
+                  disabled={!changeSlotSlot || changeSlotSlot === changeSlotDialog.currentSlotId}
+                  className="bg-[#2D5A45] hover:bg-[#234839] text-white"
+                >
+                  {isChange ? 'Change Slot' : 'Assign Slot'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       {/* ── Assign Mulaqat Dialog ── */}
       <Dialog open={assignDialog === 'assign' || assignDialog === 'join'} onOpenChange={open => { if (!open) { setAssignDialog(null); setBulkDay(''); setBulkSlot(''); } }}>
