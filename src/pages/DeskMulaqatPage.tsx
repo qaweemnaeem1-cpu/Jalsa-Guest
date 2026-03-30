@@ -13,8 +13,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { ProfileDialog, getRoleDisplayLabel } from '@/components/ProfileDialog';
@@ -131,6 +132,12 @@ export default function DeskMulaqatPage() {
   const [addingGuest, setAddingGuest] = useState(false);
   const [selectedGuestId, setSelectedGuestId] = useState('');
 
+  // ── Checkbox + bulk-assign state ──────────────────────────────────────────────
+  const [selectedCountries, setSelectedCountries] = useState<Set<string>>(new Set());
+  const [assignDialog, setAssignDialog] = useState<'assign' | 'join' | null>(null);
+  const [bulkDay, setBulkDay] = useState('');
+  const [bulkSlot, setBulkSlot] = useState('');
+
   // ── Delegation Section B state ─────────────────────────────────────────────────
   const [tableSearch, setTableSearch] = useState('');
   const [tableFilter, setTableFilter] = useState<'all' | 'available' | 'mine'>('all');
@@ -241,6 +248,54 @@ export default function DeskMulaqatPage() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignedCountries, guests, myDelegationsSearch]);
+
+  // ── Checkbox helpers ─────────────────────────────────────────────────────────
+
+  const toggleCountry = (country: string) => {
+    setSelectedCountries(prev => {
+      const next = new Set(prev);
+      if (next.has(country)) next.delete(country); else next.add(country);
+      return next;
+    });
+  };
+
+  const allSelected = sortedCountries.length > 0 && sortedCountries.every(c => selectedCountries.has(c));
+  const someSelected = sortedCountries.some(c => selectedCountries.has(c)) && !allSelected;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedCountries(new Set());
+    } else {
+      setSelectedCountries(new Set(sortedCountries));
+    }
+  };
+
+  const selectedList = sortedCountries.filter(c => selectedCountries.has(c));
+  const selectedGuestTotal = selectedList.reduce((sum, c) => sum + getMulaqatGuests(c).length, 0);
+
+  // ── Bulk assign handler ───────────────────────────────────────────────────────
+
+  const handleBulkAssign = async () => {
+    if (!bulkSlot || selectedList.length === 0) return;
+    const slot = slots.find(s => s.id === bulkSlot);
+    const updates = selectedList
+      .map(c => getDelegationForCountry(c))
+      .filter((d): d is DelegationDetail => d !== null);
+
+    await Promise.all(updates.map(d =>
+      supabase.from('delegations').update({ slot_id: bulkSlot }).eq('id', d.id)
+    ));
+
+    setDelegationDetails(prev =>
+      prev.map(d => updates.find(u => u.id === d.id) ? { ...d, slot_id: bulkSlot } : d)
+    );
+
+    toast.success(`${updates.length} delegation${updates.length !== 1 ? 's' : ''} assigned to ${slot?.name ?? 'slot'}`);
+    setAssignDialog(null);
+    setBulkDay('');
+    setBulkSlot('');
+    setSelectedCountries(new Set());
+  };
 
   // ── Delegation slot actions ───────────────────────────────────────────────────
 
@@ -609,21 +664,42 @@ export default function DeskMulaqatPage() {
               <>
                 {/* ── Section A: My Delegations ── */}
                 <section>
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="mb-4 space-y-3">
                     <div className="flex items-center gap-2">
                       <Users className="w-5 h-5 text-[#2D5A45]" />
                       <h2 className="text-lg font-semibold text-[#1A1A1A]">My Delegations</h2>
                       <span className="text-sm text-[#4A4A4A]">({assignedCountries.length})</span>
                     </div>
                     {assignedCountries.length > 0 && (
-                      <div className="relative w-64">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
-                        <Input
-                          value={myDelegationsSearch}
-                          onChange={e => setMyDelegationsSearch(e.target.value)}
-                          placeholder="Search countries..."
-                          className="pl-9 border-[#D4CFC7] focus:border-[#2D5A45] h-9"
-                        />
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <button
+                          onClick={() => { setBulkDay(''); setBulkSlot(''); setAssignDialog('assign'); }}
+                          disabled={selectedList.length === 0}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-[#2D5A45] text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#234839] transition-colors"
+                        >
+                          Assign Mulaqat
+                        </button>
+                        <button
+                          onClick={() => { setBulkDay(''); setBulkSlot(''); setAssignDialog('join'); }}
+                          disabled={selectedList.length < 2}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-white text-[#2D5A45] border border-[#2D5A45] rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#F0F7F4] transition-colors"
+                        >
+                          Join &amp; Assign Mulaqat
+                        </button>
+                        {selectedList.length > 0 && (
+                          <span className="text-sm text-gray-500">
+                            Selected: {selectedList.length} countr{selectedList.length !== 1 ? 'ies' : 'y'} ({selectedGuestTotal} guest{selectedGuestTotal !== 1 ? 's' : ''} total)
+                          </span>
+                        )}
+                        <div className="ml-auto relative w-64">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
+                          <Input
+                            value={myDelegationsSearch}
+                            onChange={e => setMyDelegationsSearch(e.target.value)}
+                            placeholder="Search countries..."
+                            className="pl-9 border-[#D4CFC7] focus:border-[#2D5A45] h-9"
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
@@ -645,6 +721,14 @@ export default function DeskMulaqatPage() {
                           <table className="w-full text-sm border-collapse">
                             <thead>
                               <tr className="bg-[#F9F8F6]">
+                                <th className="px-4 py-3 w-10">
+                                  <Checkbox
+                                    checked={allSelected}
+                                    data-state={someSelected ? 'indeterminate' : allSelected ? 'checked' : 'unchecked'}
+                                    onCheckedChange={toggleSelectAll}
+                                    className="border-gray-300 data-[state=checked]:bg-[#2D5A45] data-[state=checked]:border-[#2D5A45] data-[state=indeterminate]:bg-[#2D5A45] data-[state=indeterminate]:border-[#2D5A45]"
+                                  />
+                                </th>
                                 {['Country', 'Members', 'Head of Delegation', 'Assigned Day', 'Assigned Slot', 'Actions'].map(h => (
                                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider whitespace-nowrap">
                                     {h}
@@ -680,6 +764,13 @@ export default function DeskMulaqatPage() {
                                         }
                                       }}
                                     >
+                                      <td className="px-4 py-3 w-10" onClick={e => e.stopPropagation()}>
+                                        <Checkbox
+                                          checked={selectedCountries.has(country)}
+                                          onCheckedChange={() => toggleCountry(country)}
+                                          className="border-gray-300 data-[state=checked]:bg-[#2D5A45] data-[state=checked]:border-[#2D5A45]"
+                                        />
+                                      </td>
                                       <td className={`px-4 py-3 font-medium text-[#1A1A1A] whitespace-nowrap ${rowTextCls}`}>
                                         <div className="flex items-center gap-2">
                                           {isExpanded
@@ -727,7 +818,7 @@ export default function DeskMulaqatPage() {
                                     {/* ── Expandable member section ── */}
                                     {isExpanded && (
                                       <tr>
-                                        <td colSpan={6} className="p-0 border-b border-[#E8E3DB]">
+                                        <td colSpan={7} className="p-0 border-b border-[#E8E3DB]">
                                           <div className="border-l-4 border-l-[#2D5A45] bg-gray-50/50 pl-8 pr-6 py-4 space-y-3">
                                             {/* Members sub-table */}
                                             {members.length === 0 ? (
@@ -1163,6 +1254,88 @@ export default function DeskMulaqatPage() {
           </div>
         </main>
       </div>
+
+      {/* ── Assign Mulaqat Dialog ── */}
+      <Dialog open={assignDialog === 'assign' || assignDialog === 'join'} onOpenChange={open => { if (!open) { setAssignDialog(null); setBulkDay(''); setBulkSlot(''); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {assignDialog === 'join' ? 'Join Delegations & Assign Slot' : 'Assign Mulaqat Slot'}
+            </DialogTitle>
+            <p className="text-sm text-[#4A4A4A] mt-1">
+              {assignDialog === 'join'
+                ? 'These delegations will share the same Mulaqat slot'
+                : `Assign ${selectedList.length} delegation${selectedList.length !== 1 ? 's' : ''} to a slot`}
+            </p>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Country pills */}
+            <div className="flex flex-wrap gap-1.5">
+              {selectedList.map(c => {
+                const count = getMulaqatGuests(c).length;
+                return (
+                  <span key={c} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs bg-[#EBF4EE] text-[#2D5A45] border border-[#C8E0D0] font-medium">
+                    {c}{assignDialog === 'join' ? ` (${count})` : ''}
+                  </span>
+                );
+              })}
+            </div>
+            {assignDialog === 'join' && (
+              <p className="text-sm text-[#4A4A4A]">
+                <span className="font-medium text-[#1A1A1A]">{selectedGuestTotal}</span> guests total
+              </p>
+            )}
+
+            {/* Day selector */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat Day</label>
+              <select
+                value={bulkDay}
+                onChange={e => { setBulkDay(e.target.value); setBulkSlot(''); }}
+                className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
+              >
+                <option value="">Select a day...</option>
+                {[...days].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
+                  <option key={d.id} value={d.id}>{fmt(d.date)}{d.label ? ` — ${d.label}` : ''}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Slot selector */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Slot</label>
+              <select
+                value={bulkSlot}
+                onChange={e => setBulkSlot(e.target.value)}
+                disabled={!bulkDay}
+                className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none disabled:opacity-50"
+              >
+                <option value="">Select a slot...</option>
+                {getSlotsForDay(bulkDay).map(s => {
+                  const taken = delegationDetails.filter(d => d.slot_id === s.id).length;
+                  return (
+                    <option key={s.id} value={s.id}>
+                      {s.name} — {taken === 0 ? 'Available' : `${taken} delegation${taken !== 1 ? 's' : ''} already`}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAssignDialog(null); setBulkDay(''); setBulkSlot(''); }}>Cancel</Button>
+            <Button
+              onClick={handleBulkAssign}
+              disabled={!bulkSlot}
+              className="bg-[#2D5A45] hover:bg-[#234839] text-white"
+            >
+              {assignDialog === 'join' ? 'Join & Assign' : 'Assign to Slot'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} />
     </div>
