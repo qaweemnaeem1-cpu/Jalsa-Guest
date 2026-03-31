@@ -363,7 +363,7 @@ export default function LocationRoomsPage() {
           <div className="space-y-4 py-1">
             <div>
               <Label className="text-xs text-[#4A4A4A] mb-1 block">
-                {dialogMode?.includes('Block') ? 'Block Name' : 'Room Name'} <span className="text-red-500">*</span>
+                {dialogMode?.includes('Block') ? 'Block Name' : 'Room Name'}<span className="text-red-500 ml-0.5">*</span>
               </Label>
               <Input
                 value={formName}
@@ -376,7 +376,7 @@ export default function LocationRoomsPage() {
             {(dialogMode === 'addRoom' || dialogMode === 'editRoom') && (
               <>
                 <div>
-                  <Label className="text-xs text-[#4A4A4A] mb-1 block">Capacity (beds) <span className="text-red-500">*</span></Label>
+                  <Label className="text-xs text-[#4A4A4A] mb-1 block">Capacity (beds)<span className="text-red-500 ml-0.5">*</span></Label>
                   <Input
                     type="number" min={1} max={20}
                     value={formCapacity}

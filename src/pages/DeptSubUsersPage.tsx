@@ -265,7 +265,7 @@ export default function DeptSubUsersPage() {
           <div className="space-y-4 py-1">
             {/* Name */}
             <div>
-              <Label className="text-xs text-[#4A4A4A] mb-1 block">Name <span className="text-red-500">*</span></Label>
+              <Label className="text-xs text-[#4A4A4A] mb-1 block">Name<span className="text-red-500 ml-0.5">*</span></Label>
               <Input
                 value={formName}
                 onChange={e => { setFormName(e.target.value); setFormErrors(p => ({ ...p, name: '' })); }}
@@ -277,7 +277,7 @@ export default function DeptSubUsersPage() {
 
             {/* Email */}
             <div>
-              <Label className="text-xs text-[#4A4A4A] mb-1 block">Email <span className="text-red-500">*</span></Label>
+              <Label className="text-xs text-[#4A4A4A] mb-1 block">Email<span className="text-red-500 ml-0.5">*</span></Label>
               <Input
                 type="email"
                 value={formEmail}
@@ -291,7 +291,7 @@ export default function DeptSubUsersPage() {
 
             {/* Phone */}
             <div>
-              <Label className="text-xs text-[#4A4A4A] mb-1 block">Phone <span className="text-red-500">*</span></Label>
+              <Label className="text-xs text-[#4A4A4A] mb-1 block">Phone<span className="text-red-500 ml-0.5">*</span></Label>
               <Input
                 value={formPhone}
                 onChange={e => { setFormPhone(e.target.value); setFormErrors(p => ({ ...p, phone: '' })); }}
@@ -303,7 +303,7 @@ export default function DeptSubUsersPage() {
 
             {/* Location */}
             <div>
-              <Label className="text-xs text-[#4A4A4A] mb-1 block">Location <span className="text-red-500">*</span></Label>
+              <Label className="text-xs text-[#4A4A4A] mb-1 block">Location<span className="text-red-500 ml-0.5">*</span></Label>
               <select
                 value={formLocation}
                 onChange={e => { setFormLocation(e.target.value); setFormErrors(p => ({ ...p, location: '' })); }}
@@ -320,7 +320,7 @@ export default function DeptSubUsersPage() {
             {/* Password */}
             <div>
               <Label className="text-xs text-[#4A4A4A] mb-1 block">
-                Password {editTarget ? <span className="text-[#4A4A4A] font-normal">(leave blank to keep current)</span> : <span className="text-red-500">*</span>}
+                Password {editTarget ? <span className="text-[#4A4A4A] font-normal">(leave blank to keep current)</span> :<span className="text-red-500 ml-0.5">*</span>}
               </Label>
               <div className="relative">
                 <Input

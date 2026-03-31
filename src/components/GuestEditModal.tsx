@@ -212,7 +212,7 @@ export function GuestEditModal({ guest, open, onClose, onSaveAndResubmit }: Gues
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="ge-fullName" className="text-sm">
-                    Full Name <span className="text-red-500">*</span>
+                    Full Name<span className="text-red-500 ml-0.5">*</span>
                   </Label>
                   <Input
                     id="ge-fullName"
@@ -226,7 +226,7 @@ export function GuestEditModal({ guest, open, onClose, onSaveAndResubmit }: Gues
 
                 <div>
                   <Label htmlFor="ge-passportNumber" className="text-sm">
-                    Passport Number <span className="text-red-500">*</span>
+                    Passport Number<span className="text-red-500 ml-0.5">*</span>
                   </Label>
                   <Input
                     id="ge-passportNumber"
@@ -240,7 +240,7 @@ export function GuestEditModal({ guest, open, onClose, onSaveAndResubmit }: Gues
 
                 <div>
                   <Label htmlFor="ge-country" className="text-sm">
-                    Country <span className="text-red-500">*</span>
+                    Country<span className="text-red-500 ml-0.5">*</span>
                   </Label>
                   <Input
                     id="ge-country"

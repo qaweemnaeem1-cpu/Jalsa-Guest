@@ -429,7 +429,7 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label htmlFor="ep-fullName" className="text-sm">
-                          Full Name <span className="text-red-500">*</span>
+                          Full Name<span className="text-red-500 ml-0.5">*</span>
                         </Label>
                         <Input
                           id="ep-fullName"
@@ -443,7 +443,7 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
 
                       <div>
                         <Label htmlFor="ep-passportNumber" className="text-sm">
-                          Passport Number <span className="text-red-500">*</span>
+                          Passport Number<span className="text-red-500 ml-0.5">*</span>
                         </Label>
                         <Input
                           id="ep-passportNumber"
@@ -466,7 +466,7 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
 
                       <div>
                         <Label htmlFor="ep-country" className="text-sm">
-                          Country <span className="text-red-500">*</span>
+                          Country<span className="text-red-500 ml-0.5">*</span>
                         </Label>
                         <Input
                           id="ep-country"

@@ -55,96 +55,81 @@ export function useDelegations() {
     return del;
   }, [user]);
 
+  /** Insert into delegation_members if not already present. Returns the delegation. */
+  const addMember = useCallback(async (guest: Guest, delegation: Delegation): Promise<void> => {
+    const { data: existing } = await supabase
+      .from('delegation_members')
+      .select('id')
+      .eq('delegation_id', delegation.id)
+      .eq('guest_id', guest.id)
+      .maybeSingle();
+
+    if (!existing) {
+      const { error } = await supabase.from('delegation_members').insert({
+        delegation_id: delegation.id,
+        guest_id: guest.id,
+        guest_name: guest.fullName,
+        is_head: false,
+      });
+      if (error) { toast.error('Failed to add member to delegation'); throw error; }
+    }
+  }, []);
+
+  /** Remove guest from delegation_members (by guest_id regardless of delegation). */
+  const removeMember = useCallback(async (guestId: string): Promise<void> => {
+    await supabase.from('delegation_members').delete().eq('guest_id', guestId);
+  }, []);
+
   /** Enable Mulaqat for a guest — auto-assigns to their own country's delegation. */
   const enableMulaqat = useCallback(async (guest: Guest) => {
     const delegation = await findOrCreate(guest.country);
     if (!delegation) return;
-
-    await supabase.from('delegation_members').upsert(
-      { delegation_id: delegation.id, guest_id: guest.id, guest_name: guest.fullName, is_head: false },
-      { onConflict: 'guest_id' },
-    );
-
+    await addMember(guest, delegation);
     await updateGuest(guest.id, { mulaqat: true, delegationId: delegation.id });
     toast.success('Added to delegation');
-  }, [findOrCreate, updateGuest]);
+  }, [findOrCreate, addMember, updateGuest]);
 
   /** Disable Mulaqat — removes from delegation. */
   const disableMulaqat = useCallback(async (guest: Guest) => {
-    if (guest.delegationId) {
-      await supabase
-        .from('delegation_members')
-        .delete()
-        .eq('delegation_id', guest.delegationId)
-        .eq('guest_id', guest.id);
-    }
+    await removeMember(guest.id);
     await updateGuest(guest.id, { mulaqat: false, delegationId: null });
     toast.success('Removed from delegation');
-  }, [updateGuest]);
+  }, [removeMember, updateGuest]);
 
   /** Move guest to a different country's delegation. */
   const changeDelegationCountry = useCallback(async (guest: Guest, newCountry: string) => {
-    // Remove from current delegation
-    if (guest.delegationId) {
-      await supabase
-        .from('delegation_members')
-        .delete()
-        .eq('delegation_id', guest.delegationId)
-        .eq('guest_id', guest.id);
-    }
-
+    await removeMember(guest.id);
     const delegation = await findOrCreate(newCountry);
     if (!delegation) return;
-
-    await supabase.from('delegation_members').upsert(
-      { delegation_id: delegation.id, guest_id: guest.id, guest_name: guest.fullName, is_head: false },
-      { onConflict: 'guest_id' },
-    );
-
+    await addMember(guest, delegation);
     await updateGuest(guest.id, { delegationId: delegation.id });
     toast.success(`Moved to ${newCountry} delegation`);
-  }, [findOrCreate, updateGuest]);
+  }, [findOrCreate, addMember, removeMember, updateGuest]);
 
   /** Set mulaqat type and handle delegation membership accordingly. */
   const setMulaqatType = useCallback(async (guest: Guest, type: 'No' | 'Delegation' | 'Daftari' | 'Both') => {
-    const removeFromDelegation = async () => {
-      if (guest.delegationId) {
-        await supabase
-          .from('delegation_members')
-          .delete()
-          .eq('delegation_id', guest.delegationId)
-          .eq('guest_id', guest.id);
-      }
-    };
-
-    const addToDelegation = async () => {
-      const delegation = await findOrCreate(guest.country);
-      if (!delegation) return null;
-      await supabase.from('delegation_members').upsert(
-        { delegation_id: delegation.id, guest_id: guest.id, guest_name: guest.fullName, is_head: false },
-        { onConflict: 'guest_id' },
-      );
-      return delegation;
-    };
-
     if (type === 'No') {
-      await removeFromDelegation();
+      await removeMember(guest.id);
       await updateGuest(guest.id, { mulaqat: false, mulaqatType: 'No', delegationId: null });
       toast.success('Removed from Mulaqat');
     } else if (type === 'Delegation') {
-      const delegation = await addToDelegation();
-      await updateGuest(guest.id, { mulaqat: true, mulaqatType: 'Delegation', delegationId: delegation?.id ?? guest.delegationId });
+      const delegation = await findOrCreate(guest.country);
+      if (!delegation) return;
+      await addMember(guest, delegation);
+      await updateGuest(guest.id, { mulaqat: true, mulaqatType: 'Delegation', delegationId: delegation.id });
       toast.success('Added to Delegation');
     } else if (type === 'Daftari') {
-      await removeFromDelegation();
+      await removeMember(guest.id);
       await updateGuest(guest.id, { mulaqat: true, mulaqatType: 'Daftari', delegationId: null });
       toast.success('Set as Daftari');
     } else if (type === 'Both') {
-      const delegation = await addToDelegation();
-      await updateGuest(guest.id, { mulaqat: true, mulaqatType: 'Both', delegationId: delegation?.id ?? guest.delegationId });
+      const delegation = await findOrCreate(guest.country);
+      if (!delegation) return;
+      await addMember(guest, delegation);
+      await updateGuest(guest.id, { mulaqat: true, mulaqatType: 'Both', delegationId: delegation.id });
       toast.success('Added to Delegation and Daftari');
     }
-  }, [findOrCreate, updateGuest]);
+  }, [findOrCreate, addMember, removeMember, updateGuest]);
 
   return { delegations, getDelegationCountry, enableMulaqat, disableMulaqat, changeDelegationCountry, setMulaqatType };
 }

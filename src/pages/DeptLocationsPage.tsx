@@ -572,7 +572,7 @@ export default function DeptLocationsPage() {
             <div className="space-y-4 py-1">
               <div>
                 <Label className="text-xs text-[#4A4A4A] mb-1 block">
-                  Block Name <span className="text-red-500">*</span>
+                  Block Name<span className="text-red-500 ml-0.5">*</span>
                 </Label>
                 <Input
                   value={blockFormName}
@@ -633,7 +633,7 @@ export default function DeptLocationsPage() {
             <div className="space-y-4 py-1">
               <div>
                 <Label className="text-xs text-[#4A4A4A] mb-1 block">
-                  Room Name <span className="text-red-500">*</span>
+                  Room Name<span className="text-red-500 ml-0.5">*</span>
                 </Label>
                 <Input
                   value={roomFormName}
@@ -644,7 +644,7 @@ export default function DeptLocationsPage() {
               </div>
               <div>
                 <Label className="text-xs text-[#4A4A4A] mb-1 block">
-                  Capacity <span className="text-red-500">*</span>
+                  Capacity<span className="text-red-500 ml-0.5">*</span>
                 </Label>
                 <Input
                   type="number"
@@ -847,7 +847,7 @@ export default function DeptLocationsPage() {
           </DialogHeader>
           <div className="space-y-4 py-1">
             <div>
-              <Label className="text-xs text-[#4A4A4A] mb-1 block">Name <span className="text-red-500">*</span></Label>
+              <Label className="text-xs text-[#4A4A4A] mb-1 block">Name<span className="text-red-500 ml-0.5">*</span></Label>
               <Input
                 value={formName}
                 onChange={e => { setFormName(e.target.value); setFormError(''); }}

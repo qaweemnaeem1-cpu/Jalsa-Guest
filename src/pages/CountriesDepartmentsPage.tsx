@@ -220,7 +220,7 @@ function ItemFormDialog({
           {/* Name */}
           <div>
             <Label htmlFor="item-name" className="text-sm font-medium text-[#1A1A1A] mb-1.5 block">
-              Name <span className="text-red-500">*</span>
+              Name<span className="text-red-500 ml-0.5">*</span>
             </Label>
             <Input
               id="item-name"

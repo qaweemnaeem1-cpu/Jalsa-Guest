@@ -128,7 +128,7 @@ export default function AdminMulaqatPage() {
   const [addDayOpen, setAddDayOpen] = useState(false);
   const [addDayDate, setAddDayDate] = useState('');
   const [addDayLabel, setAddDayLabel] = useState('');
-  const [addDaySlots, setAddDaySlots] = useState<string[]>(['Slot 1']);
+  const [addDaySlotCount, setAddDaySlotCount] = useState(1);
   const [daySaving, setDaySaving] = useState(false);
 
   // Edit Day dialog (delegation)
@@ -165,7 +165,7 @@ export default function AdminMulaqatPage() {
   const [addDaftariDayOpen, setAddDaftariDayOpen] = useState(false);
   const [addDaftariDate, setAddDaftariDate] = useState('');
   const [addDaftariLabel, setAddDaftariLabel] = useState('');
-  const [addDaftariSlotNames, setAddDaftariSlotNames] = useState<string[]>(['Slot 1']);
+  const [addDaftariSlotCount, setAddDaftariSlotCount] = useState(1);
   const [daftariDaySaving, setDaftariDaySaving] = useState(false);
 
   // Daftari – Edit Day dialog
@@ -194,7 +194,7 @@ export default function AdminMulaqatPage() {
   // ── Fetch ────────────────────────────────────────────────────────────────────
 
   const fetchAll = useCallback(async () => {
-    const [{ data: dayData }, { data: slotData }, { data: delData }] = await Promise.all([
+    const [{ data: dayData }, { data: slotData }, { data: delData, error: delError }] = await Promise.all([
       supabase.from('mulaqat_days').select('*').order('date'),
       supabase.from('mulaqat_slots').select('*').order('name'),
       supabase
@@ -205,6 +205,12 @@ export default function AdminMulaqatPage() {
     if (dayData) setDays(dayData as MulaqatDay[]);
     if (slotData) setSlots(slotData as MulaqatSlot[]);
     if (delData) setDelegations(delData as Delegation[]);
+    console.log('[SA Mulaqat] Delegations:', delData);
+    console.log('[SA Mulaqat] Delegation query error:', delError);
+    console.log('[SA Mulaqat] Members per country:', delData?.map(d => ({ country: d.country, memberCount: d.delegation_members?.length ?? 0, members: d.delegation_members })));
+    // Check RLS on delegation_members directly
+    const { data: dmDirect, error: dmError } = await supabase.from('delegation_members').select('id, delegation_id, guest_id, guest_name, is_head');
+    console.log('[SA Mulaqat] delegation_members direct query:', dmDirect?.length, 'rows, error:', dmError);
     setLoading(false);
   }, []);
 
@@ -303,7 +309,7 @@ export default function AdminMulaqatPage() {
 
   const handleCreateDay = async () => {
     if (!addDayDate) { toast.error('Date is required'); return; }
-    if (addDaySlots.some(s => !s.trim())) { toast.error('All slot names must be filled in'); return; }
+    if (!addDaySlotCount || addDaySlotCount < 1) { toast.error('At least 1 slot is required'); return; }
     if (!user) return;
     setDaySaving(true);
     try {
@@ -312,14 +318,13 @@ export default function AdminMulaqatPage() {
         .insert({ date: addDayDate, label: addDayLabel.trim() || null, created_by: user.id })
         .select().single();
       if (dayErr || !day) throw dayErr;
-      if (addDaySlots.length > 0) {
-        await supabase.from('mulaqat_slots').insert(
-          addDaySlots.map(name => ({ name: name.trim(), day_id: day.id, date: addDayDate, is_active: true })),
-        );
-      }
-      toast.success(`Day added with ${addDaySlots.length} slot${addDaySlots.length !== 1 ? 's' : ''}`);
+      const slotNames = Array.from({ length: addDaySlotCount }, (_, i) => `Slot ${i + 1}`);
+      await supabase.from('mulaqat_slots').insert(
+        slotNames.map(name => ({ name, day_id: day.id, date: addDayDate, is_active: true })),
+      );
+      toast.success(`Day added with ${addDaySlotCount} slot${addDaySlotCount !== 1 ? 's' : ''}`);
       setAddDayOpen(false);
-      setAddDayDate(''); setAddDayLabel(''); setAddDaySlots(['Slot 1']);
+      setAddDayDate(''); setAddDayLabel(''); setAddDaySlotCount(1);
       fetchAll();
     } catch { toast.error('Failed to create day'); }
     finally { setDaySaving(false); }
@@ -429,7 +434,7 @@ export default function AdminMulaqatPage() {
 
   const handleCreateDaftariDay = async () => {
     if (!addDaftariDate) { toast.error('Date is required'); return; }
-    if (addDaftariSlotNames.some(s => !s.trim())) { toast.error('All slot names must be filled in'); return; }
+    if (!addDaftariSlotCount || addDaftariSlotCount < 1) { toast.error('At least 1 slot is required'); return; }
     if (!user) return;
     setDaftariDaySaving(true);
     try {
@@ -438,14 +443,13 @@ export default function AdminMulaqatPage() {
         .insert({ date: addDaftariDate, label: addDaftariLabel.trim() || null, is_active: true, created_by: user.id })
         .select().single();
       if (dayErr || !day) throw dayErr;
-      if (addDaftariSlotNames.length > 0) {
-        await supabase.from('daftari_slots').insert(
-          addDaftariSlotNames.map(name => ({ name: name.trim(), day_id: day.id })),
-        );
-      }
-      toast.success(`Daftari day added with ${addDaftariSlotNames.length} slot${addDaftariSlotNames.length !== 1 ? 's' : ''}`);
+      const slotNames = Array.from({ length: addDaftariSlotCount }, (_, i) => `Slot ${i + 1}`);
+      await supabase.from('daftari_slots').insert(
+        slotNames.map(name => ({ name, day_id: day.id })),
+      );
+      toast.success(`Daftari day added with ${addDaftariSlotCount} slot${addDaftariSlotCount !== 1 ? 's' : ''}`);
       setAddDaftariDayOpen(false);
-      setAddDaftariDate(''); setAddDaftariLabel(''); setAddDaftariSlotNames(['Slot 1']);
+      setAddDaftariDate(''); setAddDaftariLabel(''); setAddDaftariSlotCount(1);
       fetchDaftari();
     } catch { toast.error('Failed to create daftari day'); }
     finally { setDaftariDaySaving(false); }
@@ -1157,31 +1161,21 @@ export default function AdminMulaqatPage() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-[#1A1A1A]">Date <span className="text-red-500">*</span></label>
+              <label className="text-sm font-medium text-[#1A1A1A]">Date<span className="text-red-500 ml-0.5">*</span></label>
               <Input type="date" value={addDayDate} onChange={e => setAddDayDate(e.target.value)} className="border-[#D4CFC7] focus:border-[#2D5A45]" />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-[#1A1A1A]">Label <span className="text-xs text-[#4A4A4A] font-normal">(optional)</span></label>
               <Input value={addDayLabel} onChange={e => setAddDayLabel(e.target.value)} placeholder="e.g. Day 1, Saturday Session" className="border-[#D4CFC7] focus:border-[#2D5A45]" />
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-[#1A1A1A]">Slots</label>
-                <button onClick={() => setAddDaySlots(prev => [...prev, `Slot ${prev.length + 1}`])} className="text-xs text-[#2D5A45] hover:text-[#234839] font-medium flex items-center gap-0.5">
-                  <Plus className="w-3.5 h-3.5" />Add slot
-                </button>
-              </div>
-              {addDaySlots.map((name, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Input value={name} onChange={e => setAddDaySlots(prev => prev.map((s, idx) => idx === i ? e.target.value : s))}
-                    placeholder={`Slot ${i + 1} name`} className="border-[#D4CFC7] focus:border-[#2D5A45] h-8 text-sm" />
-                  {addDaySlots.length > 1 && (
-                    <button onClick={() => setAddDaySlots(prev => prev.filter((_, idx) => idx !== i))} className="p-1 rounded text-red-400 hover:bg-red-50 flex-shrink-0">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              ))}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-[#1A1A1A]">Number of Slots <span className="text-red-500 ml-0.5">*</span></label>
+              <Input
+                type="number" min={1} max={50} value={addDaySlotCount}
+                onChange={e => setAddDaySlotCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
+                className="border-[#D4CFC7] focus:border-[#2D5A45] w-20"
+              />
+              <p className="text-xs text-[#4A4A4A]">Slots will be named Slot 1, Slot 2, Slot 3…</p>
             </div>
           </div>
           <DialogFooter>
@@ -1201,7 +1195,7 @@ export default function AdminMulaqatPage() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-[#1A1A1A]">Date <span className="text-red-500">*</span></label>
+              <label className="text-sm font-medium text-[#1A1A1A]">Date<span className="text-red-500 ml-0.5">*</span></label>
               <Input type="date" value={editDayDate} onChange={e => setEditDayDate(e.target.value)} className="border-[#D4CFC7] focus:border-[#2D5A45]" />
             </div>
             <div className="space-y-1.5">
@@ -1247,7 +1241,7 @@ export default function AdminMulaqatPage() {
             <DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5 text-[#2D5A45]" />Add Slot</DialogTitle>
           </DialogHeader>
           <div className="py-2">
-            <label className="text-sm font-medium text-[#1A1A1A] block mb-1.5">Slot Name <span className="text-red-500">*</span></label>
+            <label className="text-sm font-medium text-[#1A1A1A] block mb-1.5">Slot Name<span className="text-red-500 ml-0.5">*</span></label>
             <Input value={addSlotName} onChange={e => setAddSlotName(e.target.value)} placeholder="e.g. Late Afternoon Session" className="border-[#D4CFC7] focus:border-[#2D5A45]" />
           </div>
           <DialogFooter>
@@ -1422,31 +1416,21 @@ export default function AdminMulaqatPage() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-[#1A1A1A]">Date <span className="text-red-500">*</span></label>
+              <label className="text-sm font-medium text-[#1A1A1A]">Date<span className="text-red-500 ml-0.5">*</span></label>
               <Input type="date" value={addDaftariDate} onChange={e => setAddDaftariDate(e.target.value)} className="border-[#D4CFC7] focus:border-[#2D5A45]" />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-[#1A1A1A]">Label <span className="text-xs text-[#4A4A4A] font-normal">(optional, e.g. "Day 1")</span></label>
               <Input value={addDaftariLabel} onChange={e => setAddDaftariLabel(e.target.value)} placeholder="e.g. Day 1, Monday Session" className="border-[#D4CFC7] focus:border-[#2D5A45]" />
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-[#1A1A1A]">Slots</label>
-                <button onClick={() => setAddDaftariSlotNames(prev => [...prev, `Slot ${prev.length + 1}`])} className="text-xs text-[#2D5A45] hover:text-[#234839] font-medium flex items-center gap-0.5">
-                  <Plus className="w-3.5 h-3.5" />Add slot
-                </button>
-              </div>
-              {addDaftariSlotNames.map((name, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Input value={name} onChange={e => setAddDaftariSlotNames(prev => prev.map((s, idx) => idx === i ? e.target.value : s))}
-                    placeholder={`Slot ${i + 1} name`} className="border-[#D4CFC7] focus:border-[#2D5A45] h-8 text-sm" />
-                  {addDaftariSlotNames.length > 1 && (
-                    <button onClick={() => setAddDaftariSlotNames(prev => prev.filter((_, idx) => idx !== i))} className="p-1 rounded text-red-400 hover:bg-red-50 flex-shrink-0">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              ))}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-[#1A1A1A]">Number of Slots <span className="text-red-500 ml-0.5">*</span></label>
+              <Input
+                type="number" min={1} max={50} value={addDaftariSlotCount}
+                onChange={e => setAddDaftariSlotCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
+                className="border-[#D4CFC7] focus:border-[#2D5A45] w-20"
+              />
+              <p className="text-xs text-[#4A4A4A]">Slots will be named Slot 1, Slot 2, Slot 3…</p>
             </div>
           </div>
           <DialogFooter>
@@ -1466,7 +1450,7 @@ export default function AdminMulaqatPage() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-[#1A1A1A]">Date <span className="text-red-500">*</span></label>
+              <label className="text-sm font-medium text-[#1A1A1A]">Date<span className="text-red-500 ml-0.5">*</span></label>
               <Input type="date" value={editDaftariDate} onChange={e => setEditDaftariDate(e.target.value)} className="border-[#D4CFC7] focus:border-[#2D5A45]" />
             </div>
             <div className="space-y-1.5">
@@ -1509,7 +1493,7 @@ export default function AdminMulaqatPage() {
             <DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5 text-[#2D5A45]" />Add Daftari Slot</DialogTitle>
           </DialogHeader>
           <div className="py-2">
-            <label className="text-sm font-medium text-[#1A1A1A] block mb-1.5">Slot Name <span className="text-red-500">*</span></label>
+            <label className="text-sm font-medium text-[#1A1A1A] block mb-1.5">Slot Name<span className="text-red-500 ml-0.5">*</span></label>
             <Input value={addDaftariSlotName} onChange={e => setAddDaftariSlotName(e.target.value)} placeholder="e.g. Morning Session 1" className="border-[#D4CFC7] focus:border-[#2D5A45]" />
           </div>
           <DialogFooter>
