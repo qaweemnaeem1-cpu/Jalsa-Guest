@@ -164,6 +164,13 @@ export const LOCATION_PILL_COLORS = [
   'bg-teal-50 text-teal-700 border-teal-200',
 ];
 
+/** Format a designation value (string or string[]) for display. */
+export function formatDesignation(d?: string | string[] | null): string {
+  if (!d) return '—';
+  if (Array.isArray(d)) return d.length > 0 ? d.join(', ') : '—';
+  return d || '—';
+}
+
 export const VISA_STATUS_LABELS: Record<string, string> = {
   'not-required': 'Not Required',
   'pending': 'Pending',

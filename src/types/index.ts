@@ -29,6 +29,7 @@ export interface FamilyMember {
   relationship: string;
   gender: 'male' | 'female';
   passportCountry?: string;
+  designation?: string | string[];
   status?: FamilyMemberStatus;
   assignedDepartment?: string;
   assignedDepartmentAt?: string;
@@ -92,7 +93,7 @@ export interface Guest {
   visaDetails?: VisaDetails;
   guestType: GuestType;
   familyMembers: FamilyMember[];
-  designation: string;
+  designation: string | string[];
   arrivalFlightNumber?: string;
   arrivalAirport?: string;
   arrivalTerminal?: string;

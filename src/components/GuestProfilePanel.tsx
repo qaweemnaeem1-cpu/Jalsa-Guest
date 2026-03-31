@@ -22,7 +22,7 @@ import { toast } from 'sonner';
 import { Pencil, Trash2, Send } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
-import { GUEST_STATUS_LABELS, ROLE_LABELS, VISA_STATUS_LABELS } from '@/lib/constants';
+import { GUEST_STATUS_LABELS, ROLE_LABELS, VISA_STATUS_LABELS, formatDesignation } from '@/lib/constants';
 import { CountryCombobox } from '@/components/CountryCombobox';
 import type { Guest, GuestStatus, UserRole } from '@/types';
 

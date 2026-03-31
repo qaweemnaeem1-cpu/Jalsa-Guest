@@ -20,6 +20,7 @@ import {
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { ProfileDialog, getRoleDisplayLabel } from '@/components/ProfileDialog';
 import { DESK_NAV } from '@/lib/navItems';
+import { formatDesignation } from '@/lib/constants';
 import type { Guest } from '@/types';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -663,7 +664,7 @@ export default function DeskMulaqatPage() {
       !search ||
       g.fullName.toLowerCase().includes(search) ||
       g.country.toLowerCase().includes(search) ||
-      (g.designation ?? '').toLowerCase().includes(search)
+      formatDesignation(g.designation).toLowerCase().includes(search)
     );
     return [...list].sort((a, b) => {
       const cmp = a.country.localeCompare(b.country);
@@ -1056,7 +1057,7 @@ export default function DeskMulaqatPage() {
                                                               {g.fullName}
                                                             </div>
                                                           </td>
-                                                          <td className="px-4 py-2.5 text-xs text-[#4A4A4A]">{g.designation || '—'}</td>
+                                                          <td className="px-4 py-2.5 text-xs text-[#4A4A4A]">{formatDesignation(g.designation)}</td>
                                                           <td className="px-4 py-2.5 text-xs whitespace-nowrap">
                                                             <div className="text-[#4A4A4A]">{fmtDep(g.departureTime)}</div>
                                                             {fmtFlight(g.departureFlightNumber, g.departureAirport) && (
@@ -1365,7 +1366,7 @@ export default function DeskMulaqatPage() {
                                     </td>
                                     <td className="px-4 py-3 text-sm text-[#4A4A4A] whitespace-nowrap">{g.country}</td>
                                     <td className="px-4 py-3 font-medium text-[#1A1A1A] whitespace-nowrap">{g.fullName}</td>
-                                    <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.designation || '—'}</td>
+                                    <td className="px-4 py-3 text-sm text-[#4A4A4A]">{formatDesignation(g.designation)}</td>
                                     <td className="px-4 py-3 whitespace-nowrap">
                                       <div className="text-sm text-[#4A4A4A]">{fmtDep(g.departureTime)}</div>
                                       {fmtFlight(g.departureFlightNumber, g.departureAirport) && (

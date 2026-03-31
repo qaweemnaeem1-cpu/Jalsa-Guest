@@ -85,7 +85,7 @@ function rowToGuest(row: any): Guest {
     familyMembers: Array.isArray(row.family_members)
       ? row.family_members.map(rowToFamilyMember)
       : [],
-    designation: row.designation ?? '',
+    designation: Array.isArray(row.designation) ? row.designation : (row.designation ? [row.designation] : []),
     arrivalFlightNumber: row.flight_number ?? row.arrival_flight_number ?? undefined,
     arrivalAirport: row.arrival_airport ?? undefined,
     arrivalTerminal: row.arrival_terminal ?? undefined,
@@ -215,7 +215,12 @@ function updatesToDbRow(updates: Partial<Guest>): Record<string, any> {
     if (skip.has(key)) continue;
     const dbKey = map[key] ?? key;
     // Convert empty strings to null so PostgreSQL doesn't reject typed columns
-    row[dbKey] = (value === '' || value === undefined) ? null : value;
+    // Arrays are passed through as-is (TEXT[] columns); empty arrays become null
+    if (Array.isArray(value)) {
+      row[dbKey] = value.length > 0 ? value : null;
+    } else {
+      row[dbKey] = (value === '' || value === undefined) ? null : value;
+    }
   }
   return row;
 }
@@ -363,7 +368,7 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
         date_of_birth:      toNull(guestData.dateOfBirth),
         age:                guestData.dateOfBirth ? calculateAge(guestData.dateOfBirth) : toInt(guestData.age),
         guest_type:         toNull(guestData.guestType) ?? 'Individual',
-        designation:        toNull(guestData.designation),
+        designation:        Array.isArray(guestData.designation) ? (guestData.designation.length > 0 ? guestData.designation : null) : toNull(guestData.designation),
         // Coordinators always use their own country so guests are always visible to them
         country: user?.role === 'coordinator'
           ? (toNull(user.country) ?? toNull(guestData.country))

@@ -27,7 +27,7 @@ import {
   CheckCircle, AlertCircle, Eye, Pencil, ChevronLeft, ChevronRight, Building2, User,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
+import { ROLE_LABELS, GUEST_STATUS_LABELS, formatDesignation } from '@/lib/constants';
 import { useDepartments } from '@/hooks/useDepartments';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
@@ -657,7 +657,7 @@ export default function GuestsToReviewPage() {
                                       <span className="text-sm text-[#4A4A4A]">{group.head.country}</span>
                                     </td>
                                     <td className="px-3 py-3">
-                                      <span className="text-sm text-[#4A4A4A]">{group.head.designation || '—'}</span>
+                                      <span className="text-sm text-[#4A4A4A]">{formatDesignation(group.head.designation)}</span>
                                     </td>
                                     <td className="px-3 py-3">
                                       <Badge variant="outline" className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 border-indigo-200 whitespace-nowrap">
@@ -905,7 +905,7 @@ export default function GuestsToReviewPage() {
                                     <span className="text-sm text-[#4A4A4A]">{g.country}</span>
                                   </td>
                                   <td className="px-3 py-3">
-                                    <span className="text-sm text-[#4A4A4A]">{g.designation || '—'}</span>
+                                    <span className="text-sm text-[#4A4A4A]">{formatDesignation(g.designation)}</span>
                                   </td>
 
                                   <td className="px-3 py-3">

@@ -74,14 +74,116 @@ const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> 
   ],
 };
 
+// ── Designation multi-select ──────────────────────────────────────────────────
+
+interface DesignationMultiSelectProps {
+  value: string[];
+  onChange: (v: string[]) => void;
+  options: string[];
+  placeholder?: string;
+}
+
+function DesignationMultiSelect({ value, onChange, options, placeholder = 'Select designations' }: DesignationMultiSelectProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const toggle = (item: string) => {
+    if (value.includes(item)) {
+      onChange(value.filter(v => v !== item));
+    } else {
+      onChange([...value, item]);
+    }
+  };
+
+  const filtered = options.filter(o => o.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div ref={ref} className="relative">
+      <div
+        tabIndex={0}
+        role="combobox"
+        aria-expanded={open}
+        className="min-h-11 flex items-start flex-wrap gap-1.5 w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white cursor-pointer hover:border-[#2D5A45] transition-colors focus:outline-none focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45]"
+        onClick={() => setOpen(o => !o)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o); }
+          if (e.key === 'Escape') { setOpen(false); setSearch(''); }
+        }}
+      >
+        {value.length === 0 ? (
+          <span className="text-gray-400 self-center">{placeholder}</span>
+        ) : (
+          value.map(v => (
+            <span key={v} className="inline-flex items-center gap-1 bg-[#D6E4D9] text-[#2D5A45] text-xs font-medium px-2 py-0.5 rounded-full">
+              {v}
+              <button type="button" onClick={e => { e.stopPropagation(); toggle(v); }} className="hover:text-[#1A1A1A]">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))
+        )}
+        <ChevronDown className={`w-4 h-4 text-gray-400 ml-auto self-center shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </div>
+      {open && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+          <div className="p-2 border-b border-gray-100">
+            <input
+              autoFocus
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search designations..."
+              className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-md outline-none focus:border-[#2D5A45]"
+            />
+          </div>
+          <div className="max-h-52 overflow-y-auto py-1">
+            {filtered.map(opt => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => toggle(opt)}
+                className={`w-[calc(100%-8px)] mx-1 my-0.5 flex items-center gap-2.5 text-left px-3 py-2 text-sm rounded-md transition-colors ${value.includes(opt) ? 'bg-[#D6E4D9] text-[#2D5A45] font-medium' : 'text-gray-700 hover:bg-[#D6E4D9] hover:text-[#2D5A45]'}`}
+              >
+                <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${value.includes(opt) ? 'bg-[#2D5A45] border-[#2D5A45]' : 'border-gray-300'}`}>
+                  {value.includes(opt) && <span className="text-white text-[10px] font-bold">✓</span>}
+                </span>
+                {opt}
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <p className="px-3 py-2 text-sm text-gray-400">No results</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Family member form ────────────────────────────────────────────────────────
+
 interface FamilyMemberFormProps {
   member: FamilyMember;
   index: number;
   onUpdate: (index: number, updates: Partial<FamilyMember>) => void;
   onRemove: (index: number) => void;
+  designationOptions: string[];
 }
 
-function FamilyMemberForm({ member, index, onUpdate, onRemove }: FamilyMemberFormProps) {
+function FamilyMemberForm({ member, index, onUpdate, onRemove, designationOptions }: FamilyMemberFormProps) {
   return (
     <div className="bg-[#F5F0E8] rounded-lg p-4 space-y-4">
       <div className="flex items-center justify-between">
@@ -154,6 +256,16 @@ function FamilyMemberForm({ member, index, onUpdate, onRemove }: FamilyMemberFor
           onChange={(v) => onUpdate(index, { passportCountry: v })}
         />
       </div>
+
+      <div className="space-y-2">
+        <Label className="text-[#1A1A1A]">Designation</Label>
+        <DesignationMultiSelect
+          value={Array.isArray(member.designation) ? member.designation : (member.designation ? [member.designation] : [])}
+          onChange={(v) => onUpdate(index, { designation: v })}
+          options={designationOptions}
+          placeholder="Select designations (optional)"
+        />
+      </div>
     </div>
   );
 }
@@ -183,7 +295,7 @@ export default function NewGuestPage() {
     dateOfBirth: '',
     guestType: 'individual' as 'individual' | 'family',
     familyMembers: [] as FamilyMember[],
-    designation: '',
+    designation: [] as string[],
     passportNumber: '',
     passportCountry: '',
     contactNumber: '',
@@ -207,7 +319,7 @@ export default function NewGuestPage() {
     specialNeeds: '',
     dietaryRequirements: '',
     wheelchairRequired: false,
-    religion: '',
+    religion: 'Ahmadi Muslim',
     introduction: '',
     isHeadOfFamily: false as boolean,
     expenses: 'Self' as 'Self' | 'Jamaat',
@@ -349,7 +461,7 @@ export default function NewGuestPage() {
       toast.error('Contact number is required');
       return;
     }
-    if (!formData.designation) {
+    if (formData.designation.length === 0) {
       toast.error('Designation is required');
       return;
     }
@@ -389,7 +501,6 @@ export default function NewGuestPage() {
           family_group_id:   familyGroupId,
           family_name:       familyName,
           country:           resolvedCountry,
-          designation:       toNull(formData.designation),
           visa_status:       toNull(formData.visaStatus) ?? 'Not Required',
           expenses:          toNull(formData.expenses) ?? 'Self',
           tabshir_reference: toNull(formData.tabshirReference),
@@ -426,6 +537,7 @@ export default function NewGuestPage() {
           wheelchair_required: toBool(formData.wheelchairRequired),
           religion:          toNull(formData.religion),
           introduction:      toNull(formData.introduction),
+          designation:       formData.designation.length > 0 ? formData.designation : null,
           is_head_of_family: true,
           relationship:      'Self',
           photo_url:         toNull(formData.photoUrl),
@@ -448,6 +560,7 @@ export default function NewGuestPage() {
             gender:            toNull(m.gender),
             age:               toInt(m.age),
             date_of_birth:     null,
+            designation:       Array.isArray(m.designation) && m.designation.length > 0 ? m.designation : null,
             religion:          null,
             relationship:      m.relationship,
             is_head_of_family: false,
@@ -497,7 +610,7 @@ export default function NewGuestPage() {
           visaDetails: formData.visaStatus !== 'not-required' ? formData.visaDetails : undefined,
           guestType: formData.guestType,
           familyMembers: [],
-          designation: formData.designation,
+          designation: formData.designation.length > 0 ? formData.designation : [],
           arrivalFlightNumber: formData.arrivalFlightNumber,
           arrivalAirport: formData.arrivalAirport,
           arrivalTerminal: formData.arrivalTerminal,
@@ -887,6 +1000,7 @@ export default function NewGuestPage() {
                             index={index}
                             onUpdate={handleUpdateFamilyMember}
                             onRemove={handleRemoveFamilyMember}
+                            designationOptions={activeDesignations}
                           />
                         ))}
                       </div>
@@ -900,16 +1014,12 @@ export default function NewGuestPage() {
                       <Briefcase className="w-4 h-4" />
                       Designation *
                     </Label>
-                    <select
+                    <DesignationMultiSelect
                       value={formData.designation}
-                      onChange={(e) => handleInputChange('designation', e.target.value)}
-                      className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] h-11"
-                    >
-                      <option value="">Select designation</option>
-                      {activeDesignations.map((designation) => (
-                        <option key={designation} value={designation}>{designation}</option>
-                      ))}
-                    </select>
+                      onChange={(v) => handleInputChange('designation', v)}
+                      options={activeDesignations}
+                      placeholder="Select designations"
+                    />
                   </div>
                 </CardContent>
               </Card>

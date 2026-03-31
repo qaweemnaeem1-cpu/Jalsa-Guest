@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Send, Pencil, Trash2, X, Plane, Building2, BedDouble } from 'lucide-react';
+import { Send, Pencil, Trash2, X, Plane, Building2, BedDouble, ChevronDown } from 'lucide-react';
 import { AuditTimeline } from '@/components/AuditTimeline';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -17,7 +17,7 @@ import { useAuditTrail } from '@/hooks/useAuditTrail';
 import { useDesignations } from '@/hooks/useDesignations';
 import { useAssignableItems } from '@/hooks/useAssignableItems';
 import {
-  GUEST_STATUS_LABELS, ROLE_LABELS, VISA_STATUS_LABELS,
+  GUEST_STATUS_LABELS, ROLE_LABELS, VISA_STATUS_LABELS, formatDesignation,
 } from '@/lib/constants';
 import { useDepartments } from '@/hooks/useDepartments';
 import { useRooms } from '@/hooks/useRooms';
@@ -132,6 +132,76 @@ const getRemarkBubbleStyle = (role: UserRole): string => {
 };
 
 
+// ─── Designation multi-select (edit mode) ─────────────────────────────────────
+
+function DesignationMultiSelect({ value, onChange, options }: { value: string[]; onChange: (v: string[]) => void; options: string[] }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setSearch(''); }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const toggle = (item: string) =>
+    onChange(value.includes(item) ? value.filter(v => v !== item) : [...value, item]);
+
+  const filtered = options.filter(o => o.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div ref={ref} className="relative">
+      <div
+        tabIndex={0} role="combobox" aria-expanded={open}
+        className="min-h-9 flex items-start flex-wrap gap-1.5 w-full px-3 py-1.5 border border-[#D4CFC7] rounded-md text-sm bg-white cursor-pointer hover:border-[#2D5A45] transition-colors focus:outline-none focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45]"
+        onClick={() => setOpen(o => !o)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o); }
+          if (e.key === 'Escape') { setOpen(false); setSearch(''); }
+        }}
+      >
+        {value.length === 0
+          ? <span className="text-gray-400 self-center text-xs">Select designations…</span>
+          : value.map(v => (
+            <span key={v} className="inline-flex items-center gap-1 bg-[#D6E4D9] text-[#2D5A45] text-xs font-medium px-2 py-0.5 rounded-full">
+              {v}
+              <button type="button" onClick={e => { e.stopPropagation(); toggle(v); }} className="hover:text-[#1A1A1A]">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))
+        }
+        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 ml-auto self-center shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </div>
+      {open && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+          <div className="p-1.5 border-b border-gray-100">
+            <input autoFocus type="text" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search…" className="w-full px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:border-[#2D5A45]" />
+          </div>
+          <div className="max-h-48 overflow-y-auto py-1">
+            {filtered.map(opt => (
+              <button key={opt} type="button" onClick={() => toggle(opt)}
+                className={`w-[calc(100%-8px)] mx-1 my-0.5 flex items-center gap-2 text-left px-2.5 py-1.5 text-xs rounded transition-colors ${value.includes(opt) ? 'bg-[#D6E4D9] text-[#2D5A45] font-medium' : 'text-gray-700 hover:bg-[#D6E4D9] hover:text-[#2D5A45]'}`}
+              >
+                <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${value.includes(opt) ? 'bg-[#2D5A45] border-[#2D5A45]' : 'border-gray-300'}`}>
+                  {value.includes(opt) && <span className="text-white text-[8px] font-bold">✓</span>}
+                </span>
+                {opt}
+              </button>
+            ))}
+            {filtered.length === 0 && <p className="px-3 py-2 text-xs text-gray-400">No results</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function FieldCard({ label, value }: { label: string; value?: React.ReactNode }) {
@@ -214,6 +284,7 @@ export function GuestViewModal({
   const [locEditValue, setLocEditValue] = useState('');
   const [roomAssignId, setRoomAssignId] = useState('');
   const [bedAssignNum, setBedAssignNum] = useState<number | ''>('');
+  const [editDesignations, setEditDesignations] = useState<string[]>([]);
 
   const canComment    = user ? ['desk-in-charge', 'super-admin', 'coordinator'].includes(user.role) : false;
   const canAssignRoom = user ? ['super-admin', 'accommodation'].includes(user.role) : false;
@@ -245,6 +316,7 @@ export function GuestViewModal({
       setCommentText('');
       setDeptEditValue(guest.assignedDepartment ?? '');
       setLocEditValue(guest.placedLocation ?? '');
+      setEditDesignations(Array.isArray(guest.designation) ? guest.designation : (guest.designation ? [guest.designation] : []));
       reset({
         fullName:             guest.fullName,
         passportNumber:       guest.passportNumber,
@@ -253,7 +325,7 @@ export function GuestViewModal({
         dateOfBirth:          guest.dateOfBirth ?? '',
         contactNumber:        guest.contactNumber,
         email:                guest.email ?? '',
-        designation:          guest.designation ?? '',
+        designation:          '',
         guestType:            guest.guestType,
         wheelchairRequired:   guest.wheelchairRequired,
         specialNeeds:         guest.specialNeeds ?? '',
@@ -290,7 +362,7 @@ export function GuestViewModal({
       dateOfBirth:           dob,
       contactNumber:         stripHtml(data.contactNumber),
       email:                 stripHtml(data.email) || undefined,
-      designation:           stripHtml(data.designation) || undefined,
+      designation:           editDesignations.length > 0 ? editDesignations : undefined,
       guestType:             data.guestType,
       wheelchairRequired:    data.wheelchairRequired,
       specialNeeds:          stripHtml(data.specialNeeds) || undefined,
@@ -644,13 +716,12 @@ export function GuestViewModal({
                         </select>
                       </EditField>
 
-                      <EditField label="Designation" error={errors.designation?.message}>
-                        <select {...register('designation')} className={selectCls}>
-                          <option value="">Select designation…</option>
-                          {activeDesignations.map(d => (
-                            <option key={d} value={d}>{d}</option>
-                          ))}
-                        </select>
+                      <EditField label="Designation">
+                        <DesignationMultiSelect
+                          value={editDesignations}
+                          onChange={setEditDesignations}
+                          options={activeDesignations}
+                        />
                       </EditField>
                     </div>
                   </div>
@@ -718,7 +789,7 @@ export function GuestViewModal({
                       <FieldCard label="Contact Number" value={guest.contactNumber} />
                       <FieldCard label="Email Address" value={guest.email} />
                       <FieldCard label="Country" value={guest.country} />
-                      <FieldCard label="Designation" value={guest.designation} />
+                      <FieldCard label="Designation" value={formatDesignation(guest.designation)} />
                     </div>
                   </div>
 

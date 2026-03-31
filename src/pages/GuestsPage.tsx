@@ -56,7 +56,7 @@ import {
 import { ProfileDialog } from '@/components/ProfileDialog';
 import { useMemo, useRef, useEffect } from 'react';
 import { useRooms } from '@/hooks/useRooms';
-import { GUEST_STATUS_LABELS, ROLE_LABELS } from '@/lib/constants';
+import { GUEST_STATUS_LABELS, ROLE_LABELS, formatDesignation } from '@/lib/constants';
 import { CountryCombobox } from '@/components/CountryCombobox';
 import { MulaqatTypeSelect } from '@/components/MulaqatTypeSelect';
 import { useDelegations } from '@/hooks/useDelegations';
@@ -837,7 +837,7 @@ export default function GuestsPage() {
                             {user.role === 'desk-in-charge' && (
                               <td className="px-4 py-3">{getCoordinatorName(guest.submittedBy)}</td>
                             )}
-                            <td className="px-4 py-3">{guest.designation}</td>
+                            <td className="px-4 py-3">{formatDesignation(guest.designation)}</td>
                             <td className="px-4 py-3">
                               <Badge variant="outline" className="capitalize">
                                 {guest.guestType}

@@ -24,7 +24,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
-import { ROLE_LABELS } from '@/lib/constants';
+import { ROLE_LABELS, formatDesignation } from '@/lib/constants';
 import { ProfileDialog } from '@/components/ProfileDialog';
 import { SUPER_ADMIN_NAV } from '@/lib/navItems';
 import type { Guest } from '@/types';
@@ -1307,7 +1307,7 @@ export default function AdminMulaqatPage() {
                                                                           {m.guest_name}
                                                                         </div>
                                                                       </td>
-                                                                      <td className="px-2 py-1.5 text-[#4A4A4A]">{gInfo?.designation || '—'}</td>
+                                                                      <td className="px-2 py-1.5 text-[#4A4A4A]">{formatDesignation(gInfo?.designation)}</td>
                                                                       <td className="px-2 py-1.5 whitespace-nowrap">
                                                                         <div className="text-[#4A4A4A]">{fmtDep(gInfo?.departureTime)}</div>
                                                                         {fmtFlight(gInfo?.departureFlightNumber, gInfo?.departureAirport) && (
@@ -1570,7 +1570,7 @@ export default function AdminMulaqatPage() {
                                                           {m.guest_name}
                                                         </div>
                                                       </td>
-                                                      <td className="px-3 py-2.5 text-xs text-[#4A4A4A]">{gInfo?.designation || '—'}</td>
+                                                      <td className="px-3 py-2.5 text-xs text-[#4A4A4A]">{formatDesignation(gInfo?.designation)}</td>
                                                       <td className="px-3 py-2.5 text-xs whitespace-nowrap">
                                                         <div className="text-[#4A4A4A]">{fmtDep(gInfo?.departureTime)}</div>
                                                         {fmtFlight(gInfo?.departureFlightNumber, gInfo?.departureAirport) && (
@@ -1772,7 +1772,7 @@ export default function AdminMulaqatPage() {
                                                         {g.fullName}
                                                         <span className="ml-1 text-[10px] text-[#4A4A4A] font-normal">({g.country})</span>
                                                       </td>
-                                                      <td className="px-3 py-2 text-[#4A4A4A]">{g.designation || '—'}</td>
+                                                      <td className="px-3 py-2 text-[#4A4A4A]">{formatDesignation(g.designation)}</td>
                                                       <td className="px-3 py-2 whitespace-nowrap">
                                                         <div className="text-[#4A4A4A]">{fmtDep(g.departureTime)}</div>
                                                         {fmtFlight(g.departureFlightNumber, g.departureAirport) && (
@@ -1930,7 +1930,7 @@ export default function AdminMulaqatPage() {
                                     </td>
                                     <td className="px-3 py-3 text-sm text-[#4A4A4A] whitespace-nowrap">{guest.country}</td>
                                     <td className="px-3 py-3 font-medium text-[#1A1A1A] whitespace-nowrap">{guest.fullName}</td>
-                                    <td className="px-3 py-3 text-sm text-[#4A4A4A]">{guest.designation || '—'}</td>
+                                    <td className="px-3 py-3 text-sm text-[#4A4A4A]">{formatDesignation(guest.designation)}</td>
                                     <td className="px-3 py-3 whitespace-nowrap">
                                       <div className="text-sm text-[#4A4A4A]">{fmtDep(guest.departureTime)}</div>
                                       {fmtFlight(guest.departureFlightNumber, guest.departureAirport) && (
