@@ -62,6 +62,7 @@ import { MulaqatTypeSelect } from '@/components/MulaqatTypeSelect';
 import { useDelegations } from '@/hooks/useDelegations';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { FamilyStatusCell } from '@/components/FamilyStatusCell';
+import { FamilyBadge, type FamilyMemberInfo } from '@/components/FamilyBadge';
 import { DepartmentSelect } from '@/components/DepartmentSelect';
 import { supabase } from '@/lib/supabase';
 import type { UserRole, Guest } from '@/types';
@@ -810,11 +811,23 @@ export default function GuestsPage() {
                             </td>
                             <td className="px-4 py-3 font-medium">{guest.referenceNumber}</td>
                             <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium shrink-0">
                                   {guest.fullName.charAt(0)}
                                 </div>
-                                {guest.fullName}
+                                <span>{guest.fullName}</span>
+                                {guest.familyGroupId && (() => {
+                                  const groupMembers = guests.filter(g => g.familyGroupId === guest.familyGroupId);
+                                  const lastName = (guest.familyName ?? guest.fullName).replace(' Family', '') || guest.fullName.split(' ').pop() ?? '';
+                                  const memberInfos: FamilyMemberInfo[] = groupMembers.map(g => ({
+                                    name: g.fullName,
+                                    relationship: g.isHeadOfFamily ? 'Head' : (g.relationship ?? '—'),
+                                    status: g.status,
+                                    assignedDepartment: g.assignedDepartment,
+                                    placedLocation: g.placedLocation,
+                                  }));
+                                  return <FamilyBadge lastName={lastName} members={memberInfos} currentDept={guest.assignedDepartment ?? ''} />;
+                                })()}
                               </div>
                             </td>
                             <td className="px-4 py-3">{guest.country}</td>
@@ -829,7 +842,11 @@ export default function GuestsPage() {
                               <Badge variant="outline" className="capitalize">
                                 {guest.guestType}
                               </Badge>
-                              {guest.guestType === 'family' && guest.familyMembers.length > 0 && (
+                              {guest.familyGroupId && (() => {
+                                const cnt = guests.filter(g => g.familyGroupId === guest.familyGroupId).length;
+                                return cnt > 1 ? <span className="text-xs text-[#4A4A4A] ml-1">({cnt} members)</span> : null;
+                              })()}
+                              {!guest.familyGroupId && guest.guestType === 'family' && guest.familyMembers.length > 0 && (
                                 <span className="text-xs text-[#4A4A4A] ml-1">
                                   ({guest.familyMembers.length + 1} members)
                                 </span>

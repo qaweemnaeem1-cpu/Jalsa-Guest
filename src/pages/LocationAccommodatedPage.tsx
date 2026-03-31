@@ -35,7 +35,20 @@ interface AccommodatedRow {
   assignedAt?: string;
 }
 
-function buildFamilyMemberList(g: Guest): FamilyMemberInfo[] {
+function buildFamilyMemberList(g: Guest, allGuests?: Guest[]): FamilyMemberInfo[] {
+  // New model: use family_group_id to find all members
+  if (g.familyGroupId && allGuests) {
+    return allGuests
+      .filter(x => x.familyGroupId === g.familyGroupId)
+      .map(x => ({
+        name: x.fullName,
+        relationship: x.isHeadOfFamily ? 'Head' : (x.relationship ?? '—'),
+        status: x.status,
+        assignedDepartment: x.assignedDepartment,
+        placedLocation: x.placedLocation,
+      }));
+  }
+  // Old model
   return [
     { name: g.fullName, relationship: 'Head', status: g.status, assignedDepartment: g.assignedDepartment, placedLocation: g.placedLocation },
     ...(g.familyMembers ?? []).map(m => ({
@@ -88,9 +101,9 @@ export default function LocationAccommodatedPage() {
       for (const bed of bedAssignments[room.id] ?? []) {
         if (!bed.guestName || !bed.guestId) continue;
         const g = guestById.get(bed.guestId);
-        const isFamily = !!(g && g.guestType === 'family' && (g.familyMembers?.length ?? 0) > 0);
-        const lastName = g ? g.fullName.split(' ').pop() ?? g.fullName : '';
-        const familyAllMembers = g && isFamily ? buildFamilyMemberList(g) : [];
+        const isFamily = !!(g && (g.familyGroupId || (g.guestType === 'family' && (g.familyMembers?.length ?? 0) > 0)));
+        const lastName = g ? ((g.familyName ?? g.fullName).replace(' Family', '').split(' ').pop() ?? g.fullName) : '';
+        const familyAllMembers = g && isFamily ? buildFamilyMemberList(g, guests) : [];
         rows.push({
           rowKey: bed.familyMemberId ? `${bed.guestId}-${bed.familyMemberId}` : bed.guestId,
           guestId: bed.guestId,

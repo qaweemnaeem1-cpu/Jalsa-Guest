@@ -24,6 +24,18 @@ interface PlacedRow {
   placedAt?: string;
 }
 
+function buildFamilyMemberListFromGroup(allGuests: Guest[], familyGroupId: string): FamilyMemberInfo[] {
+  return allGuests
+    .filter(g => g.familyGroupId === familyGroupId)
+    .map(g => ({
+      name: g.fullName,
+      relationship: g.isHeadOfFamily ? 'Head' : (g.relationship ?? '—'),
+      status: g.status,
+      assignedDepartment: g.assignedDepartment,
+      placedLocation: g.placedLocation,
+    }));
+}
+
 function buildFamilyMemberList(g: Guest): FamilyMemberInfo[] {
   return [
     { name: g.fullName, relationship: 'Head', status: g.status, assignedDepartment: g.assignedDepartment, placedLocation: g.placedLocation },
@@ -40,45 +52,45 @@ function buildFamilyMemberList(g: Guest): FamilyMemberInfo[] {
 function buildRows(guests: Guest[], dept: string): PlacedRow[] {
   const rows: PlacedRow[] = [];
   for (const g of guests) {
+    // New model
+    if (g.familyGroupId) {
+      if (g.assignedDepartment === dept && g.placedLocation) {
+        const lastName = (g.familyName ?? g.fullName).replace(' Family', '').split(' ').pop() ?? g.fullName;
+        rows.push({
+          rowKey: g.id, guestId: g.id, memberId: null,
+          name: g.fullName, country: g.country, referenceNumber: g.referenceNumber,
+          relationship: g.isHeadOfFamily ? 'Head' : (g.relationship ?? '—'),
+          isFamily: true, familyLastName: lastName,
+          familyAllMembers: buildFamilyMemberListFromGroup(guests, g.familyGroupId),
+          placedLocation: g.placedLocation, placedAt: g.placedAt,
+        });
+      }
+      continue;
+    }
+
+    // Old model
     const isFamily = g.guestType === 'family' && (g.familyMembers?.length ?? 0) > 0;
     const lastName = g.fullName.split(' ').pop() ?? g.fullName;
     const familyAllMembers = isFamily ? buildFamilyMemberList(g) : [];
 
-    // Head guest placed in this dept
     if (g.assignedDepartment === dept && g.placedLocation) {
       rows.push({
-        rowKey: g.id,
-        guestId: g.id,
-        memberId: null,
-        name: g.fullName,
-        country: g.country,
-        referenceNumber: g.referenceNumber,
+        rowKey: g.id, guestId: g.id, memberId: null,
+        name: g.fullName, country: g.country, referenceNumber: g.referenceNumber,
         relationship: isFamily ? 'Head' : 'Individual',
-        isFamily,
-        familyLastName: lastName,
-        familyAllMembers,
-        placedLocation: g.placedLocation,
-        placedAt: g.placedAt,
+        isFamily, familyLastName: lastName, familyAllMembers,
+        placedLocation: g.placedLocation, placedAt: g.placedAt,
       });
     }
-
-    // Family members placed in this dept
     if (isFamily) {
       for (const m of g.familyMembers ?? []) {
         if (m.assignedDepartment === dept && m.placedLocation) {
           rows.push({
-            rowKey: `${g.id}-${m.id}`,
-            guestId: g.id,
-            memberId: m.id,
-            name: m.name,
-            country: g.country,
-            referenceNumber: g.referenceNumber,
+            rowKey: `${g.id}-${m.id}`, guestId: g.id, memberId: m.id,
+            name: m.name, country: g.country, referenceNumber: g.referenceNumber,
             relationship: m.relationship,
-            isFamily: true,
-            familyLastName: lastName,
-            familyAllMembers,
-            placedLocation: m.placedLocation,
-            placedAt: m.placedAt,
+            isFamily: true, familyLastName: lastName, familyAllMembers,
+            placedLocation: m.placedLocation, placedAt: m.placedAt,
           });
         }
       }

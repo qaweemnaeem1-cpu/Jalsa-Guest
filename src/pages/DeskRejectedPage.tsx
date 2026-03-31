@@ -579,7 +579,245 @@ export default function DeskRejectedPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#E8E3DB]">
-                          {paginated.map(g => {
+                          {paginated.map(item => {
+                            // ── New-model family group row ──────────────────────────────
+                            if (item.type === 'family') {
+                              const { group } = item;
+                              const isExpanded = expandedRows.has(group.groupId);
+                              const allDepts = group.members.map(m => m.assignedDepartment).filter(Boolean);
+                              const allSameDept = allDepts.length === group.members.length && new Set(allDepts).size === 1;
+                              const groupDept = allSameDept ? allDepts[0] : undefined;
+                              return (
+                                <Fragment key={group.groupId}>
+                                  <tr
+                                    className="hover:bg-[#FAFAFA] cursor-pointer select-none bg-indigo-50/40"
+                                    onClick={() => toggleRow(group.groupId)}
+                                  >
+                                    <td className="px-3 py-3">
+                                      <span className="font-mono text-sm text-[#4A4A4A]">{group.head.referenceNumber}</span>
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      <div className="flex items-center gap-1.5">
+                                        {isExpanded
+                                          ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                                          : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+                                        <span className="font-semibold text-sm text-[#1A1A1A]">{group.familyName}</span>
+                                        <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-xs px-2 py-0.5 shrink-0">
+                                          Family ({group.members.length})
+                                        </Badge>
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      <span className="text-sm text-[#4A4A4A]">{group.head.country}</span>
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      <span className="text-sm text-[#4A4A4A]">{group.head.designation || '—'}</span>
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      <Badge variant="outline" className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 border-indigo-200 whitespace-nowrap">
+                                        Family ({group.members.length})
+                                      </Badge>
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      <div className="flex items-center gap-1">
+                                        {group.members.map(m => (
+                                          <span key={m.id} title={`${m.fullName}: ${m.status}`} className={`w-2.5 h-2.5 rounded-full ${statusDotColor(m.status)}`} />
+                                        ))}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                                      {groupDept ? (
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getDeptBadgeCls(groupDept)}`}>
+                                          {groupDept}
+                                        </span>
+                                      ) : (
+                                        <span className="text-xs text-gray-400 italic">Mixed</span>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                                      <MulaqatTypeSelect
+                                        value={group.head.mulaqatType ?? 'No'}
+                                        onValueChange={v => setMulaqatType(group.head, v)}
+                                        stopPropagation
+                                      />
+                                    </td>
+                                    <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                                      {(group.head.mulaqatType === 'Delegation' || group.head.mulaqatType === 'Both') ? (
+                                        <CountryCombobox
+                                          compact
+                                          hideClear
+                                          value={getDelegationCountry(group.head.delegationId) ?? group.head.country}
+                                          onChange={v => changeDelegationCountry(group.head, v)}
+                                        />
+                                      ) : (
+                                        <span className="text-sm text-gray-400">—</span>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          onClick={() => handleFamilyApproveAll(group.members)}
+                                          title="Approve All"
+                                          className="p-1.5 rounded text-green-600 hover:bg-green-50 transition-colors"
+                                        >
+                                          <CheckCircle className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                          onClick={() => setFamilyCorrectionDialog({ members: group.members, reason: '' })}
+                                          title="Correction All"
+                                          className="p-1.5 rounded text-orange-500 hover:bg-orange-50 transition-colors"
+                                        >
+                                          <AlertCircle className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                          onClick={() => setFamilyRejectDialog({ members: group.members, reason: '' })}
+                                          title="Reject All"
+                                          className="p-1.5 rounded text-red-500 hover:bg-red-50 transition-colors"
+                                        >
+                                          <XCircle className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  {/* Expanded sub-table */}
+                                  {isExpanded && (
+                                    <tr>
+                                      <td colSpan={10} className="p-0 border-b border-[#E8E3DB]">
+                                        <div className="bg-gray-50/50 border-l-4 border-[#2D5A45] px-4 py-3">
+                                          <table className="w-full text-sm">
+                                            <thead>
+                                              <tr className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-[#E8E3DB]">
+                                                <th className="px-2 py-2 text-left">Ref</th>
+                                                <th className="px-2 py-2 text-left">Name</th>
+                                                <th className="px-2 py-2 text-left">Relationship</th>
+                                                <th className="px-2 py-2 text-left">Status</th>
+                                                <th className="px-2 py-2 text-left">Department</th>
+                                                <th className="px-2 py-2 text-left">Mulaqat</th>
+                                                <th className="px-2 py-2 text-left">Actions</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-[#F0EDE8]">
+                                              {group.members.map(m => {
+                                                const mApproved = m.status === 'Approved' || m.status === 'Accommodated';
+                                                return (
+                                                  <tr key={m.id} className="hover:bg-white/70">
+                                                    <td className="px-2 py-2 font-mono text-xs text-[#4A4A4A]">{m.referenceNumber}</td>
+                                                    <td className="px-2 py-2">
+                                                      <div className="flex items-center gap-1">
+                                                        {m.isHeadOfFamily && <span title="Head of family">⭐</span>}
+                                                        <span className="font-medium text-[#1A1A1A]">{m.fullName}</span>
+                                                      </div>
+                                                    </td>
+                                                    <td className="px-2 py-2">
+                                                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 capitalize">
+                                                        {m.relationship ?? (m.isHeadOfFamily ? 'Head' : '—')}
+                                                      </span>
+                                                    </td>
+                                                    <td className="px-2 py-2">
+                                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${familyStatusBadgeCls(m.status)}`}>
+                                                        {m.status}
+                                                      </span>
+                                                    </td>
+                                                    <td className="px-2 py-2">
+                                                      {m.assignedDepartment ? (
+                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${getDeptBadgeCls(m.assignedDepartment)}`}>
+                                                          {m.assignedDepartment}
+                                                        </span>
+                                                      ) : (
+                                                        <DepartmentSelect
+                                                          value=""
+                                                          onValueChange={v => { if (v) handleDeptAssignById(m.id, v); }}
+                                                          placeholder="Assign..."
+                                                          className="text-[10px] min-w-[110px]"
+                                                        />
+                                                      )}
+                                                    </td>
+                                                    <td className="px-2 py-2 text-xs text-gray-500">{m.mulaqatType ?? 'No'}</td>
+                                                    <td className="px-2 py-2">
+                                                      <div className="flex items-center gap-1">
+                                                        <button
+                                                          onClick={() => setApproveGuestId(m.id)}
+                                                          disabled={mApproved}
+                                                          title="Approve"
+                                                          className="p-1 rounded text-green-600 hover:bg-green-50 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+                                                        >
+                                                          <CheckCircle className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        <button
+                                                          onClick={() => setCorrectionDialog({ open: true, guest: m, reason: '' })}
+                                                          disabled={mApproved}
+                                                          title="Needs Correction"
+                                                          className="p-1 rounded text-orange-500 hover:bg-orange-50 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+                                                        >
+                                                          <AlertCircle className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        <button
+                                                          onClick={() => setRejectDialog({ open: true, guest: m, reason: '' })}
+                                                          disabled={mApproved}
+                                                          title="Reject"
+                                                          className="p-1 rounded text-red-500 hover:bg-red-50 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+                                                        >
+                                                          <XCircle className="w-3.5 h-3.5" />
+                                                        </button>
+                                                      </div>
+                                                    </td>
+                                                  </tr>
+                                                );
+                                              })}
+                                            </tbody>
+                                          </table>
+                                          {/* Sub-table footer bulk actions */}
+                                          <div className="flex items-center gap-2 pt-3 mt-2 border-t border-[#E8E3DB]">
+                                            <button
+                                              onClick={() => handleFamilyApproveAll(group.members)}
+                                              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-medium transition-colors"
+                                            >
+                                              <CheckCircle className="w-3.5 h-3.5" />
+                                              Approve All
+                                            </button>
+                                            <button
+                                              onClick={() => setFamilyCorrectionDialog({ members: group.members, reason: '' })}
+                                              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-xs font-medium transition-colors"
+                                            >
+                                              <AlertCircle className="w-3.5 h-3.5" />
+                                              Correction All
+                                            </button>
+                                            <button
+                                              onClick={() => setFamilyRejectDialog({ members: group.members, reason: '' })}
+                                              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-medium transition-colors"
+                                            >
+                                              <XCircle className="w-3.5 h-3.5" />
+                                              Reject All
+                                            </button>
+                                            <div className="flex items-center gap-1.5 ml-3">
+                                              <DepartmentSelect
+                                                value={assignAllValues[group.groupId] ?? ''}
+                                                onValueChange={v => setAssignAllValues(prev => ({ ...prev, [group.groupId]: v }))}
+                                                placeholder="Assign all to dept..."
+                                                className="text-xs min-w-[140px]"
+                                              />
+                                              <button
+                                                onClick={() => {
+                                                  const dept = assignAllValues[group.groupId];
+                                                  if (dept) { handleFamilyGroupDeptAssignAll(group.members, dept); setAssignAllValues(prev => ({ ...prev, [group.groupId]: '' })); }
+                                                }}
+                                                disabled={!assignAllValues[group.groupId]}
+                                                className="px-3 py-1.5 bg-[#2D5A45] hover:bg-[#234839] text-white rounded-md text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                              >
+                                                Apply
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </Fragment>
+                              );
+                            }
+
+                            // ── Individual guest row (old model OR new individual) ────
+                            const g = item.guest;
                             const isFamily = g.guestType === 'family' && g.familyMembers.length > 0;
                             const isExpanded = expandedRows.has(g.id);
 
@@ -678,7 +916,7 @@ export default function DeskRejectedPage() {
                                   </td>
                                 </tr>
 
-                                {/* Family member drawer */}
+                                {/* Family member drawer (old model) */}
                                 {isFamily && isExpanded && (
                                   <tr>
                                     <td colSpan={10} className="p-0 bg-[#F9F8F6] border-b border-[#E8E3DB]">
@@ -1120,6 +1358,84 @@ export default function DeskRejectedPage() {
             >
               <XCircle className="w-4 h-4 mr-1.5" />
               Confirm Reject
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Family Group Correction All Dialog */}
+      <Dialog open={!!familyCorrectionDialog} onOpenChange={open => { if (!open) setFamilyCorrectionDialog(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-orange-500" />
+              Correction — All Family Members
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-[#4A4A4A]">
+              Sending all {familyCorrectionDialog?.members.length} family members back for correction.
+            </p>
+            <Textarea
+              value={familyCorrectionDialog?.reason ?? ''}
+              onChange={e => setFamilyCorrectionDialog(d => d ? { ...d, reason: e.target.value } : d)}
+              placeholder="Describe what needs to be corrected (required, min. 10 chars)..."
+              rows={4}
+              maxLength={1000}
+              className="border-[#D4CFC7] focus:border-[#2D5A45] resize-none text-sm"
+            />
+            {(familyCorrectionDialog?.reason.length ?? 0) > 0 && (familyCorrectionDialog?.reason.trim().length ?? 0) < 10 && (
+              <p className="text-xs text-red-500">Please provide at least 10 characters.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFamilyCorrectionDialog(null)}>Cancel</Button>
+            <Button
+              onClick={handleFamilyCorrectionAllConfirm}
+              disabled={(familyCorrectionDialog?.reason.trim().length ?? 0) < 10}
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+            >
+              <AlertCircle className="w-4 h-4 mr-1.5" />
+              Send All for Correction
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Family Group Reject All Dialog */}
+      <Dialog open={!!familyRejectDialog} onOpenChange={open => { if (!open) setFamilyRejectDialog(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <XCircle className="w-5 h-5 text-red-500" />
+              Reject All Family Members
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-[#4A4A4A]">
+              Rejecting all {familyRejectDialog?.members.length} family members. This action should be used carefully.
+            </p>
+            <Textarea
+              value={familyRejectDialog?.reason ?? ''}
+              onChange={e => setFamilyRejectDialog(d => d ? { ...d, reason: e.target.value } : d)}
+              placeholder="Reason for rejection (required, min. 10 chars)..."
+              rows={4}
+              maxLength={1000}
+              className="border-[#D4CFC7] focus:border-[#2D5A45] resize-none text-sm"
+            />
+            {(familyRejectDialog?.reason.length ?? 0) > 0 && (familyRejectDialog?.reason.trim().length ?? 0) < 10 && (
+              <p className="text-xs text-red-500">Please provide at least 10 characters.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFamilyRejectDialog(null)}>Cancel</Button>
+            <Button
+              onClick={handleFamilyRejectAllConfirm}
+              disabled={(familyRejectDialog?.reason.trim().length ?? 0) < 10}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              <XCircle className="w-4 h-4 mr-1.5" />
+              Reject All
             </Button>
           </DialogFooter>
         </DialogContent>

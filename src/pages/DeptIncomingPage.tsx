@@ -39,6 +39,18 @@ interface PersonRow {
   status: string;
 }
 
+function buildFamilyMemberListFromGroup(allGuests: Guest[], familyGroupId: string): FamilyMemberInfo[] {
+  return allGuests
+    .filter(g => g.familyGroupId === familyGroupId)
+    .map(g => ({
+      name: g.fullName,
+      relationship: g.isHeadOfFamily ? 'Head' : (g.relationship ?? '—'),
+      status: g.status,
+      assignedDepartment: g.assignedDepartment,
+      placedLocation: g.placedLocation,
+    }));
+}
+
 function buildFamilyMemberList(g: Guest): FamilyMemberInfo[] {
   const head: FamilyMemberInfo = {
     name: g.fullName,
@@ -60,11 +72,34 @@ function buildFamilyMemberList(g: Guest): FamilyMemberInfo[] {
 function buildRows(guests: Guest[], dept: string): PersonRow[] {
   const rows: PersonRow[] = [];
   for (const g of guests) {
+    // New model: guest has familyGroupId — it IS its own row
+    if (g.familyGroupId) {
+      if (g.assignedDepartment === dept && !g.placedLocation) {
+        const lastName = (g.familyName ?? g.fullName).replace(' Family', '').split(' ').pop() ?? g.fullName;
+        rows.push({
+          rowKey: g.id,
+          guestId: g.id,
+          memberId: null,
+          name: g.fullName,
+          country: g.country,
+          referenceNumber: g.referenceNumber,
+          relationship: g.isHeadOfFamily ? 'Head' : (g.relationship ?? '—'),
+          isFamily: true,
+          familyLastName: lastName,
+          familyGroupId: g.familyGroupId,
+          familyAllMembers: buildFamilyMemberListFromGroup(guests, g.familyGroupId),
+          assignedDepartmentAt: g.assignedDepartmentAt,
+          status: g.status,
+        });
+      }
+      continue;
+    }
+
+    // Old model: single guest row with familyMembers sub-array
     const isFamily = g.guestType === 'family' && (g.familyMembers?.length ?? 0) > 0;
     const lastName = g.fullName.split(' ').pop() ?? g.fullName;
     const familyAllMembers = isFamily ? buildFamilyMemberList(g) : [];
 
-    // Head guest
     if (g.assignedDepartment === dept && !g.placedLocation) {
       rows.push({
         rowKey: g.id,
@@ -83,7 +118,6 @@ function buildRows(guests: Guest[], dept: string): PersonRow[] {
       });
     }
 
-    // Family member rows
     if (isFamily) {
       for (const m of g.familyMembers ?? []) {
         if (m.assignedDepartment === dept && !m.placedLocation) {

@@ -32,6 +32,18 @@ interface PersonRow {
   placedAt?: string;
 }
 
+function buildFamilyMemberListFromGroup(allGuests: Guest[], familyGroupId: string): FamilyMemberInfo[] {
+  return allGuests
+    .filter(g => g.familyGroupId === familyGroupId)
+    .map(g => ({
+      name: g.fullName,
+      relationship: g.isHeadOfFamily ? 'Head' : (g.relationship ?? '—'),
+      status: g.status,
+      assignedDepartment: g.assignedDepartment,
+      placedLocation: g.placedLocation,
+    }));
+}
+
 function buildFamilyMemberList(g: Guest): FamilyMemberInfo[] {
   return [
     { name: g.fullName, relationship: 'Head', status: g.status, assignedDepartment: g.assignedDepartment, placedLocation: g.placedLocation },
@@ -45,6 +57,23 @@ function buildFamilyMemberList(g: Guest): FamilyMemberInfo[] {
 function buildLocationRows(guests: Guest[], loc: string): PersonRow[] {
   const rows: PersonRow[] = [];
   for (const g of guests) {
+    // New model: guest has familyGroupId
+    if (g.familyGroupId) {
+      if (g.placedLocation === loc) {
+        const lastName = (g.familyName ?? g.fullName).replace(' Family', '').split(' ').pop() ?? g.fullName;
+        rows.push({
+          rowKey: g.id, guestId: g.id, memberId: null,
+          name: g.fullName, country: g.country, referenceNumber: g.referenceNumber,
+          relationship: g.isHeadOfFamily ? 'Head' : (g.relationship ?? '—'),
+          isFamily: true, familyLastName: lastName,
+          familyAllMembers: buildFamilyMemberListFromGroup(guests, g.familyGroupId),
+          placedAt: g.placedAt,
+        });
+      }
+      continue;
+    }
+
+    // Old model
     const isFamily = g.guestType === 'family' && (g.familyMembers?.length ?? 0) > 0;
     const lastName = g.fullName.split(' ').pop() ?? g.fullName;
     const familyAllMembers = isFamily ? buildFamilyMemberList(g) : [];
