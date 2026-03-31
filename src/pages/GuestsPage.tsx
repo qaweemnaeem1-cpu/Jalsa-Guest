@@ -818,7 +818,7 @@ export default function GuestsPage() {
                                 <span>{guest.fullName}</span>
                                 {guest.familyGroupId && (() => {
                                   const groupMembers = guests.filter(g => g.familyGroupId === guest.familyGroupId);
-                                  const lastName = (guest.familyName ?? guest.fullName).replace(' Family', '') || guest.fullName.split(' ').pop() ?? '';
+                                  const lastName = (guest.familyName ?? guest.fullName).replace(' Family', '') || guest.fullName.split(' ').pop() || '';
                                   const memberInfos: FamilyMemberInfo[] = groupMembers.map(g => ({
                                     name: g.fullName,
                                     relationship: g.isHeadOfFamily ? 'Head' : (g.relationship ?? '—'),
