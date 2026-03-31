@@ -139,6 +139,10 @@ export interface Guest {
   expenses?: 'Self' | 'Jamaat';
   tabshirReference?: string;
   photoUrl?: string;
+  // Family group fields (new model — each member is a separate Guest row)
+  familyGroupId?: string | null;
+  familyName?: string;
+  relationship?: string; // 'Self' | 'Wife' | 'Son' | 'Daughter' | etc.
 }
 
 export function canTransitionStatus(from: GuestStatus, to: GuestStatus): boolean {

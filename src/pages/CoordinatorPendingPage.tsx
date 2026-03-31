@@ -8,17 +8,35 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { toast } from 'sonner';
 import {
-  LayoutDashboard, Users, Clock, MessageSquare, XCircle,
-  ChevronDown, LogOut,
-  CheckCircle, AlertCircle, Edit, User, Plus,
+  Clock, ChevronDown, LogOut, ChevronRight,
+  CheckCircle, AlertCircle, Edit, User, Plus, Users,
 } from 'lucide-react';
-import { ROLE_LABELS } from '@/lib/constants';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
 import { COORD_NAV } from '@/lib/navItems';
+import type { Guest } from '@/types';
 
 function getInitials(name: string) {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
+function statusBadgeCls(status: string): string {
+  if (status === 'Awaiting Review')  return 'bg-amber-50 text-amber-700 border-amber-200';
+  if (status === 'Needs Correction') return 'bg-orange-50 text-orange-700 border-orange-200';
+  if (status === 'Approved')         return 'bg-green-50 text-green-700 border-green-200';
+  if (status === 'Rejected')         return 'bg-red-50 text-red-700 border-red-200';
+  return 'bg-gray-50 text-gray-500 border-gray-200';
+}
+
+/** Deduplicate guests to one card per family group (show head) + all individuals. */
+function deduplicateToGroups(list: Guest[]): Guest[] {
+  const seen = new Set<string>();
+  return list.filter(g => {
+    if (!g.familyGroupId) return true;
+    if (seen.has(g.familyGroupId)) return false;
+    seen.add(g.familyGroupId);
+    return true;
+  });
 }
 
 export default function CoordinatorPendingPage() {
@@ -27,34 +45,52 @@ export default function CoordinatorPendingPage() {
   const { guests, updateGuest } = useGuests();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-
-  // Edit modal state
   const [editGuestId, setEditGuestId] = useState<string | null>(null);
-
-  // Re-submit confirmation dialog
   const [resubmitGuestId, setResubmitGuestId] = useState<string | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   if (!user) return null;
 
   const myGuests = guests.filter(g => g.submittedBy === user.id);
-  const awaitingReview = myGuests.filter(g => g.status === 'Awaiting Review');
-  const needsCorrection = myGuests.filter(g => g.status === 'Needs Correction');
-  const rejectedCount = myGuests.filter(g => g.status === 'Rejected').length;
-
+  // Count unique family groups + individuals that are awaiting/correction
+  const awaitingAll = myGuests.filter(g => g.status === 'Awaiting Review');
+  const correctionAll = myGuests.filter(g => g.status === 'Needs Correction');
+  const awaitingReview = deduplicateToGroups(awaitingAll);
+  const needsCorrection = deduplicateToGroups(correctionAll);
+  const rejectedCount = new Set(myGuests.filter(g => g.status === 'Rejected').map(g => g.familyGroupId ?? g.id)).size;
   const pendingCount = awaitingReview.length + needsCorrection.length;
 
   const editGuest = guests.find(g => g.id === editGuestId) ?? null;
   const resubmitGuest = guests.find(g => g.id === resubmitGuestId) ?? null;
 
-  const handleResubmit = () => {
+  const toggleGroup = (id: string) => setExpandedGroups(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  /** Get all guests in the same family group (or just [g] for individuals). */
+  const getFamilyMembers = (g: Guest): Guest[] =>
+    g.familyGroupId
+      ? myGuests.filter(x => x.familyGroupId === g.familyGroupId)
+      : [g];
+
+  const handleResubmit = async () => {
     if (!resubmitGuest) return;
-    updateGuest(resubmitGuest.id, {
-      status: 'Awaiting Review',
-      resubmitCount: (resubmitGuest.resubmitCount ?? 0) + 1,
-      resubmittedAt: new Date().toISOString(),
-    });
+    const members = getFamilyMembers(resubmitGuest);
+    const now = new Date().toISOString();
+    for (const m of members) {
+      updateGuest(m.id, {
+        status: 'Awaiting Review',
+        resubmitCount: (m.resubmitCount ?? 0) + 1,
+        resubmittedAt: now,
+      });
+    }
     setResubmitGuestId(null);
-    toast.success(`${resubmitGuest.fullName} re-submitted for review`);
+    const label = resubmitGuest.familyGroupId
+      ? `${resubmitGuest.familyName ?? 'Family'} (${members.length} members)`
+      : resubmitGuest.fullName;
+    toast.success(`${label} re-submitted for review`);
   };
 
   return (
@@ -186,24 +222,55 @@ export default function CoordinatorPendingPage() {
                     <p className="text-sm text-[#4A4A4A]">No guests awaiting review.</p>
                   </div>
                 ) : (
-                  awaitingReview.map(g => (
-                    <div key={g.id} className="flex items-center gap-4 px-5 py-4 border-b border-[#E8E3DB] last:border-b-0">
-                      <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center text-amber-700 font-bold text-sm shrink-0">
-                        {g.fullName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-[#1A1A1A]">{g.fullName}</span>
-                          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px]">
-                            Awaiting Review
-                          </Badge>
+                  awaitingReview.map(g => {
+                    const members = getFamilyMembers(g);
+                    const isGroup = !!g.familyGroupId;
+                    const isExpanded = expandedGroups.has(g.familyGroupId ?? g.id);
+                    const displayName = isGroup ? (g.familyName ?? g.fullName) : g.fullName;
+                    return (
+                      <div key={g.id} className="border-b border-[#E8E3DB] last:border-b-0">
+                        <div className="flex items-center gap-4 px-5 py-4">
+                          <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center text-amber-700 font-bold text-sm shrink-0">
+                            {isGroup ? <Users className="w-5 h-5" /> : getInitials(g.fullName)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-[#1A1A1A]">{displayName}</span>
+                              {isGroup && (
+                                <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200 text-[10px]">
+                                  Family · {members.length} members
+                                </Badge>
+                              )}
+                              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px]">
+                                Awaiting Review
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-[#4A4A4A] mt-0.5 font-mono">{g.referenceNumber}</p>
+                          </div>
+                          {isGroup && (
+                            <button type="button" onClick={() => toggleGroup(g.familyGroupId!)}
+                              className="p-1 rounded hover:bg-[#F5F0E8] text-[#4A4A4A] transition-colors shrink-0">
+                              {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                            </button>
+                          )}
+                          {!isGroup && <span className="text-xs text-[#4A4A4A]/50 italic shrink-0">Under review</span>}
                         </div>
-                        <p className="text-xs text-[#4A4A4A] mt-0.5 font-mono">{g.referenceNumber}</p>
-                        <p className="text-xs text-[#4A4A4A]/60 mt-0.5">Submitted {g.submittedAt ?? '—'}</p>
+                        {isGroup && isExpanded && (
+                          <div className="bg-gray-50/50 border-l-4 border-[#2D5A45] ml-5 mr-5 mb-3 rounded-lg overflow-hidden">
+                            {members.map((m, i) => (
+                              <div key={m.id} className={`flex items-center gap-3 px-4 py-2.5 text-sm ${i > 0 ? 'border-t border-[#E8E3DB]' : ''}`}>
+                                <span className="text-[#4A4A4A] w-4 shrink-0">{i + 1}.</span>
+                                {m.isHeadOfFamily && <span className="text-amber-500">⭐</span>}
+                                <span className="font-medium text-[#1A1A1A] flex-1">{m.fullName}</span>
+                                <span className="text-xs text-[#4A4A4A] capitalize">{m.relationship ?? '—'}</span>
+                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusBadgeCls(m.status)}`}>{m.status}</Badge>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <span className="text-xs text-[#4A4A4A]/50 italic shrink-0">Under review</span>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -227,80 +294,70 @@ export default function CoordinatorPendingPage() {
                   </div>
                 ) : (
                   needsCorrection.map(g => {
+                    const members = getFamilyMembers(g);
+                    const isGroup = !!g.familyGroupId;
+                    const isExpanded = expandedGroups.has(g.familyGroupId ?? g.id);
+                    const displayName = isGroup ? (g.familyName ?? g.fullName) : g.fullName;
                     const latestRemark = g.remarks?.sort(
                       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
                     )[0];
-
-                    // For family guests — find which individual members need correction
-                    const membersNeedingCorrection = g.guestType === 'family'
-                      ? [
-                          ...(g.status === 'Needs Correction' && g.familyMembers.some(m => m.status !== undefined && m.status !== 'Needs Correction')
-                            ? [] // head is fine if at least one member has a different explicit status
-                            : g.familyMembers.filter(m => (m.status ?? g.status) === 'Needs Correction').length === 0
-                              ? [] // none explicitly flagged — don't highlight individuals
-                              : []),
-                          ...g.familyMembers.filter(m => (m.status ?? g.status) === 'Needs Correction'),
-                        ]
-                      : [];
-
-                    const isFamily = g.guestType === 'family';
-
                     return (
-                      <div
-                        key={g.id}
-                        className={`flex items-start gap-4 px-5 py-4 border-b border-[#E8E3DB] last:border-b-0 ${
-                          isFamily ? 'border-l-4 border-l-orange-400' : ''
-                        }`}
-                      >
-                        {/* Avatar */}
-                        <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center text-orange-700 font-bold text-sm shrink-0 mt-0.5">
-                          {getInitials(g.fullName)}
-                        </div>
-                        {/* Info */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-[#1A1A1A]">{g.fullName}</span>
-                            {isFamily && (
-                              <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200 text-[10px]">
-                                Family · {g.familyMembers.length + 1} members
-                              </Badge>
-                            )}
-                            <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-[10px]">
-                              Needs Correction
-                            </Badge>
+                      <div key={g.id} className="border-b border-[#E8E3DB] last:border-b-0">
+                        <div className="flex items-start gap-4 px-5 py-4">
+                          <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center text-orange-700 font-bold text-sm shrink-0 mt-0.5">
+                            {isGroup ? <Users className="w-5 h-5" /> : getInitials(g.fullName)}
                           </div>
-                          <p className="text-xs text-[#4A4A4A] mt-0.5 font-mono">{g.referenceNumber}</p>
-                          {/* Per-member correction hints */}
-                          {membersNeedingCorrection.map(m => (
-                            <p key={m.id} className="text-xs text-orange-600 mt-0.5">
-                              {m.name} needs correction
-                            </p>
-                          ))}
-                          {latestRemark && (
-                            <p className="text-xs text-[#4A4A4A]/70 mt-1 truncate max-w-md">
-                              {latestRemark.message.slice(0, 80)}{latestRemark.message.length > 80 ? '…' : ''}
-                            </p>
-                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-[#1A1A1A]">{displayName}</span>
+                              {isGroup && (
+                                <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200 text-[10px]">
+                                  Family · {members.length} members
+                                </Badge>
+                              )}
+                              <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-[10px]">
+                                Needs Correction
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-[#4A4A4A] mt-0.5 font-mono">{g.referenceNumber}</p>
+                            {latestRemark && (
+                              <p className="text-xs text-[#4A4A4A]/70 mt-1 truncate max-w-md">
+                                {latestRemark.message.slice(0, 80)}{latestRemark.message.length > 80 ? '…' : ''}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 mt-0.5">
+                            {isGroup && (
+                              <button type="button" onClick={() => toggleGroup(g.familyGroupId!)}
+                                className="p-1 rounded hover:bg-[#F5F0E8] text-[#4A4A4A] transition-colors">
+                                {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                              </button>
+                            )}
+                            <Button size="sm" variant="outline"
+                              onClick={() => setEditGuestId(g.id)}
+                              className="border-[#2D5A45] text-[#2D5A45] hover:bg-[#E8F5EE] gap-1.5">
+                              <Edit className="w-3.5 h-3.5" />
+                              Edit &amp; Fix
+                            </Button>
+                            <Button size="sm" onClick={() => setResubmitGuestId(g.id)}
+                              className="bg-amber-600 hover:bg-amber-700 text-white">
+                              Re-Submit
+                            </Button>
+                          </div>
                         </div>
-                        {/* Actions */}
-                        <div className="flex items-center gap-2 shrink-0 mt-0.5">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setEditGuestId(g.id)}
-                            className="border-[#2D5A45] text-[#2D5A45] hover:bg-[#E8F5EE] gap-1.5"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                            Edit &amp; Fix
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => setResubmitGuestId(g.id)}
-                            className="bg-amber-600 hover:bg-amber-700 text-white"
-                          >
-                            Re-Submit
-                          </Button>
-                        </div>
+                        {isGroup && isExpanded && (
+                          <div className="bg-gray-50/50 border-l-4 border-orange-400 ml-5 mr-5 mb-3 rounded-lg overflow-hidden">
+                            {members.map((m, i) => (
+                              <div key={m.id} className={`flex items-center gap-3 px-4 py-2.5 text-sm ${i > 0 ? 'border-t border-[#E8E3DB]' : ''}`}>
+                                <span className="text-[#4A4A4A] w-4 shrink-0">{i + 1}.</span>
+                                {m.isHeadOfFamily && <span className="text-amber-500">⭐</span>}
+                                <span className="font-medium text-[#1A1A1A] flex-1">{m.fullName}</span>
+                                <span className="text-xs text-[#4A4A4A] capitalize">{m.relationship ?? '—'}</span>
+                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusBadgeCls(m.status)}`}>{m.status}</Badge>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   })
@@ -337,8 +394,13 @@ export default function CoordinatorPendingPage() {
             <DialogTitle>Re-Submit Guest</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-[#4A4A4A]">
-            Are you sure you want to re-submit <span className="font-semibold">{resubmitGuest?.fullName}</span> for review?
-            This will change their status back to "Awaiting Review".
+            Are you sure you want to re-submit{' '}
+            <span className="font-semibold">
+              {resubmitGuest?.familyGroupId
+                ? `${resubmitGuest.familyName ?? 'Family'} (${getFamilyMembers(resubmitGuest).length} members)`
+                : resubmitGuest?.fullName}
+            </span>{' '}
+            for review? This will change their status back to "Awaiting Review".
           </p>
           <DialogFooter className="mt-4 gap-2">
             <Button variant="outline" onClick={() => setResubmitGuestId(null)}>Cancel</Button>

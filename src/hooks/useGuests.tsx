@@ -132,6 +132,9 @@ function rowToGuest(row: any): Guest {
     expenses: row.expenses ?? undefined,
     tabshirReference: row.tabshir_reference ?? undefined,
     photoUrl: row.photo_url ?? undefined,
+    familyGroupId: row.family_group_id ?? null,
+    familyName: row.family_name ?? undefined,
+    relationship: row.relationship ?? undefined,
   };
 }
 
@@ -193,6 +196,9 @@ function updatesToDbRow(updates: Partial<Guest>): Record<string, any> {
     expenses:           'expenses',
     tabshirReference:   'tabshir_reference',
     photoUrl:           'photo_url',
+    familyGroupId:      'family_group_id',
+    familyName:         'family_name',
+    relationship:       'relationship',
   };
 
   // Fields that must never be sent to the DB (no matching column)

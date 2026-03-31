@@ -21,6 +21,7 @@ import { MulaqatTypeSelect } from '@/components/MulaqatTypeSelect';
 import { useDelegations } from '@/hooks/useDelegations';
 import { CountryCombobox } from '@/components/CountryCombobox';
 import { FamilyStatusCell } from '@/components/FamilyStatusCell';
+import { buildDisplayGroups, statusDotColor, statusBadgeCls as familyStatusBadgeCls } from '@/lib/familyGroups';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import {
@@ -71,6 +72,7 @@ export default function DeskRejectedPage() {
 
   // Family drawer state
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  // Legacy member dialogs kept for old-model rows; new-model members reuse correctionDialog/rejectDialog
   const [memberCorrectionDialog, setMemberCorrectionDialog] = useState<{
     guestId: string; memberId: string | null; memberName: string; reason: string;
   } | null>(null);
@@ -78,6 +80,9 @@ export default function DeskRejectedPage() {
     guestId: string; memberId: string | null; memberName: string; reason: string;
   } | null>(null);
   const [assignAllValues, setAssignAllValues] = useState<Record<string, string>>({});
+  // Family group bulk action reason dialogs
+  const [familyCorrectionDialog, setFamilyCorrectionDialog] = useState<{ members: Guest[]; reason: string } | null>(null);
+  const [familyRejectDialog, setFamilyRejectDialog] = useState<{ members: Guest[]; reason: string } | null>(null);
 
   const assignedCountries = useMemo(() => user?.assignedCountries || [], [user?.assignedCountries]);
 
@@ -109,8 +114,9 @@ export default function DeskRejectedPage() {
 
   if (!user) return null;
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const displayItems = buildDisplayGroups(filtered);
+  const totalPages = Math.max(1, Math.ceil(displayItems.length / PAGE_SIZE));
+  const paginated = displayItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const makeAuditEntry = (guest: Guest, oldStatus: string, newStatus: string) => {
     addEntry({
@@ -363,6 +369,62 @@ export default function DeskRejectedPage() {
     handleDeptAssignById(g.id, dept);
     g.familyMembers.forEach(m => assignFamilyMemberDepartment(g.id, m.id, dept));
     setAssignAllValues(prev => ({ ...prev, [g.id]: '' }));
+  };
+
+  // ── New-model family group bulk actions ──────────────────────────────────────
+
+  const handleFamilyApproveAll = (members: Guest[]) => {
+    const now = new Date().toISOString();
+    members.forEach(m => {
+      updateGuest(m.id, { status: 'Approved', reviewedBy: user.id, reviewedAt: now });
+      makeAuditEntry(m, m.status, 'Approved');
+    });
+    toast.success(`Approved ${members.length} family members`);
+  };
+
+  const handleFamilyCorrectionAllConfirm = () => {
+    if (!familyCorrectionDialog || familyCorrectionDialog.reason.trim().length < 10) return;
+    const { members, reason } = familyCorrectionDialog;
+    const safe = sanitizeComment(reason);
+    const now = new Date().toISOString();
+    members.forEach(m => {
+      updateGuest(m.id, { status: 'Needs Correction', reviewedBy: user.id, reviewedAt: now });
+      makeAuditEntry(m, m.status, 'Needs Correction');
+      if (safe) {
+        addComment({
+          guestId: m.id, guestName: m.fullName, guestReference: m.referenceNumber,
+          comment: safe,
+          createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
+        });
+      }
+    });
+    toast.success(`Correction requested for ${members.length} family members`);
+    setFamilyCorrectionDialog(null);
+  };
+
+  const handleFamilyRejectAllConfirm = () => {
+    if (!familyRejectDialog || familyRejectDialog.reason.trim().length < 10) return;
+    const { members, reason } = familyRejectDialog;
+    const safe = sanitizeComment(reason);
+    const now = new Date().toISOString();
+    members.forEach(m => {
+      updateGuest(m.id, { status: 'Rejected', rejectionReason: safe || null, reviewedBy: user.id, reviewedAt: now });
+      makeAuditEntry(m, m.status, 'Rejected');
+      if (safe) {
+        addComment({
+          guestId: m.id, guestName: m.fullName, guestReference: m.referenceNumber,
+          comment: safe,
+          createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
+        });
+      }
+    });
+    toast.success(`Rejected ${members.length} family members`);
+    setFamilyRejectDialog(null);
+  };
+
+  const handleFamilyGroupDeptAssignAll = (members: Guest[], dept: string) => {
+    if (!dept) return;
+    members.forEach(m => handleDeptAssignById(m.id, dept));
   };
 
   return (

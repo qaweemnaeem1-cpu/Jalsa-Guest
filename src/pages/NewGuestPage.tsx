@@ -332,17 +332,15 @@ export default function NewGuestPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.fullName.trim()) {
       toast.error('Full name is required');
       return;
     }
-    // Coordinators have country auto-assigned — skip validation for them
     if (!formData.country && user?.role !== 'coordinator') {
       toast.error('Country is required');
       return;
     }
-
     if (!formData.passportNumber.trim()) {
       toast.error('Passport number is required');
       return;
@@ -369,63 +367,170 @@ export default function NewGuestPage() {
     }
 
     setIsSubmitting(true);
-    
+
     try {
-      // formData.country holds the country name directly (select value is country.name)
-      const resolvedCountry = user?.role === 'coordinator'
-        ? (user.country || '')
-        : formData.country;
-      const resolvedCountryCode = user?.role === 'coordinator'
-        ? (user.countryCode || user.country || '')
-        : formData.country;
+      const resolvedCountry = user?.role === 'coordinator' ? (user.country || '') : formData.country;
+      const toNull = (v: unknown) =>
+        v === '' || v === undefined || v === null ? null : v;
+      const toInt = (v: unknown) => { const n = parseInt(String(v)); return isNaN(n) ? null : n; };
+      const toBool = (v: unknown) => v === true || v === 'true';
+      const now = new Date().toISOString();
 
-      const result = await addGuest({
-        fullName: formData.fullName,
-        country: resolvedCountry,
-        countryCode: resolvedCountryCode,
-        gender: formData.gender,
-        age: parseInt(formData.age),
-        dateOfBirth: formData.dateOfBirth,
-        passportNumber: formData.passportNumber,
-        passportCountry: formData.passportCountry,
-        contactNumber: formData.contactNumber,
-        email: formData.email,
-        visaStatus: formData.visaStatus,
-        visaDetails: formData.visaStatus !== 'not-required' ? formData.visaDetails : undefined,
-        guestType: formData.guestType,
-        familyMembers: formData.familyMembers,
-        designation: formData.designation,
-        arrivalFlightNumber: formData.arrivalFlightNumber,
-        arrivalAirport: formData.arrivalAirport,
-        arrivalTerminal: formData.arrivalTerminal,
-        arrivalTime: formData.arrivalTime,
-        departureFlightNumber: formData.departureFlightNumber,
-        departureAirport: formData.departureAirport,
-        departureTerminal: formData.departureTerminal,
-        departureTime: formData.departureTime,
-        specialNeeds: formData.specialNeeds,
-        dietaryRequirements: formData.dietaryRequirements,
-        wheelchairRequired: formData.wheelchairRequired,
-        religion: formData.religion || undefined,
-        introduction: formData.introduction || undefined,
-        isHeadOfFamily: formData.isHeadOfFamily,
-        expenses: formData.expenses,
-        tabshirReference: formData.tabshirReference || undefined,
-        photoUrl: formData.photoUrl || undefined,
-        submittedBy: user.id,
-      });
+      if (formData.guestType === 'family') {
+        // ── Family registration: each member gets its own guest row ──────────
+        const familyGroupId = crypto.randomUUID();
+        const familyName = (formData.fullName.split(' ').pop() ?? formData.fullName) + ' Family';
 
-      if (!result) return; // addGuest already showed an error toast
-      addEntry({
-        guestId: result.id,
-        guestName: result.fullName,
-        guestReference: result.referenceNumber,
-        type: 'submission',
-        action: 'Guest registered and submitted for review',
-        createdBy: { id: user.id, name: user.name, role: user.role as 'coordinator' | 'super-admin' | 'desk-in-charge' },
-        createdAt: new Date().toISOString(),
-      });
-      toast.success('Guest registered successfully');
+        const { count } = await supabase.from('guests').select('*', { count: 'exact', head: true });
+        let nextRef = (count ?? 0) + 1;
+
+        const sharedFields = {
+          guest_type:        'Family',
+          family_group_id:   familyGroupId,
+          family_name:       familyName,
+          country:           resolvedCountry,
+          designation:       toNull(formData.designation),
+          visa_status:       toNull(formData.visaStatus) ?? 'Not Required',
+          expenses:          toNull(formData.expenses) ?? 'Self',
+          tabshir_reference: toNull(formData.tabshirReference),
+          passport_country:  toNull(formData.passportCountry),
+          status:            'Awaiting Review',
+          appeal_status:     'none',
+          submitted_by:      user.id,
+          submitted_at:      now,
+          resubmit_count:    0,
+        };
+
+        // Insert head guest
+        const mainInsert = {
+          ...sharedFields,
+          reference:         `MEH-2024-${String(nextRef).padStart(6, '0')}`,
+          full_name:         toNull(formData.fullName),
+          gender:            toNull(formData.gender),
+          date_of_birth:     toNull(formData.dateOfBirth),
+          age:               formData.dateOfBirth
+            ? (() => { const b = new Date(formData.dateOfBirth); const t = new Date(); let a = t.getFullYear() - b.getFullYear(); if (t.getMonth() < b.getMonth() || (t.getMonth() === b.getMonth() && t.getDate() < b.getDate())) a--; return a >= 0 ? a : null; })()
+            : toInt(formData.age),
+          passport_number:   toNull(formData.passportNumber),
+          contact_number:    toNull(formData.contactNumber),
+          email:             toNull(formData.email),
+          flight_number:     toNull(formData.arrivalFlightNumber),
+          arrival_airport:   toNull(formData.arrivalAirport),
+          arrival_terminal:  toNull(formData.arrivalTerminal),
+          arrival_time:      toNull(formData.arrivalTime),
+          departure_airport:  toNull(formData.departureAirport),
+          departure_terminal: toNull(formData.departureTerminal),
+          departure_time:    toNull(formData.departureTime),
+          special_needs:     toNull(formData.specialNeeds),
+          dietary_requirements: toNull(formData.dietaryRequirements),
+          wheelchair_required: toBool(formData.wheelchairRequired),
+          religion:          toNull(formData.religion),
+          introduction:      toNull(formData.introduction),
+          is_head_of_family: true,
+          relationship:      'Self',
+          photo_url:         toNull(formData.photoUrl),
+        };
+
+        const { data: mainData, error: mainError } = await supabase
+          .from('guests').insert(mainInsert).select().single();
+        if (mainError || !mainData) {
+          toast.error(mainError?.message ?? 'Failed to register guest');
+          return;
+        }
+
+        // Insert each family member
+        for (const m of formData.familyMembers) {
+          nextRef++;
+          await supabase.from('guests').insert({
+            ...sharedFields,
+            reference:         `MEH-2024-${String(nextRef).padStart(6, '0')}`,
+            full_name:         toNull(m.name),
+            gender:            toNull(m.gender),
+            age:               toInt(m.age),
+            date_of_birth:     null,
+            religion:          null,
+            relationship:      m.relationship,
+            is_head_of_family: false,
+            passport_number:   null,
+            contact_number:    null,
+            email:             null,
+            flight_number:     null,
+            arrival_airport:   null,
+            arrival_terminal:  null,
+            arrival_time:      null,
+            departure_airport:  null,
+            departure_terminal: null,
+            departure_time:    null,
+            special_needs:     null,
+            dietary_requirements: null,
+            wheelchair_required: false,
+            introduction:      null,
+            photo_url:         null,
+          });
+        }
+
+        addEntry({
+          guestId: mainData.id,
+          guestName: formData.fullName,
+          guestReference: mainData.reference,
+          type: 'submission',
+          action: `Family registered: ${familyName} (${formData.familyMembers.length + 1} members)`,
+          createdBy: { id: user.id, name: user.name, role: user.role as 'coordinator' | 'super-admin' | 'desk-in-charge' },
+          createdAt: now,
+        });
+        toast.success(`${familyName} registered with ${formData.familyMembers.length + 1} members`);
+
+      } else {
+        // ── Individual registration (unchanged path) ─────────────────────────
+        const result = await addGuest({
+          fullName: formData.fullName,
+          country: resolvedCountry,
+          countryCode: user?.role === 'coordinator' ? (user.countryCode || resolvedCountry) : formData.country,
+          gender: formData.gender,
+          age: parseInt(formData.age),
+          dateOfBirth: formData.dateOfBirth,
+          passportNumber: formData.passportNumber,
+          passportCountry: formData.passportCountry,
+          contactNumber: formData.contactNumber,
+          email: formData.email,
+          visaStatus: formData.visaStatus,
+          visaDetails: formData.visaStatus !== 'not-required' ? formData.visaDetails : undefined,
+          guestType: formData.guestType,
+          familyMembers: [],
+          designation: formData.designation,
+          arrivalFlightNumber: formData.arrivalFlightNumber,
+          arrivalAirport: formData.arrivalAirport,
+          arrivalTerminal: formData.arrivalTerminal,
+          arrivalTime: formData.arrivalTime,
+          departureFlightNumber: formData.departureFlightNumber,
+          departureAirport: formData.departureAirport,
+          departureTerminal: formData.departureTerminal,
+          departureTime: formData.departureTime,
+          specialNeeds: formData.specialNeeds,
+          dietaryRequirements: formData.dietaryRequirements,
+          wheelchairRequired: formData.wheelchairRequired,
+          religion: formData.religion || undefined,
+          introduction: formData.introduction || undefined,
+          isHeadOfFamily: formData.isHeadOfFamily,
+          expenses: formData.expenses,
+          tabshirReference: formData.tabshirReference || undefined,
+          photoUrl: formData.photoUrl || undefined,
+          submittedBy: user.id,
+        });
+
+        if (!result) return;
+        addEntry({
+          guestId: result.id,
+          guestName: result.fullName,
+          guestReference: result.referenceNumber,
+          type: 'submission',
+          action: 'Guest registered and submitted for review',
+          createdBy: { id: user.id, name: user.name, role: user.role as 'coordinator' | 'super-admin' | 'desk-in-charge' },
+          createdAt: now,
+        });
+        toast.success('Guest registered successfully');
+      }
+
       navigate(user.role === 'coordinator' ? '/coordinator/pending' : user.role === 'desk-in-charge' ? '/desk/review' : '/guests');
     } catch (error) {
       toast.error('Failed to register guest. Please try again.');

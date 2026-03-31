@@ -9,11 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import {
-  LayoutDashboard, Users, Clock, MessageSquare,
-  ChevronDown, LogOut,
-  CheckCircle, XCircle, User, Plus,
+  Users, ChevronDown, LogOut, CheckCircle, XCircle, User, Plus,
 } from 'lucide-react';
-import { ROLE_LABELS } from '@/lib/constants';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
 import { COORD_NAV } from '@/lib/navItems';
@@ -36,29 +33,44 @@ export default function CoordinatorRejectedPage() {
   if (!user) return null;
 
   const myGuests = guests.filter(g => g.submittedBy === user.id);
-  const pendingCount = myGuests.filter(
-    g => g.status === 'Awaiting Review' || g.status === 'Needs Correction'
-  ).length;
-  const rejected = myGuests.filter(g => g.status === 'Rejected');
+  const pendingCount = new Set(
+    myGuests.filter(g => g.status === 'Awaiting Review' || g.status === 'Needs Correction')
+      .map(g => g.familyGroupId ?? g.id)
+  ).size;
+
+  // Deduplicate: one card per family group (show head), plus all individuals
+  const seenGroups = new Set<string>();
+  const rejected = myGuests.filter(g => g.status === 'Rejected').filter(g => {
+    if (!g.familyGroupId) return true;
+    if (seenGroups.has(g.familyGroupId)) return false;
+    seenGroups.add(g.familyGroupId);
+    return true;
+  });
 
   const appealGuest = guests.find(g => g.id === appealGuestId) ?? null;
+  const appealGroupMembers = appealGuest?.familyGroupId
+    ? myGuests.filter(m => m.familyGroupId === appealGuest.familyGroupId && m.status === 'Rejected')
+    : appealGuest ? [appealGuest] : [];
 
   const handleAppeal = () => {
     if (!appealGuest || appealText.trim().length < 10) return;
-    updateGuest(appealGuest.id, {
-      appealStatus: 'pending',
-      appealReason: appealText.trim(),
-      appealedAt: new Date().toISOString(),
-    });
+    const now = new Date().toISOString();
+    for (const m of appealGroupMembers) {
+      updateGuest(m.id, {
+        appealStatus: 'pending',
+        appealReason: appealText.trim(),
+        appealedAt: now,
+      });
+    }
     addEntry({
       guestId: appealGuest.id,
-      guestName: appealGuest.fullName,
+      guestName: appealGuest.familyGroupId ? (appealGuest.familyName ?? appealGuest.fullName) : appealGuest.fullName,
       guestReference: appealGuest.referenceNumber,
       type: 'appeal',
       action: 'Appeal submitted to Super Admin',
       comment: appealText.trim(),
       createdBy: { id: user.id, name: user.name, role: 'coordinator' },
-      createdAt: new Date().toISOString(),
+      createdAt: now,
     });
     setAppealGuestId(null);
     setAppealText('');
@@ -103,7 +115,7 @@ export default function CoordinatorRejectedPage() {
                     {pendingCount}
                   </span>
                 )}
-                {item.href === '/coordinator/rejected' && rejected.length > 0 && (
+                {item.href === '/coordinator/rejected' && rejected.length > 0 && rejected.length > 0 && (
                   <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                     {rejected.length}
                   </span>
@@ -183,16 +195,27 @@ export default function CoordinatorRejectedPage() {
                   <p className="text-sm text-[#4A4A4A]">None of your guests have been rejected.</p>
                 </div>
               ) : (
-                rejected.map(g => (
+                rejected.map(g => {
+                  const isGroup = !!g.familyGroupId;
+                  const displayName = isGroup ? (g.familyName ?? g.fullName) : g.fullName;
+                  const groupMemberCount = isGroup
+                    ? myGuests.filter(m => m.familyGroupId === g.familyGroupId && m.status === 'Rejected').length
+                    : 0;
+                  return (
                   <div key={g.id} className="flex items-center gap-4 px-5 py-4 border-b border-[#E8E3DB] last:border-b-0">
                     {/* Avatar */}
                     <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center text-red-700 font-bold text-sm shrink-0">
-                      {getInitials(g.fullName)}
+                      {isGroup ? <Users className="w-5 h-5" /> : getInitials(g.fullName)}
                     </div>
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-[#1A1A1A]">{g.fullName}</span>
+                        <span className="font-semibold text-[#1A1A1A]">{displayName}</span>
+                        {isGroup && (
+                          <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200 text-[10px]">
+                            Family · {groupMemberCount} members
+                          </Badge>
+                        )}
                         <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-[10px]">
                           Rejected
                         </Badge>
@@ -235,7 +258,8 @@ export default function CoordinatorRejectedPage() {
                       )}
                     </div>
                   </div>
-                ))
+                );
+                })
               )}
             </div>
           </div>
@@ -251,7 +275,11 @@ export default function CoordinatorRejectedPage() {
           <div className="space-y-3">
             <p className="text-sm text-[#4A4A4A]">
               Provide a reason for appealing the rejection of{' '}
-              <span className="font-semibold">{appealGuest?.fullName}</span>.
+              <span className="font-semibold">
+                {appealGuest?.familyGroupId
+                  ? `${appealGuest.familyName ?? appealGuest.fullName} (${appealGroupMembers.length} members)`
+                  : appealGuest?.fullName}
+              </span>.
             </p>
             <Textarea
               value={appealText}

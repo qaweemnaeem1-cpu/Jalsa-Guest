@@ -6,14 +6,13 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  LayoutDashboard, Users, Clock, MessageSquare, XCircle,
-  Search, ChevronDown, LogOut, ChevronRight, User, Plus,
+  Users, Search, ChevronDown, LogOut, ChevronRight, User, Plus,
 } from 'lucide-react';
-import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
+import { GUEST_STATUS_LABELS } from '@/lib/constants';
 import { useDelegations } from '@/hooks/useDelegations';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
-import { FamilyStatusCell } from '@/components/FamilyStatusCell';
+import { buildDisplayGroups, statusBadgeCls } from '@/lib/familyGroups';
 import type { GuestStatus } from '@/types';
 import { COORD_NAV } from '@/lib/navItems';
 
@@ -22,17 +21,6 @@ const STATUS_CHIPS: { label: string; value: GuestStatus | 'all' }[] = [
   { label: 'Approved',     value: 'Approved' },
   { label: 'Accommodated', value: 'Accommodated' },
 ];
-
-function statusBadgeCls(status: string): string {
-  switch (status) {
-    case 'Awaiting Review':  return 'bg-amber-50 text-amber-700 border-amber-200';
-    case 'Approved':         return 'bg-green-50 text-green-700 border-green-200';
-    case 'Accommodated':     return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-    case 'Needs Correction': return 'bg-orange-50 text-orange-700 border-orange-200';
-    case 'Rejected':         return 'bg-red-50 text-red-700 border-red-200';
-    default:                 return 'bg-gray-50 text-gray-600 border-gray-200';
-  }
-}
 
 export default function CoordinatorSubmittedPage() {
   const navigate = useNavigate();
@@ -54,21 +42,28 @@ export default function CoordinatorSubmittedPage() {
   if (!user) return null;
 
   const myGuests = guests.filter(g => g.submittedBy === user.id);
-  const pendingCount = myGuests.filter(
-    g => g.status === 'Awaiting Review' || g.status === 'Needs Correction'
-  ).length;
-  const rejectedCount = myGuests.filter(g => g.status === 'Rejected').length;
+  const pendingCount = new Set(
+    myGuests.filter(g => g.status === 'Awaiting Review' || g.status === 'Needs Correction')
+      .map(g => g.familyGroupId ?? g.id)
+  ).size;
+  const rejectedCount = new Set(
+    myGuests.filter(g => g.status === 'Rejected').map(g => g.familyGroupId ?? g.id)
+  ).size;
 
-  const allSubmitted = [...myGuests]
+  const filteredGuests = myGuests
     .filter(g => g.status === 'Approved' || g.status === 'Accommodated')
     .filter(g => statusFilter === 'all' || g.status === statusFilter)
     .filter(g =>
       search === '' ||
       g.fullName.toLowerCase().includes(search.toLowerCase()) ||
+      (g.familyName ?? '').toLowerCase().includes(search.toLowerCase()) ||
       g.referenceNumber.toLowerCase().includes(search.toLowerCase()) ||
       g.country.toLowerCase().includes(search.toLowerCase())
     )
     .sort((a, b) => (b.submittedAt ?? '').localeCompare(a.submittedAt ?? ''));
+
+  const displayItems = buildDisplayGroups(filteredGuests);
+  const allSubmitted = filteredGuests; // kept for count badge
 
   const chipCls = (active: boolean) =>
     active
@@ -214,11 +209,11 @@ export default function CoordinatorSubmittedPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                {allSubmitted.length === 0 ? (
+                {displayItems.length === 0 ? (
                   <div className="py-12 text-center text-[#4A4A4A]/60 text-sm">
                     {search || statusFilter !== 'all'
                       ? 'No guests match the current filters.'
-                      : 'You have not submitted any guests yet.'}
+                      : 'You have not submitted any approved guests yet.'}
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -228,7 +223,6 @@ export default function CoordinatorSubmittedPage() {
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Passport Country</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Type</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Submitted</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Status</th>
@@ -237,40 +231,20 @@ export default function CoordinatorSubmittedPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#E8E3DB]">
-                        {allSubmitted.map(g => {
-                          const isFamily = g.guestType === 'family' && g.familyMembers.length > 0;
-                          const isExpanded = expandedRows.has(g.id);
-                          return (
-                            <>
-                              <tr
-                                key={g.id}
-                                className={`hover:bg-[#FAFAFA] ${isFamily ? 'cursor-pointer' : ''}`}
-                                onClick={isFamily ? () => toggleRow(g.id) : undefined}
-                              >
+                        {displayItems.map((item, idx) => {
+                          if (item.type === 'individual') {
+                            const g = item.guest;
+                            return (
+                              <tr key={g.id} className="hover:bg-[#FAFAFA]">
                                 <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">{g.referenceNumber}</td>
-                                <td className="px-4 py-3 font-medium text-[#1A1A1A]">
-                                  <div className="flex items-center gap-1.5">
-                                    {g.fullName}
-                                    {isFamily && (
-                                      isExpanded
-                                        ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                                        : <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                                    )}
-                                  </div>
-                                </td>
+                                <td className="px-4 py-3 font-medium text-[#1A1A1A]">{g.fullName}</td>
                                 <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.country}</td>
-                                <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.passportCountry || '—'}</td>
                                 <td className="px-4 py-3">
-                                  <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200 capitalize">
-                                    {g.guestType}
-                                    {isFamily && (
-                                      <span className="ml-1 text-[#4A4A4A]">({g.familyMembers.length + 1})</span>
-                                    )}
-                                  </Badge>
+                                  <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200">Individual</Badge>
                                 </td>
                                 <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.submittedAt ?? '—'}</td>
                                 <td className="px-4 py-3">
-                                  <FamilyStatusCell guest={g} expandable={isFamily} />
+                                  <Badge variant="outline" className={`text-xs ${statusBadgeCls(g.status)}`}>{g.status}</Badge>
                                 </td>
                                 <td className="px-4 py-3">
                                   <Badge variant="outline" className={`text-xs ${g.mulaqat ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
@@ -285,27 +259,69 @@ export default function CoordinatorSubmittedPage() {
                                     : <span className="text-gray-300">—</span>}
                                 </td>
                               </tr>
-                              {isFamily && isExpanded && (
-                                <tr key={`${g.id}-members`} className="bg-[#F9F8F6]">
-                                  <td colSpan={9} className="px-8 py-3">
+                            );
+                          }
+                          // Family group
+                          const { group } = item;
+                          const isExpanded = expandedRows.has(group.groupId);
+                          return (
+                            <>
+                              <tr key={group.groupId} className="hover:bg-[#FAFAFA] cursor-pointer"
+                                onClick={() => toggleRow(group.groupId)}>
+                                <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">{group.head.referenceNumber}</td>
+                                <td className="px-4 py-3 font-medium text-[#1A1A1A]">
+                                  <div className="flex items-center gap-1.5">
+                                    {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
+                                    {group.familyName}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-[#4A4A4A]">{group.head.country}</td>
+                                <td className="px-4 py-3">
+                                  <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-700 border-indigo-200">
+                                    Family ({group.members.length})
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-[#4A4A4A]">{group.head.submittedAt ?? '—'}</td>
+                                <td className="px-4 py-3">
+                                  <div className="flex gap-1">
+                                    {group.members.map(m => (
+                                      <span key={m.id} title={m.status}
+                                        className={`w-2.5 h-2.5 rounded-full inline-block ${
+                                          m.status === 'Approved' || m.status === 'Accommodated' ? 'bg-green-500'
+                                          : m.status === 'Awaiting Review' ? 'bg-amber-400'
+                                          : m.status === 'Rejected' ? 'bg-red-500'
+                                          : 'bg-orange-400'
+                                        }`}
+                                      />
+                                    ))}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <Badge variant="outline" className={`text-xs ${group.head.mulaqat ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                                    {group.head.mulaqat ? 'Yes' : 'No'}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-[#4A4A4A]">
+                                  {group.head.mulaqat && group.head.delegationId
+                                    ? <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                        {getDelegationCountry(group.head.delegationId) ?? group.head.country} Delegation
+                                      </span>
+                                    : <span className="text-gray-300">—</span>}
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr key={`${group.groupId}-members`} className="bg-gray-50/50">
+                                  <td colSpan={8} className="px-6 py-3 border-l-4 border-[#2D5A45]">
                                     <div className="space-y-1.5">
-                                      <p className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wide mb-2">
-                                        Family Members
-                                      </p>
-                                      {[
-                                        { name: g.fullName, status: g.status as string, rel: 'Head' },
-                                        ...g.familyMembers.map(m => ({
-                                          name: m.name,
-                                          status: (m.status ?? g.status) as string,
-                                          rel: m.relationship,
-                                        })),
-                                      ].map((m, i) => (
-                                        <div key={i} className="flex items-center gap-3">
+                                      {group.members.map((m, i) => (
+                                        <div key={m.id} className="flex items-center gap-3">
                                           <div className="w-6 h-6 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-[10px] font-medium shrink-0">
-                                            {m.name.charAt(0)}
+                                            {m.fullName.charAt(0)}
                                           </div>
-                                          <span className="text-sm text-[#1A1A1A] w-36 shrink-0">{m.name}</span>
-                                          <span className="text-xs text-[#4A4A4A] capitalize w-20 shrink-0">{m.rel}</span>
+                                          {m.isHeadOfFamily && <span className="text-amber-500 text-xs">⭐</span>}
+                                          <span className="text-sm text-[#1A1A1A] w-36 shrink-0">{m.fullName}</span>
+                                          <span className="text-xs text-[#4A4A4A] capitalize w-20 shrink-0">{m.relationship ?? '—'}</span>
+                                          <span className="text-xs font-mono text-[#4A4A4A] w-28 shrink-0">{m.referenceNumber}</span>
                                           <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusBadgeCls(m.status)}`}>
                                             {GUEST_STATUS_LABELS[m.status as GuestStatus] ?? m.status}
                                           </Badge>
