@@ -133,6 +133,12 @@ export interface Guest {
   mulaqat?: boolean;
   mulaqatType?: 'No' | 'Delegation' | 'Daftari' | 'Both';
   delegationId?: string | null;
+  religion?: string;
+  introduction?: string;
+  isHeadOfFamily?: boolean;
+  expenses?: 'Self' | 'Jamaat';
+  tabshirReference?: string;
+  photoUrl?: string;
 }
 
 export function canTransitionStatus(from: GuestStatus, to: GuestStatus): boolean {

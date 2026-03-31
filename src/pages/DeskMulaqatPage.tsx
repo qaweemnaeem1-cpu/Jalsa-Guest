@@ -98,6 +98,21 @@ function fmtDate(d: string | null | undefined): string {
   return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function fmtDep(d: string | null | undefined): string {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return '—';
+  const datePart = dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const h = dt.getHours(), m = dt.getMinutes();
+  if (h === 0 && m === 0) return datePart;
+  return `${datePart}, ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function fmtFlight(flightNum: string | undefined, airport: string | undefined): string | null {
+  if (!flightNum) return null;
+  return airport ? `${flightNum} · ${airport}` : flightNum;
+}
+
 function dayHeader(day: MulaqatDay | DaftariDay): string {
   const dateStr = fmt(day.date);
   return day.label ? `${dateStr} — ${day.label}` : dateStr;
@@ -396,6 +411,7 @@ export default function DeskMulaqatPage() {
   // ── Daftari actions ───────────────────────────────────────────────────────────
 
   const handleAssignDaftariSlot = async (guest: Guest, slotId: string) => {
+    console.log('[Daftari] AssignSlot triggered', { guestId: guest.id, slotId, guestName: guest.fullName });
     const slot = daftariSlots.find(s => s.id === slotId);
     if (!slot) return;
     const { error } = await supabase
@@ -414,6 +430,7 @@ export default function DeskMulaqatPage() {
   };
 
   const handleUnassignDaftariSlot = async (guest: Guest) => {
+    console.log('[Daftari] UnassignSlot triggered', { guestId: guest.id, slotId: guestSlotIds[guest.id] });
     const slotId = guestSlotIds[guest.id];
     if (slotId) {
       const otherGuestIds = Object.entries(guestSlotIds)
@@ -446,16 +463,28 @@ export default function DeskMulaqatPage() {
     if (!daftariBulkSlot || daftariSelectedGuestList.length === 0) return;
     const slot = daftariSlots.find(s => s.id === daftariBulkSlot);
     const guestList = daftariSelectedGuestList;
+    console.log('[Daftari] BulkAssign triggered', { slotId: daftariBulkSlot, guests: guestList.map(g => g.id) });
 
+    // Clear old slot assignments for guests that already have one
+    const oldSlotIds = new Set(guestList.map(g => guestSlotIds[g.id]).filter(Boolean) as string[]);
+    if (oldSlotIds.size > 0) {
+      await Promise.all([...oldSlotIds].map(sId =>
+        supabase.from('daftari_slots').update({ guest_id: null, guest_name: null, assigned_by: null, assigned_by_name: null }).eq('id', sId)
+      ));
+    }
+
+    // For join: all names shown; for single: just that name
+    const allNames = guestList.map(g => g.fullName).join(', ');
     await Promise.all(guestList.map(g =>
       supabase.from('guests').update({ daftari_slot_id: daftariBulkSlot }).eq('id', g.id)
     ));
-    await supabase.from('daftari_slots').update({
-      guest_id: guestList[guestList.length - 1].id,
-      guest_name: guestList[guestList.length - 1].fullName,
+    const { data: slotRes, error: slotErr } = await supabase.from('daftari_slots').update({
+      guest_id: guestList[0].id,
+      guest_name: allNames,
       assigned_by: user.id,
       assigned_by_name: user.name,
-    }).eq('id', daftariBulkSlot);
+    }).eq('id', daftariBulkSlot).select().single();
+    console.log('[Daftari] Slot update:', { slotRes, slotErr });
 
     setGuestSlotIds(prev => {
       const next = { ...prev };
@@ -464,7 +493,7 @@ export default function DeskMulaqatPage() {
     });
     setDaftariSlots(prev => prev.map(s =>
       s.id === daftariBulkSlot
-        ? { ...s, guest_id: guestList[guestList.length - 1].id, guest_name: guestList[guestList.length - 1].fullName, assigned_by: user.id, assigned_by_name: user.name }
+        ? { ...s, guest_id: guestList[0].id, guest_name: allNames, assigned_by: user.id, assigned_by_name: user.name }
         : s
     ));
 
@@ -485,17 +514,39 @@ export default function DeskMulaqatPage() {
 
   const handleDaftariConfirmChangeSlot = async () => {
     if (!daftariChangeSlotDialog || !daftariChangeSlotSlot) return;
-    const slot = daftariSlots.find(s => s.id === daftariChangeSlotSlot);
+    const newSlot = daftariSlots.find(s => s.id === daftariChangeSlotSlot);
     const guest = guests.find(g => g.id === daftariChangeSlotDialog.guestId);
     if (!guest) return;
+    console.log('[Daftari] ChangeSlot triggered', { guestId: guest.id, oldSlotId: daftariChangeSlotDialog.currentSlotId, newSlotId: daftariChangeSlotSlot });
 
-    await supabase.from('guests').update({ daftari_slot_id: daftariChangeSlotSlot }).eq('id', guest.id);
-    await supabase.from('daftari_slots').update({
+    // Clear old slot
+    const oldSlotId = daftariChangeSlotDialog.currentSlotId;
+    if (oldSlotId) {
+      const otherGuestsInOldSlot = Object.entries(guestSlotIds)
+        .filter(([gId, sId]) => gId !== guest.id && sId === oldSlotId)
+        .map(([gId]) => gId);
+      const { error: clearErr } = await supabase.from('daftari_slots').update({
+        guest_id: otherGuestsInOldSlot.length > 0 ? otherGuestsInOldSlot[otherGuestsInOldSlot.length - 1] : null,
+        guest_name: null, assigned_by: null, assigned_by_name: null,
+      }).eq('id', oldSlotId);
+      console.log('[Daftari] Clear old slot:', { clearErr });
+      setDaftariSlots(prev => prev.map(s =>
+        s.id === oldSlotId
+          ? { ...s, guest_id: otherGuestsInOldSlot.length > 0 ? otherGuestsInOldSlot[otherGuestsInOldSlot.length - 1] : null }
+          : s
+      ));
+    }
+
+    const { data: guestRes, error: guestErr } = await supabase.from('guests').update({ daftari_slot_id: daftariChangeSlotSlot }).eq('id', guest.id).select().single();
+    const { data: slotRes, error: slotErr } = await supabase.from('daftari_slots').update({
       guest_id: guest.id,
       guest_name: guest.fullName,
       assigned_by: user.id,
       assigned_by_name: user.name,
-    }).eq('id', daftariChangeSlotSlot);
+    }).eq('id', daftariChangeSlotSlot).select().single();
+    console.log('[Daftari] Assign new slot:', { guestRes, guestErr, slotRes, slotErr });
+
+    if (guestErr || slotErr) { toast.error('Failed to change slot: ' + (guestErr?.message ?? slotErr?.message)); return; }
 
     setGuestSlotIds(prev => ({ ...prev, [guest.id]: daftariChangeSlotSlot }));
     setDaftariSlots(prev => prev.map(s =>
@@ -504,7 +555,7 @@ export default function DeskMulaqatPage() {
         : s
     ));
 
-    toast.success(`${guest.fullName} assigned to ${slot?.name ?? 'slot'}`);
+    toast.success(`${guest.fullName} moved to ${newSlot?.name ?? 'slot'}`);
     setDaftariChangeSlotDialog(null);
     setDaftariChangeSlotDay('');
     setDaftariChangeSlotSlot('');
@@ -988,7 +1039,7 @@ export default function DeskMulaqatPage() {
                                                 <table className="w-full text-sm border-collapse">
                                                   <thead>
                                                     <tr className="bg-[#F9F8F6]">
-                                                      {['#', 'Name', 'Designation', 'Departure Date', 'Departure Flight', 'Actions'].map(h => (
+                                                      {['#', 'Name', 'Designation', 'Departure', 'Actions'].map(h => (
                                                         <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider whitespace-nowrap">{h}</th>
                                                       ))}
                                                     </tr>
@@ -1006,13 +1057,11 @@ export default function DeskMulaqatPage() {
                                                             </div>
                                                           </td>
                                                           <td className="px-4 py-2.5 text-xs text-[#4A4A4A]">{g.designation || '—'}</td>
-                                                          <td className="px-4 py-2.5 text-xs text-[#4A4A4A] whitespace-nowrap">{fmtDate(g.departureTime)}</td>
-                                                          <td className="px-4 py-2.5 text-xs text-[#4A4A4A] whitespace-nowrap">
-                                                            {g.departureFlightNumber
-                                                              ? g.departureAirport
-                                                                ? `${g.departureFlightNumber} (${g.departureAirport})`
-                                                                : g.departureFlightNumber
-                                                              : '—'}
+                                                          <td className="px-4 py-2.5 text-xs whitespace-nowrap">
+                                                            <div className="text-[#4A4A4A]">{fmtDep(g.departureTime)}</div>
+                                                            {fmtFlight(g.departureFlightNumber, g.departureAirport) && (
+                                                              <div className="text-xs text-gray-400 mt-0.5">{fmtFlight(g.departureFlightNumber, g.departureAirport)}</div>
+                                                            )}
                                                           </td>
                                                           <td className="px-4 py-2.5">
                                                             <div className="flex items-center gap-1.5">
@@ -1292,7 +1341,7 @@ export default function DeskMulaqatPage() {
                                     className="border-gray-300 data-[state=checked]:bg-[#2D5A45] data-[state=checked]:border-[#2D5A45] data-[state=indeterminate]:bg-[#2D5A45] data-[state=indeterminate]:border-[#2D5A45]"
                                   />
                                 </th>
-                                {['Country', 'Name', 'Designation', 'Departure Date', 'Departure Flight', 'Assigned Day', 'Assigned Slot', 'Group', 'Actions'].map(h => (
+                                {['Country', 'Name', 'Designation', 'Departure', 'Assigned Day', 'Assigned Slot', 'Group', 'Actions'].map(h => (
                                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider whitespace-nowrap">{h}</th>
                                 ))}
                               </tr>
@@ -1317,13 +1366,11 @@ export default function DeskMulaqatPage() {
                                     <td className="px-4 py-3 text-sm text-[#4A4A4A] whitespace-nowrap">{g.country}</td>
                                     <td className="px-4 py-3 font-medium text-[#1A1A1A] whitespace-nowrap">{g.fullName}</td>
                                     <td className="px-4 py-3 text-sm text-[#4A4A4A]">{g.designation || '—'}</td>
-                                    <td className="px-4 py-3 text-sm text-[#4A4A4A] whitespace-nowrap">{fmtDate(g.departureTime)}</td>
-                                    <td className="px-4 py-3 text-sm text-[#4A4A4A] whitespace-nowrap">
-                                      {g.departureFlightNumber
-                                        ? g.departureAirport
-                                          ? `${g.departureFlightNumber} (${g.departureAirport})`
-                                          : g.departureFlightNumber
-                                        : '—'}
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      <div className="text-sm text-[#4A4A4A]">{fmtDep(g.departureTime)}</div>
+                                      {fmtFlight(g.departureFlightNumber, g.departureAirport) && (
+                                        <div className="text-xs text-gray-400 mt-0.5">{fmtFlight(g.departureFlightNumber, g.departureAirport)}</div>
+                                      )}
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap">
                                       {assignedDay

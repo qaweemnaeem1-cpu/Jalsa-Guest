@@ -660,12 +660,25 @@ export function GuestViewModal({
                   {/* Personal Information — view */}
                   <div>
                     <SectionHeading>Personal Information</SectionHeading>
+                    {guest.photoUrl && (
+                      <div className="mb-4">
+                        <img
+                          src={guest.photoUrl}
+                          alt={guest.fullName}
+                          className="w-24 h-24 object-cover rounded-lg border border-[#E8E3DB]"
+                        />
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                       <FieldCard label="Full Name" value={guest.fullName} />
                       <FieldCard label="Gender" value={<span className="capitalize">{guest.gender}</span>} />
                       <FieldCard label="Date of Birth" value={guest.dateOfBirth} />
                       <FieldCard label="Age" value={guest.age} />
                       <FieldCard label="Guest Type" value={<span className="capitalize">{guest.guestType}</span>} />
+                      {guest.guestType === 'individual' && (
+                        <FieldCard label="Head of Family" value={guest.isHeadOfFamily ? <span className="text-[#2D5A45] font-medium">Yes</span> : 'No'} />
+                      )}
+                      <FieldCard label="Religion" value={guest.religion} />
                       <FieldCard label="Visa Status" value={VISA_STATUS_LABELS[guest.visaStatus]} />
                       <FieldCard
                         label="Wheelchair Required"
@@ -675,7 +688,27 @@ export function GuestViewModal({
                       />
                       <FieldCard label="Special Needs" value={guest.specialNeeds} />
                     </div>
+                    {guest.introduction && (
+                      <div className="mt-4 p-3 bg-[#F5F0E8] rounded-lg">
+                        <p className="text-xs font-medium text-[#4A4A4A] mb-1">Introduction</p>
+                        <p className="text-sm text-[#1A1A1A] whitespace-pre-wrap">{guest.introduction}</p>
+                      </div>
+                    )}
                   </div>
+
+                  {/* Expenses — view */}
+                  {(guest.expenses || guest.tabshirReference) && (
+                    <div>
+                      <SectionHeading>Expenses</SectionHeading>
+                      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                        <FieldCard label="Expenses Covered By" value={guest.expenses ?? 'Self'} />
+                        {guest.tabshirReference && (
+                          <FieldCard label="Tabshir Reference Nr." value={<span className="font-mono">{guest.tabshirReference}</span>} />
+                        )}
+                      </div>
+                    </div>
+                  )}
+
 
                   {/* Contact Details — view */}
                   <div>

@@ -126,6 +126,12 @@ function rowToGuest(row: any): Guest {
     mulaqat: row.mulaqat ?? false,
     mulaqatType: row.mulaqat_type ?? 'No',
     delegationId: row.delegation_id ?? null,
+    religion: row.religion ?? undefined,
+    introduction: row.introduction ?? undefined,
+    isHeadOfFamily: row.is_head_of_family ?? false,
+    expenses: row.expenses ?? undefined,
+    tabshirReference: row.tabshir_reference ?? undefined,
+    photoUrl: row.photo_url ?? undefined,
   };
 }
 
@@ -181,6 +187,12 @@ function updatesToDbRow(updates: Partial<Guest>): Record<string, any> {
     mulaqat:            'mulaqat',
     mulaqatType:        'mulaqat_type',
     delegationId:       'delegation_id',
+    religion:           'religion',
+    introduction:       'introduction',
+    isHeadOfFamily:     'is_head_of_family',
+    expenses:           'expenses',
+    tabshirReference:   'tabshir_reference',
+    photoUrl:           'photo_url',
   };
 
   // Fields that must never be sent to the DB (no matching column)
@@ -373,6 +385,12 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
         submitted_by:       toNull(guestData.submittedBy),
         submitted_at:       new Date().toISOString(),
         resubmit_count:     0,
+        religion:           toNull(guestData.religion),
+        introduction:       toNull(guestData.introduction),
+        is_head_of_family:  toBool(guestData.isHeadOfFamily),
+        expenses:           toNull(guestData.expenses) ?? 'Self',
+        tabshir_reference:  toNull(guestData.tabshirReference),
+        photo_url:          toNull(guestData.photoUrl),
       };
 
       console.log('[addGuest] Clean insert data:', insertData);
@@ -414,7 +432,13 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
         .single();
 
       const newGuest = rowToGuest(full ?? data);
-      setGuests(prev => [newGuest, ...prev]);
+      // If real-time already inserted this guest, replace it (to get familyMembers);
+      // otherwise prepend. This prevents duplicates regardless of timing.
+      setGuests(prev =>
+        prev.some(g => g.id === newGuest.id)
+          ? prev.map(g => g.id === newGuest.id ? newGuest : g)
+          : [newGuest, ...prev]
+      );
       return newGuest;
     } catch (err) {
       console.error('[addGuest] Exception:', err);

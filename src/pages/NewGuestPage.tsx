@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -35,6 +36,9 @@ import {
   CheckSquare,
   XCircle,
   MessageSquare,
+  Upload,
+  X,
+  ImageIcon,
 } from 'lucide-react';
 import {
   AIRPORTS,
@@ -164,6 +168,12 @@ export default function NewGuestPage() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [religions, setReligions] = useState<Array<{ id: string; name: string }>>([]);
+  const [religionSearch, setReligionSearch] = useState('');
+  const [religionOpen, setReligionOpen] = useState(false);
+  const religionRef = useRef<HTMLDivElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [photoDragOver, setPhotoDragOver] = useState(false);
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -197,7 +207,44 @@ export default function NewGuestPage() {
     specialNeeds: '',
     dietaryRequirements: '',
     wheelchairRequired: false,
+    religion: '',
+    introduction: '',
+    isHeadOfFamily: false as boolean,
+    expenses: 'Self' as 'Self' | 'Jamaat',
+    tabshirReference: '',
+    photoUrl: '',
   });
+
+  useEffect(() => {
+    supabase.from('religions').select('id, name').eq('is_active', true).order('name')
+      .then(({ data }) => { if (data) setReligions(data as Array<{ id: string; name: string }>); });
+  }, []);
+
+  useEffect(() => {
+    if (!religionOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (religionRef.current && !religionRef.current.contains(e.target as Node)) {
+        setReligionOpen(false);
+        setReligionSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [religionOpen]);
+
+  const handlePhotoFile = useCallback((file: File) => {
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      handleInputChange('photoUrl', e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!user) return null;
 
@@ -359,6 +406,12 @@ export default function NewGuestPage() {
         specialNeeds: formData.specialNeeds,
         dietaryRequirements: formData.dietaryRequirements,
         wheelchairRequired: formData.wheelchairRequired,
+        religion: formData.religion || undefined,
+        introduction: formData.introduction || undefined,
+        isHeadOfFamily: formData.isHeadOfFamily,
+        expenses: formData.expenses,
+        tabshirReference: formData.tabshirReference || undefined,
+        photoUrl: formData.photoUrl || undefined,
         submittedBy: user.id,
       });
 
@@ -556,6 +609,66 @@ export default function NewGuestPage() {
                     </div>
 
                     <div className="space-y-2">
+                      <Label className="text-[#1A1A1A] font-medium">Religion</Label>
+                      <div ref={religionRef} className="relative">
+                        <div
+                          tabIndex={0}
+                          role="combobox"
+                          aria-expanded={religionOpen}
+                          className="flex items-center justify-between w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white h-11 cursor-pointer hover:border-[#2D5A45] transition-colors focus:outline-none focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45]"
+                          onClick={() => setReligionOpen(o => !o)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setReligionOpen(o => !o); }
+                            if (e.key === 'Escape') { setReligionOpen(false); setReligionSearch(''); }
+                          }}
+                        >
+                          <span className={formData.religion ? 'text-[#1A1A1A]' : 'text-gray-400'}>
+                            {formData.religion || 'Select religion'}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            {formData.religion && (
+                              <button type="button" onClick={e => { e.stopPropagation(); handleInputChange('religion', ''); }}
+                                className="text-gray-400 hover:text-[#1A1A1A]">
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${religionOpen ? 'rotate-180' : ''}`} />
+                          </div>
+                        </div>
+                        {religionOpen && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+                            <div className="p-2 border-b border-gray-100">
+                              <input
+                                autoFocus
+                                type="text"
+                                value={religionSearch}
+                                onChange={e => setReligionSearch(e.target.value)}
+                                placeholder="Search religion..."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-md outline-none focus:border-[#2D5A45]"
+                              />
+                            </div>
+                            <div className="max-h-48 overflow-y-auto py-1">
+                              {religions
+                                .filter(r => r.name.toLowerCase().includes(religionSearch.toLowerCase()))
+                                .map(r => (
+                                  <button key={r.id} type="button"
+                                    onClick={() => { handleInputChange('religion', r.name); setReligionOpen(false); setReligionSearch(''); }}
+                                    className={`w-[calc(100%-8px)] mx-1 my-0.5 text-left px-3 py-2 text-sm rounded-md transition-colors ${formData.religion === r.name ? 'bg-[#D6E4D9] text-[#2D5A45] font-medium' : 'text-gray-700 hover:bg-[#D6E4D9] hover:text-[#2D5A45]'}`}
+                                  >
+                                    {r.name}
+                                  </button>
+                                ))
+                              }
+                              {religions.filter(r => r.name.toLowerCase().includes(religionSearch.toLowerCase())).length === 0 && (
+                                <p className="px-3 py-2 text-sm text-gray-400">No results</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
                       <Label className="text-[#1A1A1A] font-medium">Date of Birth</Label>
                       <Input
                         type="date"
@@ -575,6 +688,17 @@ export default function NewGuestPage() {
                         className="border-[#D4CFC7] h-11 bg-white text-[#1A1A1A] cursor-not-allowed"
                       />
                     </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-[#1A1A1A] font-medium">Introduction</Label>
+                    <textarea
+                      value={formData.introduction}
+                      onChange={(e) => handleInputChange('introduction', e.target.value)}
+                      placeholder="Brief introduction about the guest"
+                      rows={3}
+                      className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] resize-none"
+                    />
                   </div>
                 </CardContent>
               </Card>
@@ -602,6 +726,29 @@ export default function NewGuestPage() {
                         </div>
                       ))}
                     </RadioGroup>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-[#1A1A1A] font-medium">Is this guest the Head of Family?</Label>
+                    <RadioGroup
+                      value={formData.isHeadOfFamily ? 'yes' : 'no'}
+                      onValueChange={(v) => handleInputChange('isHeadOfFamily', v === 'yes')}
+                      className="flex gap-6"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="no" id="hof-no" />
+                        <Label htmlFor="hof-no" className="cursor-pointer">No</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="yes" id="hof-yes" />
+                        <Label htmlFor="hof-yes" className="cursor-pointer">Yes</Label>
+                      </div>
+                    </RadioGroup>
+                    {formData.guestType === 'family' && formData.isHeadOfFamily && (
+                      <p className="text-xs text-[#2D5A45] bg-[#E8F5EE] px-3 py-2 rounded-md mt-1">
+                        This guest will be marked as the head of the family group.
+                      </p>
+                    )}
                   </div>
 
                   {formData.guestType === 'family' && (
@@ -658,6 +805,45 @@ export default function NewGuestPage() {
                         <option key={designation} value={designation}>{designation}</option>
                       ))}
                     </select>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Expenses */}
+              <Card className="shadow-sm">
+                <CardHeader className="bg-[#D6E4D9]/30 border-l-4 border-[#2D5A45] py-3 px-4">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-800">
+                    <CreditCard className="w-5 h-5 text-[#2D5A45]" />
+                    Expenses
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 space-y-5">
+                  <div className="space-y-2">
+                    <Label className="text-[#1A1A1A] font-medium">Expenses Covered By</Label>
+                    <RadioGroup
+                      value={formData.expenses}
+                      onValueChange={(v) => handleInputChange('expenses', v as 'Self' | 'Jamaat')}
+                      className="flex gap-6"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="Self" id="exp-self" />
+                        <Label htmlFor="exp-self" className="cursor-pointer">Self</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="Jamaat" id="exp-jamaat" />
+                        <Label htmlFor="exp-jamaat" className="cursor-pointer">Jamaat</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-[#1A1A1A] font-medium">Tabshir Reference Nr.</Label>
+                    <Input
+                      value={formData.tabshirReference}
+                      onChange={(e) => handleInputChange('tabshirReference', e.target.value)}
+                      placeholder="Enter Tabshir reference number"
+                      className={`h-11 transition-colors ${formData.expenses === 'Jamaat' ? 'border-[#2D5A45] ring-1 ring-[#2D5A45] focus:border-[#2D5A45] focus:ring-[#2D5A45]' : 'border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45]'}`}
+                    />
                   </div>
                 </CardContent>
               </Card>
@@ -981,6 +1167,74 @@ export default function NewGuestPage() {
                       Wheelchair required
                     </Label>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Photo Upload */}
+              <Card className="shadow-sm">
+                <CardHeader className="bg-[#D6E4D9]/30 border-l-4 border-[#2D5A45] py-3 px-4">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-800">
+                    <ImageIcon className="w-5 h-5 text-[#2D5A45]" />
+                    Guest Photo
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6">
+                  {formData.photoUrl ? (
+                    <div className="flex items-start gap-4">
+                      <img
+                        src={formData.photoUrl}
+                        alt="Guest photo preview"
+                        className="w-32 h-32 object-cover rounded-lg border border-[#E8E3DB]"
+                      />
+                      <div className="space-y-2">
+                        <p className="text-sm text-[#4A4A4A]">Photo uploaded successfully</p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleInputChange('photoUrl', '')}
+                          className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                        >
+                          <X className="w-4 h-4 mr-1" />
+                          Remove Photo
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      tabIndex={0}
+                      role="button"
+                      aria-label="Upload guest photo"
+                      onDragOver={(e) => { e.preventDefault(); setPhotoDragOver(true); }}
+                      onDragLeave={() => setPhotoDragOver(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setPhotoDragOver(false);
+                        const file = e.dataTransfer.files[0];
+                        if (file) handlePhotoFile(file);
+                      }}
+                      onClick={() => photoInputRef.current?.click()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); photoInputRef.current?.click(); }
+                      }}
+                      className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors focus:outline-none focus:border-[#2D5A45] focus:ring-2 focus:ring-[#2D5A45] focus:ring-offset-1 ${photoDragOver ? 'border-[#2D5A45] bg-[#E8F5EE]' : 'border-[#D4CFC7] hover:border-[#2D5A45] hover:bg-[#F5F0E8]'}`}
+                    >
+                      <Upload className="w-8 h-8 text-[#4A4A4A] mx-auto mb-3" />
+                      <p className="text-sm font-medium text-[#1A1A1A]">Drag & drop a photo here, or click to select</p>
+                      <p className="text-xs text-[#4A4A4A] mt-1">JPG, PNG or WEBP · Max 5 MB</p>
+                      <input
+                        ref={photoInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handlePhotoFile(file);
+                          e.target.value = '';
+                        }}
+                      />
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
