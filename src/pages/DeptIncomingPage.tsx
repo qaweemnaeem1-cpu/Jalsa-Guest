@@ -1,5 +1,5 @@
-import { Fragment, useMemo, useState } from 'react';
-import { Inbox, Eye, Check, Search, Users } from 'lucide-react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Inbox, Eye, Check, Search, Users, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -21,6 +21,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import type { Guest } from '@/types';
+import { supabase } from '@/lib/supabase';
+import { formatDesignation } from '@/lib/constants';
 
 // A flattened row representing a single person (head or family member)
 interface PersonRow {
@@ -37,6 +39,13 @@ interface PersonRow {
   familyAllMembers: FamilyMemberInfo[];
   assignedDepartmentAt?: string;
   status: string;
+  arrivalTime?: string;
+  arrivalAirport?: string;
+  arrivalFlightNumber?: string;
+  departureTime?: string;
+  departureAirport?: string;
+  designation: string | string[];
+  roomAssignment?: string;
 }
 
 function buildFamilyMemberListFromGroup(allGuests: Guest[], familyGroupId: string): FamilyMemberInfo[] {
@@ -90,6 +99,12 @@ function buildRows(guests: Guest[], dept: string): PersonRow[] {
           familyAllMembers: buildFamilyMemberListFromGroup(guests, g.familyGroupId),
           assignedDepartmentAt: g.assignedDepartmentAt,
           status: g.status,
+          arrivalTime: g.arrivalTime,
+          arrivalAirport: g.arrivalAirport,
+          arrivalFlightNumber: g.arrivalFlightNumber,
+          departureTime: g.departureTime,
+          departureAirport: g.departureAirport,
+          designation: g.designation,
         });
       }
       continue;
@@ -115,6 +130,12 @@ function buildRows(guests: Guest[], dept: string): PersonRow[] {
         familyAllMembers,
         assignedDepartmentAt: g.assignedDepartmentAt,
         status: g.status,
+        arrivalTime: g.arrivalTime,
+        arrivalAirport: g.arrivalAirport,
+        arrivalFlightNumber: g.arrivalFlightNumber,
+        departureTime: g.departureTime,
+        departureAirport: g.departureAirport,
+        designation: g.designation,
       });
     }
 
@@ -135,6 +156,13 @@ function buildRows(guests: Guest[], dept: string): PersonRow[] {
             familyAllMembers,
             assignedDepartmentAt: m.assignedDepartmentAt,
             status: m.status ?? g.status,
+            // Family members inherit flight info from parent guest
+            arrivalTime: g.arrivalTime,
+            arrivalAirport: g.arrivalAirport,
+            arrivalFlightNumber: g.arrivalFlightNumber,
+            departureTime: g.departureTime,
+            departureAirport: g.departureAirport,
+            designation: g.designation,
           });
         }
       }
@@ -170,6 +198,17 @@ export default function DeptIncomingPage() {
   const [bulkLocations, setBulkLocations] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
 
+  const [selectedRooms, setSelectedRooms] = useState<Record<string, string>>({}); // rowKey → roomId
+  const [roomsByLocation, setRoomsByLocation] = useState<Record<string, Array<{
+    id: string; name: string; capacity: number; available_from?: string; available_to?: string; occupancy: number;
+  }>>>({}); // locationName → rooms
+  const [dateMismatch, setDateMismatch] = useState<{
+    rowKey: string; guestId: string; memberId: string | null; name: string;
+    roomId: string; roomName: string;
+    guestArrival?: string; guestDeparture?: string;
+    roomFrom?: string; roomTo?: string;
+  } | null>(null);
+
   const dept = user?.department ?? '';
   const locations = departments[dept] ?? [];
 
@@ -203,6 +242,128 @@ export default function DeptIncomingPage() {
     () => guests.find(g => g.id === viewGuestId) ?? null,
     [guests, viewGuestId],
   );
+
+  // Fetch rooms whenever a location is selected for any row
+  useEffect(() => {
+    for (const locationName of Object.values(selectedLocations)) {
+      if (locationName) {
+        fetchRoomsForLocation(locationName);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLocations]);
+
+  const fetchRoomsForLocation = async (locationName: string) => {
+    if (roomsByLocation[locationName]) return; // cached
+    const { data } = await supabase
+      .from('rooms')
+      .select('id, name, capacity, available_from, available_to')
+      .eq('is_active', true)
+      .order('name');
+    if (!data) return;
+    // Filter by location — rooms table has location_id which may be a UUID or name
+    // Fetch the location id first
+    const { data: locData } = await supabase
+      .from('locations')
+      .select('id')
+      .eq('name', locationName)
+      .maybeSingle();
+    const locationId = locData?.id;
+    const filtered = locationId
+      ? data.filter((r: any) => r.location_id === locationId)
+      : data;
+    // Get occupancy counts
+    const { data: beds } = await supabase
+      .from('bed_assignments')
+      .select('room_id');
+    const occMap: Record<string, number> = {};
+    if (beds) { for (const b of beds) { occMap[b.room_id] = (occMap[b.room_id] ?? 0) + 1; } }
+    setRoomsByLocation(prev => ({
+      ...prev,
+      [locationName]: filtered.map((r: any) => ({
+        id: r.id, name: r.name, capacity: r.capacity,
+        available_from: r.available_from ?? undefined,
+        available_to: r.available_to ?? undefined,
+        occupancy: occMap[r.id] ?? 0,
+      })),
+    }));
+  };
+
+  const assignRoom = async (row: PersonRow, roomId: string) => {
+    const locationName = selectedLocations[row.rowKey] ?? '';
+    const rooms = roomsByLocation[locationName] ?? [];
+    const room = rooms.find(r => r.id === roomId);
+    if (!room) return;
+
+    const guest = guests.find(g => g.id === row.guestId);
+
+    // Date mismatch check
+    const guestArrival = guest?.arrivalTime?.substring(0, 10); // YYYY-MM-DD
+    const guestDeparture = guest?.departureTime?.substring(0, 10);
+    const mismatch = (room.available_from && guestArrival && guestArrival < room.available_from) ||
+      (room.available_to && guestDeparture && guestDeparture > room.available_to);
+
+    if (mismatch) {
+      setDateMismatch({
+        rowKey: row.rowKey, guestId: row.guestId, memberId: row.memberId, name: row.name,
+        roomId, roomName: room.name,
+        guestArrival, guestDeparture,
+        roomFrom: room.available_from, roomTo: room.available_to,
+      });
+      return;
+    }
+
+    await doAssignRoom(row, roomId, room.name, room.capacity);
+  };
+
+  const doAssignRoom = async (row: PersonRow, roomId: string, roomName: string, roomCapacity: number) => {
+    if (!user) return;
+
+    // Find next bed
+    const { data: beds } = await supabase
+      .from('bed_assignments')
+      .select('bed_number')
+      .eq('room_id', roomId);
+    const nextBed = (beds?.length ?? 0) + 1;
+    if (nextBed > roomCapacity) {
+      toast.error('Room is full');
+      return;
+    }
+
+    const now = new Date().toISOString();
+
+    // Insert bed_assignment
+    await supabase.from('bed_assignments').insert({
+      room_id: roomId,
+      bed_number: nextBed,
+      guest_id: row.guestId,
+      guest_name: row.name,
+      assigned_at: now,
+    });
+
+    // Update guest
+    await supabase.from('guests').update({
+      room_assignment: roomName,
+      status: 'Accommodated',
+      accommodated_at: now,
+      accommodated_by: user.id,
+    }).eq('id', row.guestId);
+
+    // Update local state via updateGuest
+    updateGuest(row.guestId, {
+      roomAssignment: roomName,
+      status: 'Accommodated',
+      accommodatedAt: now,
+      accommodatedBy: user.id,
+    });
+
+    toast.success(`${row.name} assigned to ${roomName} (Bed ${nextBed})`);
+    setSelectedRooms(prev => { const n = { ...prev }; delete n[row.rowKey]; return n; });
+
+    // Invalidate room cache for this location
+    const locationName = selectedLocations[row.rowKey] ?? '';
+    setRoomsByLocation(prev => { const n = { ...prev }; delete n[locationName]; return n; });
+  };
 
   const handleConfirmPlacement = () => {
     if (!pendingPlacement || !user) return;
@@ -341,10 +502,11 @@ export default function DeptIncomingPage() {
                     <tr className="border-b border-[#E8E3DB] bg-[#F9F8F6]">
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Role</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Date Assigned</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Designation</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Arrival</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Departure</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Assign Location</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Assign Room</th>
                       <th className="text-right px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
@@ -368,7 +530,7 @@ export default function DeptIncomingPage() {
                           {/* Bulk assignment banner — rendered before first sibling row */}
                           {showBulkBanner && (
                             <tr className="bg-indigo-50 border-b border-indigo-100">
-                              <td colSpan={7} className="px-4 py-2">
+                              <td colSpan={8} className="px-4 py-2">
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="flex items-center gap-2">
                                     <Users className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
@@ -422,19 +584,47 @@ export default function DeptIncomingPage() {
                                 )}
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-[#4A4A4A]">{row.country}</td>
+                            <td className="px-4 py-3 text-[#4A4A4A] text-xs">{formatDesignation(row.designation)}</td>
                             <td className="px-4 py-3">
-                              <span className="capitalize text-[#4A4A4A]">{row.relationship}</span>
+                              {row.arrivalTime ? (
+                                <div>
+                                  <div className="text-sm text-[#1A1A1A]">
+                                    {new Date(row.arrivalTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                    {' '}
+                                    {new Date(row.arrivalTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                  </div>
+                                  {(row.arrivalFlightNumber || row.arrivalAirport) && (
+                                    <div className="text-xs text-gray-400">
+                                      {[row.arrivalFlightNumber, row.arrivalAirport].filter(Boolean).join(' · ')}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : <span className="text-gray-400">—</span>}
                             </td>
-                            <td className="px-4 py-3 text-[#4A4A4A]">
-                              {row.assignedDepartmentAt
-                                ? new Date(row.assignedDepartmentAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                                : '—'}
+                            <td className="px-4 py-3">
+                              {row.departureTime ? (
+                                <div>
+                                  <div className="text-sm text-[#1A1A1A]">
+                                    {new Date(row.departureTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                    {' '}
+                                    {new Date(row.departureTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                  </div>
+                                  {row.departureAirport && (
+                                    <div className="text-xs text-gray-400">
+                                      {row.departureAirport}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : <span className="text-gray-400">—</span>}
                             </td>
                             <td className="px-4 py-3">
                               <select
                                 value={selected}
-                                onChange={e => setSelectedLocations(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setSelectedLocations(prev => ({ ...prev, [row.rowKey]: val }));
+                                  if (val) fetchRoomsForLocation(val);
+                                }}
                                 className="border border-[#D4CFC7] rounded-lg px-2 py-1.5 text-xs text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45] min-w-[130px]"
                               >
                                 <option value="">Select location…</option>
@@ -442,6 +632,39 @@ export default function DeptIncomingPage() {
                                   <option key={loc} value={loc}>{loc}</option>
                                 ))}
                               </select>
+                            </td>
+                            <td className="px-4 py-3">
+                              {!selectedLocations[row.rowKey] ? (
+                                <span className="text-gray-300 text-xs">—</span>
+                              ) : (
+                                (() => {
+                                  const locRooms = roomsByLocation[selectedLocations[row.rowKey]] ?? [];
+                                  return (
+                                    <select
+                                      value={selectedRooms[row.rowKey] ?? ''}
+                                      onChange={e => setSelectedRooms(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
+                                      className="border border-[#D4CFC7] rounded-lg px-2 py-1.5 text-xs text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45] min-w-[130px]"
+                                    >
+                                      <option value="">Select room…</option>
+                                      {locRooms.map(room => {
+                                        const isFull = room.occupancy >= room.capacity;
+                                        const guestArrival = guests.find(g => g.id === row.guestId)?.arrivalTime?.substring(0, 10);
+                                        const guestDeparture = guests.find(g => g.id === row.guestId)?.departureTime?.substring(0, 10);
+                                        const dateMismatchFlag = (room.available_from && guestArrival && guestArrival < room.available_from) ||
+                                          (room.available_to && guestDeparture && guestDeparture > room.available_to);
+                                        return (
+                                          <option key={room.id} value={room.id} disabled={isFull}>
+                                            {isFull ? '🔴 ' : dateMismatchFlag ? '⚠️ ' : ''}{room.name} ({room.occupancy}/{room.capacity} beds)
+                                            {room.available_from && room.available_to
+                                              ? ` · ${new Date(room.available_from + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${new Date(room.available_to + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
+                                              : ''}
+                                          </option>
+                                        );
+                                      })}
+                                    </select>
+                                  );
+                                })()
+                              )}
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-end gap-2">
@@ -462,6 +685,14 @@ export default function DeptIncomingPage() {
                                   <Check className="w-3.5 h-3.5" />
                                   Place
                                 </button>
+                                {selectedRooms[row.rowKey] && (
+                                  <button
+                                    onClick={() => assignRoom(row, selectedRooms[row.rowKey])}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                                  >
+                                    Assign Room
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -521,6 +752,43 @@ export default function DeptIncomingPage() {
               className="bg-indigo-600 hover:bg-indigo-700 text-white"
             >
               Assign All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Date mismatch confirmation */}
+      <AlertDialog open={!!dateMismatch} onOpenChange={o => { if (!o) setDateMismatch(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              Date Mismatch
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {dateMismatch && (
+                <span>
+                  Guest arrives on {dateMismatch.guestArrival ?? '—'} but room <strong>{dateMismatch.roomName}</strong> is available from {dateMismatch.roomFrom ?? '—'} to {dateMismatch.roomTo ?? '—'}.
+                  The guest's stay may extend beyond the room's availability period.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDateMismatch(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!dateMismatch) return;
+                const rooms = roomsByLocation[selectedLocations[dateMismatch.rowKey]] ?? [];
+                const room = rooms.find(r => r.id === dateMismatch.roomId);
+                if (!room) return;
+                const row: PersonRow = { rowKey: dateMismatch.rowKey, guestId: dateMismatch.guestId, memberId: dateMismatch.memberId, name: dateMismatch.name } as PersonRow;
+                await doAssignRoom(row, dateMismatch.roomId, dateMismatch.roomName, room.capacity);
+                setDateMismatch(null);
+              }}
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+            >
+              Assign Anyway
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -35,8 +35,8 @@ interface RoomsContextValue {
   updateBlock: (blockId: string, name: string) => void;
   deleteBlock: (blockId: string) => Promise<void>;
   // Rooms
-  addRoom: (locationId: string, name: string, capacity: number, blockId?: string) => Promise<Room | null>;
-  updateRoom: (roomId: string, name: string, capacity: number) => void;
+  addRoom: (locationId: string, name: string, capacity: number, blockId?: string, availableFrom?: string, availableTo?: string) => Promise<Room | null>;
+  updateRoom: (roomId: string, name: string, capacity: number, availableFrom?: string, availableTo?: string) => void;
   deleteRoom: (roomId: string) => Promise<void>;
   // Beds
   assignGuestToRoom: (roomId: string, bedNumber: number, guestId: string, guestName: string, familyMemberId?: string) => void;
@@ -68,6 +68,8 @@ function rowToRoom(row: any): Room {
     blockId: row.block_id ?? undefined,
     capacity: row.capacity,
     isActive: row.is_active ?? true,
+    availableFrom: row.available_from ?? undefined,
+    availableTo: row.available_to ?? undefined,
   };
 }
 
@@ -200,6 +202,7 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
 
   const addRoom = useCallback(async (
     locationId: string, name: string, capacity: number, blockId?: string,
+    availableFrom?: string, availableTo?: string,
   ): Promise<Room | null> => {
     const { data, error } = await supabase
       .from('rooms')
@@ -209,6 +212,8 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
         block_id: blockId ?? null,
         capacity,
         is_active: true,
+        available_from: availableFrom ?? null,
+        available_to: availableTo ?? null,
       })
       .select()
       .single();
@@ -224,14 +229,19 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
     return room;
   }, []);
 
-  const updateRoom = useCallback((roomId: string, name: string, capacity: number) => {
+  const updateRoom = useCallback((roomId: string, name: string, capacity: number, availableFrom?: string, availableTo?: string) => {
     supabase
       .from('rooms')
-      .update({ name: name.trim(), capacity, updated_at: new Date().toISOString() })
+      .update({
+        name: name.trim(), capacity,
+        available_from: availableFrom ?? null,
+        available_to: availableTo ?? null,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', roomId)
       .then(({ error }) => { if (error) toast.error('Failed to update room'); });
 
-    setRooms(prev => prev.map(r => r.id !== roomId ? r : { ...r, name: name.trim(), capacity }));
+    setRooms(prev => prev.map(r => r.id !== roomId ? r : { ...r, name: name.trim(), capacity, availableFrom, availableTo }));
     setBedAssignments(prev => {
       const existing = prev[roomId] ?? [];
       const newBeds: BedAssignment[] = Array.from({ length: capacity }, (_, i) =>

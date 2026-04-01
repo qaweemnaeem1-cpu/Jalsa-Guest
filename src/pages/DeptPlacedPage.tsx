@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
-import { CheckCircle, Eye } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { CheckCircle, Eye, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { DeptSidebar } from '@/components/DeptSidebar';
@@ -7,6 +8,18 @@ import { DeptUserMenu } from '@/components/DeptUserMenu';
 import { useDepartments } from '@/hooks/useDepartments';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { FamilyBadge, type FamilyMemberInfo } from '@/components/FamilyBadge';
+import { supabase } from '@/lib/supabase';
+import { formatDesignation } from '@/lib/constants';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import type { Guest } from '@/types';
 
 interface PlacedRow {
@@ -22,6 +35,14 @@ interface PlacedRow {
   familyAllMembers: FamilyMemberInfo[];
   placedLocation: string;
   placedAt?: string;
+  arrivalTime?: string;
+  arrivalAirport?: string;
+  departureTime?: string;
+  departureAirport?: string;
+  designation: string | string[];
+  roomAssignment?: string;
+  guestArrivalDate?: string;
+  guestDepartureDate?: string;
 }
 
 function buildFamilyMemberListFromGroup(allGuests: Guest[], familyGroupId: string): FamilyMemberInfo[] {
@@ -63,6 +84,14 @@ function buildRows(guests: Guest[], dept: string): PlacedRow[] {
           isFamily: true, familyLastName: lastName,
           familyAllMembers: buildFamilyMemberListFromGroup(guests, g.familyGroupId),
           placedLocation: g.placedLocation, placedAt: g.placedAt,
+          arrivalTime: g.arrivalTime,
+          arrivalAirport: g.arrivalAirport,
+          departureTime: g.departureTime,
+          departureAirport: g.departureAirport,
+          designation: g.designation,
+          roomAssignment: g.roomAssignment,
+          guestArrivalDate: g.arrivalTime?.substring(0, 10),
+          guestDepartureDate: g.departureTime?.substring(0, 10),
         });
       }
       continue;
@@ -80,6 +109,14 @@ function buildRows(guests: Guest[], dept: string): PlacedRow[] {
         relationship: isFamily ? 'Head' : 'Individual',
         isFamily, familyLastName: lastName, familyAllMembers,
         placedLocation: g.placedLocation, placedAt: g.placedAt,
+        arrivalTime: g.arrivalTime,
+        arrivalAirport: g.arrivalAirport,
+        departureTime: g.departureTime,
+        departureAirport: g.departureAirport,
+        designation: g.designation,
+        roomAssignment: g.roomAssignment,
+        guestArrivalDate: g.arrivalTime?.substring(0, 10),
+        guestDepartureDate: g.departureTime?.substring(0, 10),
       });
     }
     if (isFamily) {
@@ -91,6 +128,15 @@ function buildRows(guests: Guest[], dept: string): PlacedRow[] {
             relationship: m.relationship,
             isFamily: true, familyLastName: lastName, familyAllMembers,
             placedLocation: m.placedLocation, placedAt: m.placedAt,
+            // Inherit from parent guest for old-model family members
+            arrivalTime: g.arrivalTime,
+            arrivalAirport: g.arrivalAirport,
+            departureTime: g.departureTime,
+            departureAirport: g.departureAirport,
+            designation: g.designation,
+            roomAssignment: g.roomAssignment,
+            guestArrivalDate: g.arrivalTime?.substring(0, 10),
+            guestDepartureDate: g.departureTime?.substring(0, 10),
           });
         }
       }
@@ -101,11 +147,21 @@ function buildRows(guests: Guest[], dept: string): PlacedRow[] {
 
 export default function DeptPlacedPage() {
   const { user } = useAuth();
-  const { guests } = useGuests();
+  const { guests, updateGuest } = useGuests();
   const { departments, getLocPillCls } = useDepartments();
 
   const [viewGuestId, setViewGuestId] = useState<string | null>(null);
   const [filterLocation, setFilterLocation] = useState<string>('');
+  const [selectedRooms, setSelectedRooms] = useState<Record<string, string>>({});
+  const [roomsByLocation, setRoomsByLocation] = useState<Record<string, Array<{
+    id: string; name: string; capacity: number; available_from?: string; available_to?: string; occupancy: number;
+  }>>>({});
+  const [dateMismatch, setDateMismatch] = useState<{
+    rowKey: string; guestId: string; name: string;
+    roomId: string; roomName: string; roomCapacity: number;
+    guestArrival?: string; guestDeparture?: string;
+    roomFrom?: string; roomTo?: string;
+  } | null>(null);
 
   const dept = user?.department ?? '';
   const locations = departments[dept] ?? [];
@@ -121,6 +177,65 @@ export default function DeptPlacedPage() {
     () => guests.find(g => g.id === viewGuestId) ?? null,
     [guests, viewGuestId],
   );
+
+  const fetchRoomsForLocation = async (locationName: string) => {
+    if (roomsByLocation[locationName]) return;
+    const { data: locData } = await supabase.from('locations').select('id').eq('name', locationName).maybeSingle();
+    const locationId = locData?.id;
+    const { data } = await supabase.from('rooms').select('id, name, capacity, available_from, available_to').eq('is_active', true).order('name');
+    if (!data) return;
+    const filtered = locationId ? data.filter((r: any) => r.location_id === locationId) : data;
+    const { data: beds } = await supabase.from('bed_assignments').select('room_id');
+    const occMap: Record<string, number> = {};
+    if (beds) { for (const b of beds) { occMap[b.room_id] = (occMap[b.room_id] ?? 0) + 1; } }
+    setRoomsByLocation(prev => ({
+      ...prev,
+      [locationName]: filtered.map((r: any) => ({
+        id: r.id, name: r.name, capacity: r.capacity,
+        available_from: r.available_from ?? undefined, available_to: r.available_to ?? undefined,
+        occupancy: occMap[r.id] ?? 0,
+      })),
+    }));
+  };
+
+  useEffect(() => {
+    const locs = [...new Set(filteredRows.map(r => r.placedLocation))];
+    locs.forEach(loc => fetchRoomsForLocation(loc));
+  }, [filteredRows.length]);
+
+  const assignRoom = async (row: PlacedRow, roomId: string) => {
+    const rooms = roomsByLocation[row.placedLocation] ?? [];
+    const room = rooms.find(r => r.id === roomId);
+    if (!room) return;
+    const guest = guests.find(g => g.id === row.guestId);
+    const guestArrival = guest?.arrivalTime?.substring(0, 10);
+    const guestDeparture = guest?.departureTime?.substring(0, 10);
+    const mismatch = (room.available_from && guestArrival && guestArrival < room.available_from) ||
+      (room.available_to && guestDeparture && guestDeparture > room.available_to);
+    if (mismatch) {
+      setDateMismatch({
+        rowKey: row.rowKey, guestId: row.guestId, name: row.name,
+        roomId, roomName: room.name, roomCapacity: room.capacity,
+        guestArrival, guestDeparture, roomFrom: room.available_from, roomTo: room.available_to,
+      });
+      return;
+    }
+    await doAssignRoom(row.rowKey, row.guestId, row.name, roomId, room.name, room.capacity, row.placedLocation);
+  };
+
+  const doAssignRoom = async (rowKey: string, guestId: string, guestName: string, roomId: string, roomName: string, roomCapacity: number, locationName: string) => {
+    if (!user) return;
+    const { data: beds } = await supabase.from('bed_assignments').select('bed_number').eq('room_id', roomId);
+    const nextBed = (beds?.length ?? 0) + 1;
+    if (nextBed > roomCapacity) { toast.error('Room is full'); return; }
+    const now = new Date().toISOString();
+    await supabase.from('bed_assignments').insert({ room_id: roomId, bed_number: nextBed, guest_id: guestId, guest_name: guestName, assigned_at: now });
+    await supabase.from('guests').update({ room_assignment: roomName, status: 'Accommodated', accommodated_at: now, accommodated_by: user.id }).eq('id', guestId);
+    updateGuest(guestId, { roomAssignment: roomName, status: 'Accommodated', accommodatedAt: now, accommodatedBy: user.id });
+    toast.success(`${guestName} assigned to ${roomName} (Bed ${nextBed})`);
+    setSelectedRooms(prev => { const n = { ...prev }; delete n[rowKey]; return n; });
+    setRoomsByLocation(prev => { const n = { ...prev }; delete n[locationName]; return n; });
+  };
 
   if (!user) return null;
 
@@ -175,10 +290,13 @@ export default function DeptPlacedPage() {
                     <tr className="border-b border-[#E8E3DB] bg-[#F9F8F6]">
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Role</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Designation</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Location</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Room</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Arrival</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Departure</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Date Placed</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Assign Room</th>
                       <th className="text-right px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
@@ -201,28 +319,87 @@ export default function DeptPlacedPage() {
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-[#4A4A4A]">{row.country}</td>
-                        <td className="px-4 py-3 capitalize text-[#4A4A4A]">{row.relationship}</td>
+                        <td className="px-4 py-3 text-[#4A4A4A] text-xs">{formatDesignation(row.designation)}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getLocPillCls(dept, row.placedLocation)}`}>
                             {row.placedLocation}
                           </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {row.roomAssignment ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200">
+                              {row.roomAssignment}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">No room</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {row.arrivalTime ? (
+                            <div>
+                              <div className="text-sm text-[#1A1A1A]">
+                                {new Date(row.arrivalTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </div>
+                              {row.arrivalAirport && <div className="text-xs text-gray-400">{row.arrivalAirport}</div>}
+                            </div>
+                          ) : <span className="text-gray-400">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          {row.departureTime ? (
+                            <div>
+                              <div className="text-sm text-[#1A1A1A]">
+                                {new Date(row.departureTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </div>
+                              {row.departureAirport && <div className="text-xs text-gray-400">{row.departureAirport}</div>}
+                            </div>
+                          ) : <span className="text-gray-400">—</span>}
                         </td>
                         <td className="px-4 py-3 text-[#4A4A4A]">
                           {row.placedAt
                             ? new Date(row.placedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
                             : '—'}
                         </td>
-                        <td className="px-4 py-3 text-right">
-                          {row.memberId === null && (
-                            <button
-                              onClick={() => setViewGuestId(row.guestId)}
-                              className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors"
-                              title="View guest"
+                        <td className="px-4 py-3">
+                          {row.roomAssignment ? (
+                            <span className="text-xs text-gray-400">—</span>
+                          ) : (
+                            <select
+                              value={selectedRooms[row.rowKey] ?? ''}
+                              onChange={e => setSelectedRooms(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
+                              className="border border-[#D4CFC7] rounded-lg px-2 py-1.5 text-xs text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45] min-w-[130px]"
                             >
-                              <Eye className="w-4 h-4" />
-                            </button>
+                              <option value="">Select room…</option>
+                              {(roomsByLocation[row.placedLocation] ?? []).map(room => {
+                                const isFull = room.occupancy >= room.capacity;
+                                return (
+                                  <option key={room.id} value={room.id} disabled={isFull}>
+                                    {isFull ? '🔴 ' : ''}{room.name} ({room.occupancy}/{room.capacity} beds)
+                                  </option>
+                                );
+                              })}
+                            </select>
                           )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {row.memberId === null && (
+                              <button
+                                onClick={() => setViewGuestId(row.guestId)}
+                                className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors"
+                                title="View guest"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                            )}
+                            {selectedRooms[row.rowKey] && !row.roomAssignment && (
+                              <button
+                                onClick={() => assignRoom(row, selectedRooms[row.rowKey])}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                              >
+                                Assign Room
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -239,6 +416,45 @@ export default function DeptPlacedPage() {
         open={!!viewGuestId}
         onClose={() => setViewGuestId(null)}
       />
+
+      <AlertDialog open={!!dateMismatch} onOpenChange={o => { if (!o) setDateMismatch(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              Date Mismatch
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {dateMismatch && (
+                <span>
+                  Guest stay ({dateMismatch.guestArrival ?? '—'} – {dateMismatch.guestDeparture ?? '—'}) does not match room <strong>{dateMismatch.roomName}</strong> availability ({dateMismatch.roomFrom ?? '—'} – {dateMismatch.roomTo ?? '—'}).
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDateMismatch(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!dateMismatch) return;
+                await doAssignRoom(
+                  dateMismatch.rowKey,
+                  dateMismatch.guestId,
+                  dateMismatch.name,
+                  dateMismatch.roomId,
+                  dateMismatch.roomName,
+                  dateMismatch.roomCapacity,
+                  filteredRows.find(r => r.rowKey === dateMismatch.rowKey)?.placedLocation ?? '',
+                );
+                setDateMismatch(null);
+              }}
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+            >
+              Assign Anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

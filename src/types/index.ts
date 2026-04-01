@@ -190,6 +190,8 @@ export interface Room {
   blockId?: string;
   capacity: number;
   isActive: boolean;
+  availableFrom?: string; // YYYY-MM-DD
+  availableTo?: string;   // YYYY-MM-DD
 }
 
 export interface BedAssignment {

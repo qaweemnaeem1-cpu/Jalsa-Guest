@@ -137,6 +137,8 @@ export default function DeptLocationsPage() {
   const [roomFormName, setRoomFormName] = useState('');
   const [roomFormCapacity, setRoomFormCapacity] = useState('1');
   const [roomFormBlockId, setRoomFormBlockId] = useState('');
+  const [roomFormAvailFrom, setRoomFormAvailFrom] = useState('');
+  const [roomFormAvailTo, setRoomFormAvailTo] = useState('');
   const [roomFormError, setRoomFormError] = useState('');
 
   // Room delete state
@@ -269,6 +271,8 @@ export default function DeptLocationsPage() {
     setRoomFormName('');
     setRoomFormCapacity('1');
     setRoomFormBlockId('');
+    setRoomFormAvailFrom('');
+    setRoomFormAvailTo('');
     setRoomFormError('');
     setRoomDialogOpen(true);
   }, []);
@@ -278,6 +282,8 @@ export default function DeptLocationsPage() {
     setRoomFormName(room.name);
     setRoomFormCapacity(String(room.capacity));
     setRoomFormBlockId(room.blockId ?? '');
+    setRoomFormAvailFrom(room.availableFrom ?? '');
+    setRoomFormAvailTo(room.availableTo ?? '');
     setRoomFormError('');
     setRoomDialogOpen(true);
   }, []);
@@ -299,10 +305,10 @@ export default function DeptLocationsPage() {
         setRoomFormError(`Capacity cannot be less than ${minCap} (current occupancy)`);
         return;
       }
-      updateRoom(roomEditTarget.id, trimmedName, cap);
+      updateRoom(roomEditTarget.id, trimmedName, cap, roomFormAvailFrom || undefined, roomFormAvailTo || undefined);
       toast.success('Room updated');
     } else if (selectedLocation) {
-      addRoom(selectedLocation.name, trimmedName, cap, roomFormBlockId || undefined);
+      addRoom(selectedLocation.name, trimmedName, cap, roomFormBlockId || undefined, roomFormAvailFrom || undefined, roomFormAvailTo || undefined);
       toast.success('Room added');
     }
     setRoomDialogOpen(false);
@@ -472,12 +478,26 @@ export default function DeptLocationsPage() {
                                 className={`px-4 py-3 flex items-center gap-4 hover:bg-[#F9F8F6] cursor-pointer transition-colors ${isLast && !isRoomExpanded ? '' : 'border-b border-[#E8E3DB]'}`}
                                 onClick={() => toggleRoom(room.id)}
                               >
-                                {/* Left: name + capacity badge */}
+                                {/* Left: name + capacity badge + dates */}
                                 <div className="flex items-center gap-2 flex-1 min-w-0">
                                   <span className="font-medium text-sm text-[#1A1A1A] truncate">{room.name}</span>
                                   <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded shrink-0">
                                     Cap. {room.capacity}
                                   </span>
+                                  {(room.availableFrom || room.availableTo) && (
+                                    <span className="text-xs text-gray-400 shrink-0">
+                                      {room.availableFrom
+                                        ? new Date(room.availableFrom).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+                                        : '—'}
+                                      {' – '}
+                                      {room.availableTo
+                                        ? new Date(room.availableTo).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+                                        : '—'}
+                                    </span>
+                                  )}
+                                  {!room.availableFrom && !room.availableTo && (
+                                    <span className="text-xs text-gray-300 shrink-0">Always available</span>
+                                  )}
                                 </div>
 
                                 {/* Middle: occupancy bar */}
@@ -673,6 +693,27 @@ export default function DeptLocationsPage() {
               {roomEditTarget && (
                 <p className="text-xs text-gray-400 italic">Block cannot be changed after creation.</p>
               )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs text-[#4A4A4A] mb-1 block">Available From</Label>
+                  <Input
+                    type="date"
+                    value={roomFormAvailFrom}
+                    onChange={e => setRoomFormAvailFrom(e.target.value)}
+                    className="border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-[#4A4A4A] mb-1 block">Available To</Label>
+                  <Input
+                    type="date"
+                    value={roomFormAvailTo}
+                    onChange={e => setRoomFormAvailTo(e.target.value)}
+                    className="border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-400">Leave blank if always available.</p>
               {roomFormError && <p className="text-xs text-red-600">{roomFormError}</p>}
             </div>
             <DialogFooter>

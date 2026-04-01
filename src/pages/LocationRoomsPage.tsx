@@ -61,11 +61,13 @@ export default function LocationRoomsPage() {
   const [expandedRooms, setExpandedRooms]   = useState<Set<string>>(new Set());
 
   // Dialogs
-  const [dialogMode, setDialogMode]     = useState<DialogMode>(null);
-  const [formName, setFormName]         = useState('');
-  const [formCapacity, setFormCapacity] = useState(2);
-  const [formBlockId, setFormBlockId]   = useState('');
-  const [formError, setFormError]       = useState('');
+  const [dialogMode, setDialogMode]       = useState<DialogMode>(null);
+  const [formName, setFormName]           = useState('');
+  const [formCapacity, setFormCapacity]   = useState(2);
+  const [formBlockId, setFormBlockId]     = useState('');
+  const [formAvailFrom, setFormAvailFrom] = useState('');
+  const [formAvailTo, setFormAvailTo]     = useState('');
+  const [formError, setFormError]         = useState('');
   const [editTarget, setEditTarget]     = useState<Block | Room | null>(null);
 
   // Delete confirmation
@@ -108,11 +110,13 @@ export default function LocationRoomsPage() {
   };
   const openAddRoom = () => {
     setDialogMode('addRoom'); setEditTarget(null);
-    setFormName(''); setFormCapacity(2); setFormBlockId(''); setFormError('');
+    setFormName(''); setFormCapacity(2); setFormBlockId('');
+    setFormAvailFrom(''); setFormAvailTo(''); setFormError('');
   };
   const openEditRoom = (r: Room) => {
     setDialogMode('editRoom'); setEditTarget(r);
-    setFormName(r.name); setFormCapacity(r.capacity); setFormBlockId(r.blockId ?? ''); setFormError('');
+    setFormName(r.name); setFormCapacity(r.capacity); setFormBlockId(r.blockId ?? '');
+    setFormAvailFrom(r.availableFrom ?? ''); setFormAvailTo(r.availableTo ?? ''); setFormError('');
   };
 
   const handleDialogSave = () => {
@@ -128,7 +132,7 @@ export default function LocationRoomsPage() {
       toast.success('Block updated');
     } else if (dialogMode === 'addRoom') {
       if (formCapacity < 1 || formCapacity > 20) { setFormError('Capacity must be 1–20'); return; }
-      addRoom(loc, name, formCapacity, formBlockId || undefined);
+      addRoom(loc, name, formCapacity, formBlockId || undefined, formAvailFrom || undefined, formAvailTo || undefined);
       toast.success('Room added');
     } else if (dialogMode === 'editRoom' && editTarget) {
       const r = editTarget as Room;
@@ -137,7 +141,7 @@ export default function LocationRoomsPage() {
         setFormError(`Capacity cannot be less than current occupancy (${minCap})`); return;
       }
       if (formCapacity > 20) { setFormError('Capacity must be 20 or fewer'); return; }
-      updateRoom(r.id, name, formCapacity);
+      updateRoom(r.id, name, formCapacity, formAvailFrom || undefined, formAvailTo || undefined);
       toast.success('Room updated');
     }
     setDialogMode(null);
@@ -395,6 +399,19 @@ export default function LocationRoomsPage() {
                     {locBlocks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs text-[#4A4A4A] mb-1 block">Available From</Label>
+                    <Input type="date" value={formAvailFrom} onChange={e => setFormAvailFrom(e.target.value)}
+                      className="border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm" />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-[#4A4A4A] mb-1 block">Available To</Label>
+                    <Input type="date" value={formAvailTo} onChange={e => setFormAvailTo(e.target.value)}
+                      className="border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm" />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">Leave blank if always available.</p>
               </>
             )}
             {formError && <p className="text-xs text-red-600">{formError}</p>}
