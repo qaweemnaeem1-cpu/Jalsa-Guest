@@ -11,6 +11,7 @@ import { GuestViewModal } from '@/components/GuestViewModal';
 import { PlaceGuestDialog } from '@/components/PlaceGuestDialog';
 import { FamilyBadge, type FamilyMemberInfo } from '@/components/FamilyBadge';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import type { Guest } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { formatDesignation } from '@/lib/constants';
@@ -167,6 +168,15 @@ export default function DeptIncomingPage() {
   const [placingRows, setPlacingRows] = useState<Set<string>>(new Set());
   const [dialogSaving, setDialogSaving] = useState(false);
 
+  // Bulk select + bulk place state
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkLocation, setBulkLocation] = useState('');
+  const [bulkRoomId, setBulkRoomId] = useState('');
+  const [bulkRooms, setBulkRooms] = useState<RoomOption[]>([]);
+  const [bulkLoadingRooms, setBulkLoadingRooms] = useState(false);
+
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdowns on outside click
@@ -221,6 +231,50 @@ export default function DeptIncomingPage() {
     () => guests.find(g => g.id === viewGuestId) ?? null,
     [guests, viewGuestId],
   );
+
+  // Bulk selection helpers
+  const selectedGuestRows = useMemo(
+    () => allRows.filter(r => selectedRows.has(r.rowKey)),
+    [allRows, selectedRows],
+  );
+  const allFilteredSelected = filteredRows.length > 0 && filteredRows.every(r => selectedRows.has(r.rowKey));
+  const bulkSelectedRoom = bulkRooms.find(r => r.id === bulkRoomId);
+  const bulkBedsLeft = bulkSelectedRoom ? Math.max(0, bulkSelectedRoom.capacity - bulkSelectedRoom.occupancy) : Infinity;
+  const bulkHasCapacityWarning = !!bulkSelectedRoom && bulkBedsLeft < selectedGuestRows.length;
+
+  // Fetch rooms for bulk dialog when bulk location changes
+  useEffect(() => {
+    if (!bulkLocation) { setBulkRooms([]); setBulkRoomId(''); return; }
+    if (roomsByLocation[bulkLocation]) {
+      setBulkRooms(roomsByLocation[bulkLocation]);
+      return;
+    }
+    setBulkLoadingRooms(true);
+    (async () => {
+      const { data: locData } = await supabase
+        .from('locations').select('id').eq('name', bulkLocation).maybeSingle();
+      if (!locData?.id) { setBulkRooms([]); setBulkLoadingRooms(false); return; }
+      const { data: roomData } = await supabase
+        .from('rooms').select('id, name, capacity, available_from, available_to')
+        .eq('location_id', locData.id).eq('is_active', true).order('name');
+      if (!roomData) { setBulkRooms([]); setBulkLoadingRooms(false); return; }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const roomIds = roomData.map((r: any) => r.id as string);
+      const { data: beds } = roomIds.length
+        ? await supabase.from('bed_assignments').select('room_id').in('room_id', roomIds)
+        : { data: [] };
+      const occMap: Record<string, number> = {};
+      if (beds) for (const b of beds) occMap[b.room_id] = (occMap[b.room_id] ?? 0) + 1;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setBulkRooms(roomData.map((r: any) => ({
+        id: r.id, name: r.name, capacity: r.capacity,
+        occupancy: occMap[r.id] ?? 0,
+        available_from: r.available_from ?? undefined,
+        available_to: r.available_to ?? undefined,
+      })));
+      setBulkLoadingRooms(false);
+    })();
+  }, [bulkLocation, roomsByLocation]);
 
   // ── Room fetching ────────────────────────────────────────────────────────────
 
@@ -436,6 +490,87 @@ export default function DeptIncomingPage() {
     }
   }, [user, placeDialogRow, guests, dept, addEntry2, updateGuest, placeFamilyMember]);
 
+  // ── Bulk place ───────────────────────────────────────────────────────────────
+
+  const handleBulkPlace = useCallback(async () => {
+    if (!user || selectedGuestRows.length === 0 || !bulkLocation) return;
+    setBulkSaving(true);
+    const now = new Date().toISOString();
+    const room = bulkSelectedRoom ?? null;
+
+    let bedCount = 0;
+    if (room) {
+      const { data: existingBeds } = await supabase
+        .from('bed_assignments').select('bed_number').eq('room_id', room.id);
+      bedCount = existingBeds?.length ?? 0;
+    }
+
+    let accommodatedCount = 0;
+    let placedCount = 0;
+
+    for (const row of selectedGuestRows) {
+      try {
+        if (room && bedCount < room.capacity) {
+          bedCount++;
+          await supabase.from('bed_assignments').insert({
+            room_id: room.id, bed_number: bedCount,
+            guest_id: row.guestId, guest_name: row.name, assigned_at: now,
+          });
+          await supabase.from('guests').update({
+            placed_location: bulkLocation, placed_at: now, placed_by: user.id,
+            room_assignment: room.name,
+            status: 'Accommodated',
+            accommodated_at: now, accommodated_by: user.id,
+            updated_at: now,
+          }).eq('id', row.guestId);
+          if (row.memberId) {
+            placeFamilyMember(row.guestId, row.memberId, bulkLocation);
+          } else {
+            updateGuest(row.guestId, {
+              status: 'Accommodated',
+              placedLocation: bulkLocation, placedAt: now, placedBy: user.id,
+              roomAssignment: room.name, accommodatedAt: now, accommodatedBy: user.id,
+            });
+          }
+          accommodatedCount++;
+        } else {
+          await supabase.from('guests').update({
+            placed_location: bulkLocation, placed_at: now, placed_by: user.id,
+            status: 'Placed', updated_at: now,
+          }).eq('id', row.guestId);
+          if (row.memberId) {
+            placeFamilyMember(row.guestId, row.memberId, bulkLocation);
+          } else {
+            updateGuest(row.guestId, {
+              status: 'Placed',
+              placedLocation: bulkLocation, placedAt: now, placedBy: user.id,
+            });
+          }
+          placedCount++;
+        }
+      } catch { /* continue with remaining guests */ }
+    }
+
+    // Bust room cache so occupancy updates for inline dropdowns
+    setRoomsByLocation(prev => { const n = { ...prev }; delete n[bulkLocation]; return n; });
+    fetchRoomsForLocation(bulkLocation);
+
+    const total = accommodatedCount + placedCount;
+    toast.success(
+      room && accommodatedCount > 0
+        ? `${total} guests placed at ${bulkLocation} — ${accommodatedCount} assigned to ${room.name}`
+        : `${total} guests placed at ${bulkLocation}`,
+    );
+
+    setSelectedRows(new Set());
+    setBulkDialogOpen(false);
+    setBulkLocation('');
+    setBulkRoomId('');
+    setBulkRooms([]);
+    setBulkSaving(false);
+  }, [user, selectedGuestRows, bulkLocation, bulkSelectedRoom,
+      updateGuest, placeFamilyMember, fetchRoomsForLocation]);
+
   if (!user) return null;
 
   return (
@@ -465,14 +600,30 @@ export default function DeptIncomingPage() {
 
           <div className="p-6 space-y-4">
             {allRows.length > 0 && (
-              <div className="relative max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
-                <Input
-                  placeholder="Search by name, country, reference…"
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-10 bg-white"
-                />
+              <div className="flex items-center gap-3">
+                <div className="relative max-w-sm flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
+                  <Input
+                    placeholder="Search by name, country, reference…"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-10 bg-white"
+                  />
+                </div>
+                {selectedGuestRows.length >= 2 && (
+                  <button
+                    onClick={() => { setBulkLocation(''); setBulkRoomId(''); setBulkRooms([]); setBulkDialogOpen(true); }}
+                    className="flex items-center gap-2 bg-[#2D5A45] text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-[#234839] transition-colors shrink-0"
+                  >
+                    <MapPin className="w-4 h-4" />
+                    Bulk Place ({selectedGuestRows.length})
+                  </button>
+                )}
+                {selectedGuestRows.length > 0 && selectedGuestRows.length < 2 && (
+                  <span className="text-sm text-[#4A4A4A] shrink-0">
+                    {selectedGuestRows.length} selected
+                  </span>
+                )}
               </div>
             )}
 
@@ -493,6 +644,25 @@ export default function DeptIncomingPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-[#E8E3DB] bg-[#F9F8F6]">
+                      <th className="px-3 py-3 w-9">
+                        <input
+                          type="checkbox"
+                          checked={allFilteredSelected}
+                          onChange={e => {
+                            if (e.target.checked) {
+                              setSelectedRows(prev => new Set([...prev, ...filteredRows.map(r => r.rowKey)]));
+                            } else {
+                              setSelectedRows(prev => {
+                                const next = new Set(prev);
+                                filteredRows.forEach(r => next.delete(r.rowKey));
+                                return next;
+                              });
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-[#D4CFC7] accent-[#2D5A45] cursor-pointer"
+                          title="Select all"
+                        />
+                      </th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Ref</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
@@ -521,7 +691,7 @@ export default function DeptIncomingPage() {
                         <Fragment key={row.rowKey}>
                           {isFirstInGroup && groupCount > 1 && (
                             <tr className="bg-indigo-50 border-b border-indigo-100">
-                              <td colSpan={11} className="px-4 py-1.5">
+                              <td colSpan={12} className="px-4 py-1.5">
                                 <div className="flex items-center gap-2">
                                   <Users className="w-3 h-3 text-indigo-600 shrink-0" />
                                   <span className="text-xs text-indigo-700 font-medium">
@@ -532,7 +702,23 @@ export default function DeptIncomingPage() {
                             </tr>
                           )}
 
-                          <tr className="hover:bg-[#F9F8F6]">
+                          <tr className={`hover:bg-[#F9F8F6] ${selectedRows.has(row.rowKey) ? 'bg-[#F0F7F4]' : ''}`}>
+                            {/* Checkbox */}
+                            <td className="px-3 py-2.5 w-9" onClick={e => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={selectedRows.has(row.rowKey)}
+                                onChange={e => {
+                                  setSelectedRows(prev => {
+                                    const next = new Set(prev);
+                                    if (e.target.checked) next.add(row.rowKey);
+                                    else next.delete(row.rowKey);
+                                    return next;
+                                  });
+                                }}
+                                className="w-4 h-4 rounded border-[#D4CFC7] accent-[#2D5A45] cursor-pointer"
+                              />
+                            </td>
                             {/* Reference */}
                             <td className="px-4 py-2.5 font-mono text-xs text-[#4A4A4A] whitespace-nowrap">{row.referenceNumber}</td>
 
@@ -787,6 +973,103 @@ export default function DeptIncomingPage() {
           onConfirm={handleDialogConfirm}
         />
       )}
+
+      {/* ── Bulk Place Dialog ─────────────────────────────────────────────────── */}
+      <Dialog open={bulkDialogOpen} onOpenChange={open => { if (!open && !bulkSaving) setBulkDialogOpen(false); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Place {selectedGuestRows.length} Guests</DialogTitle>
+            <DialogDescription>
+              Assign a location to all selected guests at once.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5 py-1">
+            {/* Guest pills */}
+            <div className="flex flex-wrap gap-1.5">
+              {selectedGuestRows.map(r => (
+                <span
+                  key={r.rowKey}
+                  className="inline-flex items-center px-2.5 py-1 bg-[#F0F7F4] border border-[#C2D9CE] rounded-full text-xs font-medium text-[#2D5A45]"
+                >
+                  {r.name}
+                </span>
+              ))}
+            </div>
+
+            {/* Location dropdown */}
+            <div>
+              <label className="block text-sm font-medium text-[#1A1A1A] mb-1.5">
+                Location <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={bulkLocation}
+                onChange={e => { setBulkLocation(e.target.value); setBulkRoomId(''); }}
+                className="w-full border border-[#D4CFC7] rounded-lg px-3 py-2 text-sm text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45]"
+              >
+                <option value="">Select a location…</option>
+                {locations.map(loc => (
+                  <option key={loc} value={loc}>{loc} ({guestCountByLocation[loc] ?? 0} placed)</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Room dropdown */}
+            <div>
+              <label className="block text-sm font-medium text-[#1A1A1A] mb-1.5">
+                Room <span className="text-xs font-normal text-[#4A4A4A]">(optional)</span>
+              </label>
+              <select
+                value={bulkRoomId}
+                onChange={e => setBulkRoomId(e.target.value)}
+                disabled={!bulkLocation || bulkLoadingRooms}
+                className="w-full border border-[#D4CFC7] rounded-lg px-3 py-2 text-sm text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="">Assign room (optional)</option>
+                {bulkLoadingRooms ? (
+                  <option disabled>Loading rooms…</option>
+                ) : bulkRooms.map(room => {
+                  const bedsLeft = Math.max(0, room.capacity - room.occupancy);
+                  const isFull = bedsLeft === 0;
+                  return (
+                    <option key={room.id} value={room.id} disabled={isFull}>
+                      {room.name} — {room.occupancy}/{room.capacity} beds{isFull ? ' (FULL)' : ` (${bedsLeft} free)`}
+                    </option>
+                  );
+                })}
+              </select>
+
+              {/* Capacity warning */}
+              {bulkHasCapacityWarning && bulkSelectedRoom && (
+                <div className="mt-2 flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <span className="text-amber-500 shrink-0 text-base leading-none mt-0.5">⚠️</span>
+                  <p className="text-xs text-amber-700">
+                    <span className="font-semibold">{bulkSelectedRoom.name}</span> has {bulkBedsLeft} bed{bulkBedsLeft !== 1 ? 's' : ''} left but you selected {selectedGuestRows.length} guests.
+                    Only {bulkBedsLeft} will get a bed — the rest will be placed without a room.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <button
+              onClick={() => setBulkDialogOpen(false)}
+              disabled={bulkSaving}
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-[#D4CFC7] text-[#4A4A4A] bg-white hover:bg-[#F5F0E8] disabled:opacity-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleBulkPlace}
+              disabled={!bulkLocation || bulkSaving}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-[#2D5A45] text-white hover:bg-[#234839] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {bulkSaving ? 'Placing…' : `Place All (${selectedGuestRows.length})`}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
