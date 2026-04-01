@@ -9,6 +9,7 @@ import { useDepartments } from '@/hooks/useDepartments';
 import { useAuditTrail2 } from '@/hooks/useAuditTrail2';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { FamilyBadge, type FamilyMemberInfo } from '@/components/FamilyBadge';
+import { FamilyLinkDialog } from '@/components/FamilyLinkDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase';
@@ -27,6 +28,7 @@ interface PlacedRow {
   relationship: string;
   isFamily: boolean;
   familyLastName: string;
+  familyGroupId: string | null;
   familyAllMembers: FamilyMemberInfo[];
   placedLocation: string;
   placedAt?: string;
@@ -83,6 +85,7 @@ function buildRows(guests: Guest[], dept: string): PlacedRow[] {
           name: g.fullName, country: g.country, referenceNumber: g.referenceNumber,
           relationship: g.isHeadOfFamily ? 'Head' : (g.relationship ?? '—'),
           isFamily: true, familyLastName: lastName,
+          familyGroupId: g.familyGroupId,
           familyAllMembers: buildFamilyMemberListFromGroup(guests, g.familyGroupId),
           placedLocation: g.placedLocation, placedAt: g.placedAt,
           arrivalTime: g.arrivalTime, arrivalAirport: g.arrivalAirport,
@@ -100,7 +103,7 @@ function buildRows(guests: Guest[], dept: string): PlacedRow[] {
         rowKey: g.id, guestId: g.id, memberId: null,
         name: g.fullName, country: g.country, referenceNumber: g.referenceNumber,
         relationship: isFamily ? 'Head' : 'Individual',
-        isFamily, familyLastName: lastName, familyAllMembers,
+        isFamily, familyLastName: lastName, familyGroupId: null, familyAllMembers,
         placedLocation: g.placedLocation, placedAt: g.placedAt,
         arrivalTime: g.arrivalTime, arrivalAirport: g.arrivalAirport,
         departureTime: g.departureTime, departureAirport: g.departureAirport,
@@ -114,7 +117,7 @@ function buildRows(guests: Guest[], dept: string): PlacedRow[] {
             rowKey: `${g.id}-${m.id}`, guestId: g.id, memberId: m.id,
             name: m.name, country: g.country, referenceNumber: g.referenceNumber,
             relationship: m.relationship,
-            isFamily: true, familyLastName: lastName, familyAllMembers,
+            isFamily: true, familyLastName: lastName, familyGroupId: null, familyAllMembers,
             placedLocation: m.placedLocation, placedAt: m.placedAt,
             arrivalTime: g.arrivalTime, arrivalAirport: g.arrivalAirport,
             departureTime: g.departureTime, departureAirport: g.departureAirport,
@@ -625,6 +628,7 @@ export default function DeptPlacedPage() {
                       </th>
                       <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
                       <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Family</th>
                       <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
                       <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Designation</th>
                       <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Location</th>
@@ -673,6 +677,15 @@ export default function DeptPlacedPage() {
                               />
                             )}
                           </div>
+                        </td>
+                        {/* Family */}
+                        <td className="px-4 py-3">
+                          {row.isFamily && row.familyGroupId ? (
+                            <FamilyLinkDialog
+                              familyGroupId={row.familyGroupId}
+                              familyName={row.familyLastName}
+                            />
+                          ) : <span className="text-gray-300 text-sm">—</span>}
                         </td>
                         <td className="px-4 py-3 text-sm text-[#4A4A4A]">{row.country}</td>
                         <td className="px-4 py-3 text-sm text-[#4A4A4A]">{formatDesignation(row.designation)}</td>

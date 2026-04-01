@@ -10,6 +10,7 @@ import { useAuditTrail2 } from '@/hooks/useAuditTrail2';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { PlaceGuestDialog } from '@/components/PlaceGuestDialog';
 import { FamilyBadge, type FamilyMemberInfo } from '@/components/FamilyBadge';
+import { FamilyLinkDialog } from '@/components/FamilyLinkDialog';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import type { Guest } from '@/types';
@@ -665,6 +666,7 @@ export default function DeptIncomingPage() {
                       </th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Ref</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Family</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Designation</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Arrival</th>
@@ -691,7 +693,7 @@ export default function DeptIncomingPage() {
                         <Fragment key={row.rowKey}>
                           {isFirstInGroup && groupCount > 1 && (
                             <tr className="bg-indigo-50 border-b border-indigo-100">
-                              <td colSpan={12} className="px-4 py-1.5">
+                              <td colSpan={13} className="px-4 py-1.5">
                                 <div className="flex items-center gap-2">
                                   <Users className="w-3 h-3 text-indigo-600 shrink-0" />
                                   <span className="text-xs text-indigo-700 font-medium">
@@ -737,6 +739,16 @@ export default function DeptIncomingPage() {
                                   />
                                 )}
                               </div>
+                            </td>
+
+                            {/* Family */}
+                            <td className="px-4 py-2.5">
+                              {row.isFamily && row.familyGroupId !== row.guestId ? (
+                                <FamilyLinkDialog
+                                  familyGroupId={row.familyGroupId}
+                                  familyName={row.familyLastName}
+                                />
+                              ) : <span className="text-gray-300 text-xs">—</span>}
                             </td>
 
                             {/* Country */}

@@ -7,6 +7,7 @@ import { useRooms } from '@/hooks/useRooms';
 import { LocationSidebar } from '@/components/LocationSidebar';
 import { LocationUserMenu } from '@/components/LocationUserMenu';
 import { FamilyBadge, type FamilyMemberInfo } from '@/components/FamilyBadge';
+import { FamilyLinkDialog } from '@/components/FamilyLinkDialog';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,7 @@ interface AccommodatedRow {
   referenceNumber: string;
   isFamily: boolean;
   familyLastName: string;
+  familyGroupId: string | null;
   familyAllMembers: FamilyMemberInfo[];
   roomId: string;
   roomName: string;
@@ -113,6 +115,7 @@ export default function LocationAccommodatedPage() {
           referenceNumber: g?.referenceNumber ?? '—',
           isFamily,
           familyLastName: lastName,
+          familyGroupId: g?.familyGroupId ?? null,
           familyAllMembers,
           roomId: room.id,
           roomName: room.name,
@@ -242,6 +245,7 @@ export default function LocationAccommodatedPage() {
                     <tr className="border-b border-[#E8E3DB] bg-[#F9F8F6]">
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Family</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Block</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Room</th>
@@ -264,6 +268,15 @@ export default function LocationAccommodatedPage() {
                               <FamilyBadge lastName={row.familyLastName} members={row.familyAllMembers} currentDept={loc} />
                             )}
                           </div>
+                        </td>
+                        {/* Family */}
+                        <td className="px-4 py-3">
+                          {row.isFamily && row.familyGroupId ? (
+                            <FamilyLinkDialog
+                              familyGroupId={row.familyGroupId}
+                              familyName={row.familyLastName}
+                            />
+                          ) : <span className="text-gray-300 text-xs">—</span>}
                         </td>
                         <td className="px-4 py-3 text-[#4A4A4A]">{row.country}</td>
                         <td className="px-4 py-3 text-[#4A4A4A]">{row.blockName}</td>

@@ -63,6 +63,7 @@ import { useDelegations } from '@/hooks/useDelegations';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { FamilyStatusCell } from '@/components/FamilyStatusCell';
 import { FamilyBadge, type FamilyMemberInfo } from '@/components/FamilyBadge';
+import { FamilyLinkDialog } from '@/components/FamilyLinkDialog';
 import { DepartmentSelect } from '@/components/DepartmentSelect';
 import { supabase } from '@/lib/supabase';
 import type { UserRole, Guest } from '@/types';
@@ -142,7 +143,7 @@ function CoordinatorRemarksPanel({ guest, onAddReply, onResubmit }: CoordinatorR
 
   return (
     <tr>
-      <td colSpan={10} className="p-0">
+      <td colSpan={12} className="p-0">
         <div className="bg-[#FEF9C3] border-l-4 border-amber-500 p-4 m-2 rounded-r-lg">
           <h4 className="font-medium text-amber-800 mb-3 flex items-center gap-2">
             <MessageSquare className="w-4 h-4" />
@@ -215,7 +216,7 @@ function DeskInchargeRemarksPanel({ onConfirm }: DeskInchargeRemarksPanelProps) 
 
   return (
     <tr>
-      <td colSpan={11} className="p-0">
+      <td colSpan={12} className="p-0">
         <div className="bg-[#FEE2E2] border-l-4 border-red-500 p-4 m-2 rounded-r-lg">
           <h4 className="font-medium text-red-800 mb-3">Add Remark for Coordinator</h4>
           
@@ -758,6 +759,7 @@ export default function GuestsPage() {
                         <th className="w-8 px-2 py-3"></th>
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Reference</th>
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Name</th>
+                        <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Family</th>
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Country</th>
                         {(user.role !== 'super-admin' || visibleCols.passportCountry) && (
                           <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Passport Country</th>
@@ -829,6 +831,15 @@ export default function GuestsPage() {
                                   return <FamilyBadge lastName={lastName} members={memberInfos} currentDept={guest.assignedDepartment ?? ''} />;
                                 })()}
                               </div>
+                            </td>
+                            {/* Family */}
+                            <td className="px-4 py-3">
+                              {guest.familyGroupId ? (
+                                <FamilyLinkDialog
+                                  familyGroupId={guest.familyGroupId}
+                                  familyName={(guest.familyName ?? guest.fullName).replace(' Family', '').split(' ').pop() ?? guest.fullName}
+                                />
+                              ) : <span className="text-gray-300">—</span>}
                             </td>
                             <td className="px-4 py-3">{guest.country}</td>
                             {(user.role !== 'super-admin' || visibleCols.passportCountry) && (

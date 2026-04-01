@@ -8,6 +8,7 @@ import { useAuditTrail2 } from '@/hooks/useAuditTrail2';
 import { LocationSidebar } from '@/components/LocationSidebar';
 import { LocationUserMenu } from '@/components/LocationUserMenu';
 import { FamilyBadge, type FamilyMemberInfo } from '@/components/FamilyBadge';
+import { FamilyLinkDialog } from '@/components/FamilyLinkDialog';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { Input } from '@/components/ui/input';
 import {
@@ -28,6 +29,7 @@ interface PersonRow {
   relationship: string;
   isFamily: boolean;
   familyLastName: string;
+  familyGroupId: string | null;
   familyAllMembers: FamilyMemberInfo[];
   placedAt?: string;
 }
@@ -66,6 +68,7 @@ function buildLocationRows(guests: Guest[], loc: string): PersonRow[] {
           name: g.fullName, country: g.country, referenceNumber: g.referenceNumber,
           relationship: g.isHeadOfFamily ? 'Head' : (g.relationship ?? '—'),
           isFamily: true, familyLastName: lastName,
+          familyGroupId: g.familyGroupId,
           familyAllMembers: buildFamilyMemberListFromGroup(guests, g.familyGroupId),
           placedAt: g.placedAt,
         });
@@ -83,7 +86,7 @@ function buildLocationRows(guests: Guest[], loc: string): PersonRow[] {
         rowKey: g.id, guestId: g.id, memberId: null,
         name: g.fullName, country: g.country, referenceNumber: g.referenceNumber,
         relationship: isFamily ? 'Head' : 'Individual',
-        isFamily, familyLastName: lastName, familyAllMembers, placedAt: g.placedAt,
+        isFamily, familyLastName: lastName, familyGroupId: null, familyAllMembers, placedAt: g.placedAt,
       });
     }
     if (isFamily) {
@@ -93,7 +96,7 @@ function buildLocationRows(guests: Guest[], loc: string): PersonRow[] {
             rowKey: `${g.id}-${m.id}`, guestId: g.id, memberId: m.id,
             name: m.name, country: g.country, referenceNumber: g.referenceNumber,
             relationship: m.relationship,
-            isFamily: true, familyLastName: lastName, familyAllMembers, placedAt: m.placedAt,
+            isFamily: true, familyLastName: lastName, familyGroupId: null, familyAllMembers, placedAt: m.placedAt,
           });
         }
       }
@@ -256,6 +259,7 @@ export default function LocationIncomingPage() {
                     <tr className="border-b border-[#E8E3DB] bg-[#F9F8F6]">
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Family</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Role</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Date Placed</th>
@@ -279,6 +283,15 @@ export default function LocationIncomingPage() {
                                 <FamilyBadge lastName={row.familyLastName} members={row.familyAllMembers} currentDept={loc} />
                               )}
                             </div>
+                          </td>
+                          {/* Family */}
+                          <td className="px-4 py-3">
+                            {row.isFamily && row.familyGroupId ? (
+                              <FamilyLinkDialog
+                                familyGroupId={row.familyGroupId}
+                                familyName={row.familyLastName}
+                              />
+                            ) : <span className="text-gray-300 text-xs">—</span>}
                           </td>
                           <td className="px-4 py-3 text-[#4A4A4A]">{row.country}</td>
                           <td className="px-4 py-3 capitalize text-[#4A4A4A]">{row.relationship}</td>
