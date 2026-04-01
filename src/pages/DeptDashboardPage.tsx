@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Inbox, CheckCircle, Users, MapPin, Clock, ArrowRight,
-  AlertTriangle, BedDouble, BarChart2, CalendarDays,
+  AlertTriangle, BedDouble, BarChart2, CalendarDays, Search,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -10,7 +10,9 @@ import { DeptSidebar } from '@/components/DeptSidebar';
 import { DeptUserMenu } from '@/components/DeptUserMenu';
 import { getStatusBadgeClass } from '@/lib/constants';
 import { useDepartments } from '@/hooks/useDepartments';
+import { GuestViewModal } from '@/components/GuestViewModal';
 import { supabase } from '@/lib/supabase';
+import type { Guest } from '@/types';
 
 interface LocationOccupancy {
   locationName: string;
@@ -31,8 +33,17 @@ export default function DeptDashboardPage() {
   const { guests } = useGuests();
   const { departments, locationsList, deptList } = useDepartments();
 
-  const [occupancyData, setOccupancyData]       = useState<LocationOccupancy[]>([]);
+  const [occupancyData, setOccupancyData]           = useState<LocationOccupancy[]>([]);
   const [roomsAvailableSoon, setRoomsAvailableSoon] = useState(0);
+
+  // ── Guest Search ──────────────────────────────────────────────────────────────
+  const [searchText, setSearchText]           = useState('');
+  const [searchResults, setSearchResults]     = useState<Guest[]>([]);
+  const [highlightIdx, setHighlightIdx]       = useState(-1);
+  const [showDropdown, setShowDropdown]       = useState(false);
+  const [viewGuestId, setViewGuestId]         = useState<string | null>(null);
+  const searchContainerRef                    = useRef<HTMLDivElement>(null);
+  const searchDebounceRef                     = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dept      = user?.department ?? '';
   const locations = departments[dept] ?? [];
@@ -147,6 +158,75 @@ export default function DeptDashboardPage() {
 
   const hasUrgentItems = arrivingTodayNoRoom > 0 || arrivingTomorrowNoRoom > 0 || roomsAvailableSoon > 0;
 
+  // ── Search debounce ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    if (searchText.length < 2) {
+      setSearchResults([]);
+      setShowDropdown(false);
+      setHighlightIdx(-1);
+      return;
+    }
+    searchDebounceRef.current = setTimeout(() => {
+      const q = searchText.toLowerCase();
+      const results = deptGuests.filter(g =>
+        g.fullName?.toLowerCase().includes(q) ||
+        g.country?.toLowerCase().includes(q) ||
+        g.referenceNumber?.toLowerCase().includes(q) ||
+        (Array.isArray(g.designation) ? g.designation.join(' ') : g.designation || '').toLowerCase().includes(q)
+      ).slice(0, 8);
+      setSearchResults(results);
+      setShowDropdown(true);
+      setHighlightIdx(-1);
+    }, 300);
+    return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
+  }, [searchText, deptGuests]);
+
+  // ── Click outside to close ────────────────────────────────────────────────────
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!showDropdown) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightIdx(i => Math.min(i + 1, searchResults.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightIdx(i => Math.max(i - 1, -1));
+    } else if (e.key === 'Enter') {
+      if (highlightIdx >= 0 && searchResults[highlightIdx]) {
+        openSearchResult(searchResults[highlightIdx].id);
+      }
+    } else if (e.key === 'Escape') {
+      setSearchText('');
+      setShowDropdown(false);
+    }
+  }
+
+  function openSearchResult(guestId: string) {
+    setViewGuestId(guestId);
+    setShowDropdown(false);
+  }
+
+  function searchStatusDot(g: Guest): string {
+    if (g.status === 'Accommodated') return 'bg-green-500';
+    if (g.placedLocation) return 'bg-amber-400';
+    return 'bg-blue-500';
+  }
+
+  function fmtDate(iso?: string): string {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
   if (!user) return null;
 
   return (
@@ -168,6 +248,62 @@ export default function DeptDashboardPage() {
           </header>
 
           <div className="p-6 space-y-6">
+
+            {/* ── 🔍 Quick Search ──────────────────────────────────────────────────── */}
+            <div ref={searchContainerRef} className="relative">
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchText}
+                  onChange={e => setSearchText(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  onFocus={() => { if (searchResults.length > 0) setShowDropdown(true); }}
+                  placeholder="Search guests by name, country, reference, or designation..."
+                  className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 pl-11 text-sm shadow-sm focus:outline-none focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45]"
+                />
+              </div>
+
+              {showDropdown && (
+                <div className="absolute z-50 w-full mt-1 bg-white rounded-xl shadow-lg border border-gray-200 max-h-96 overflow-y-auto">
+                  {searchResults.length === 0 ? (
+                    <p className="px-4 py-5 text-sm text-gray-400 italic text-center">
+                      No guests found matching &ldquo;{searchText}&rdquo;
+                    </p>
+                  ) : searchResults.map((g, i) => (
+                    <div
+                      key={g.id}
+                      onClick={() => openSearchResult(g.id)}
+                      className={`flex items-start gap-3 px-4 py-3 cursor-pointer rounded-lg mx-1 my-0.5 transition-colors ${
+                        i === highlightIdx ? 'bg-[#D6E4D9]' : 'hover:bg-[#D6E4D9]/30'
+                      }`}
+                    >
+                      <div className={`mt-1.5 w-2.5 h-2.5 rounded-full shrink-0 ${searchStatusDot(g)}`} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-[#1A1A1A]">{g.fullName}</span>
+                          <span className="text-sm text-gray-500">{g.country}</span>
+                          <span className="text-xs text-gray-400 font-mono">{g.referenceNumber}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
+                          <MapPin className="w-3 h-3 shrink-0" />
+                          <span>{g.placedLocation ?? 'No location'}</span>
+                          {g.roomAssignment && (
+                            <>
+                              <span className="text-gray-300">→</span>
+                              <span>{g.roomAssignment}</span>
+                            </>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-0.5">
+                          Arrives: {fmtDate(g.arrivalTime)} &nbsp;|&nbsp; Departs: {fmtDate(g.departureTime)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* ── ⚠️ Needs Attention ──────────────────────────────────────────────── */}
             <div>
@@ -484,6 +620,12 @@ export default function DeptDashboardPage() {
           </div>
         </main>
       </div>
+
+      <GuestViewModal
+        guest={guests.find(g => g.id === viewGuestId) ?? null}
+        open={!!viewGuestId}
+        onClose={() => setViewGuestId(null)}
+      />
     </div>
   );
 }
