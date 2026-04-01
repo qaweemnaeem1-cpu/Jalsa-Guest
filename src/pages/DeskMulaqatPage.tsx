@@ -81,7 +81,7 @@ interface DaftariScheduleRow {
   dayLabel: string | null;
   slotId: string;
   slotName: string;
-  slotGuests: { id: string; name: string; country: string | null; designation: string | null }[];
+  slotGuests: { id: string; name: string; country: string | null; designation: string | string[] | null }[];
   assignedByName: string | null;
   isFirstSlotOfDay: boolean;
   daySlotCount: number;
