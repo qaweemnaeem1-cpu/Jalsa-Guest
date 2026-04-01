@@ -7,7 +7,10 @@ import { toast } from 'sonner';
 import {
   Calendar, CalendarDays, ChevronDown, ChevronRight, GripVertical, LogOut, User,
   Plus, Pencil, Trash2, Eye, X, Star, Users, AlertTriangle, Search, UserMinus, UserPlus,
+  FileText, RefreshCw, Archive, Archive,
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
   type DragEndEvent,
@@ -36,6 +39,8 @@ interface MulaqatDay {
   date: string;
   label: string | null;
   created_by: string | null;
+  is_archived: boolean;
+  archived_at: string | null;
 }
 
 interface MulaqatSlot {
@@ -72,6 +77,8 @@ interface DaftariDay {
   label: string | null;
   is_active: boolean;
   created_by: string | null;
+  is_archived: boolean;
+  archived_at: string | null;
 }
 
 interface DaftariSlot {
@@ -82,6 +89,175 @@ interface DaftariSlot {
   guest_name: string | null;
   assigned_by: string | null;
   assigned_by_name: string | null;
+}
+
+// ── Overview ("All" tab) types ────────────────────────────────────────────────
+
+interface OverviewSlotDelegation {
+  id: string;
+  country: string;
+  managed_by_name: string | null;
+  head_of_delegation_name: string | null;
+  slot_id: string | null;
+  delegation_members: DelegationMember[];
+}
+
+interface OverviewMulaqatSlot {
+  id: string;
+  name: string;
+  day_id: string | null;
+  delegations: OverviewSlotDelegation[];
+}
+
+interface OverviewMulaqatDay {
+  id: string;
+  date: string;
+  label: string | null;
+  mulaqat_slots: OverviewMulaqatSlot[];
+}
+
+interface OverviewDaftariSlot {
+  id: string;
+  name: string;
+  day_id: string | null;
+  guest_id: string | null;
+  guest_name: string | null;
+  assigned_by_name: string | null;
+}
+
+interface OverviewDaftariDay {
+  id: string;
+  date: string;
+  label: string | null;
+  is_active: boolean;
+  daftari_slots: OverviewDaftariSlot[];
+}
+
+interface CombinedRow {
+  date: string;
+  type: 'delegation' | 'daftari';
+  slotId: string;
+  slotName: string;
+  delegationCountries: string[];
+  guestName: string;
+  country: string;
+  guestCount: number;
+  headNames: string[];
+  groupLabel: string;
+  managedBy: string;
+  isAssigned: boolean;
+}
+
+interface ArchivedDelegationDay {
+  id: string;
+  date: string;
+  label: string | null;
+  is_archived: boolean;
+  archived_at: string | null;
+  mulaqat_slots: Array<{
+    id: string;
+    name: string;
+    day_id: string | null;
+    delegations: Array<{
+      id: string;
+      country: string;
+      managed_by_name: string | null;
+      head_of_delegation_name: string | null;
+      delegation_members: DelegationMember[];
+    }>;
+  }>;
+}
+
+interface ArchivedDaftariDay {
+  id: string;
+  date: string;
+  label: string | null;
+  is_archived: boolean;
+  archived_at: string | null;
+  daftari_slots: Array<{
+    id: string;
+    name: string;
+    day_id: string | null;
+    guest_id: string | null;
+    guest_name: string | null;
+    assigned_by_name: string | null;
+  }>;
+}
+
+// ── PDF export types & defaults ───────────────────────────────────────────────
+
+interface PdfColumn { key: string; label: string; checked: boolean; }
+
+const DEFAULT_DELEG_COLUMNS: PdfColumn[] = [
+  { key: 'slot',        label: 'Slot Name',              checked: true  },
+  { key: 'country',     label: 'Country / Delegation',   checked: true  },
+  { key: 'guestCount',  label: 'Guest Count',             checked: true  },
+  { key: 'head',        label: 'Head of Delegation',     checked: true  },
+  { key: 'guestNames',  label: 'Guest Names',             checked: true  },
+  { key: 'designation', label: 'Designation',             checked: false },
+  { key: 'gender',      label: 'Gender',                  checked: false },
+  { key: 'religion',    label: 'Religion',                checked: false },
+  { key: 'introduction',label: 'Introduction',             checked: false },
+  { key: 'contact',     label: 'Contact Number',          checked: false },
+  { key: 'departure',   label: 'Departure Date & Time',   checked: false },
+  { key: 'department',  label: 'Department',              checked: false },
+  { key: 'location',    label: 'Location',                checked: false },
+];
+
+const DEFAULT_DAFTARI_COLUMNS: PdfColumn[] = [
+  { key: 'slot',        label: 'Slot Name',              checked: true  },
+  { key: 'guestNames',  label: 'Guest Name',              checked: true  },
+  { key: 'country',     label: 'Country',                 checked: true  },
+  { key: 'group',       label: 'Group',                   checked: true  },
+  { key: 'designation', label: 'Designation',             checked: false },
+  { key: 'contact',     label: 'Contact Number',          checked: false },
+  { key: 'introduction',label: 'Introduction',             checked: false },
+  { key: 'departure',   label: 'Departure Date & Time',   checked: false },
+  { key: 'department',  label: 'Department',              checked: false },
+  { key: 'location',    label: 'Location',                checked: false },
+];
+
+function loadPdfColumns(storageKey: string, defaults: PdfColumn[]): PdfColumn[] {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return defaults.map(c => ({ ...c }));
+    const saved = JSON.parse(raw) as Array<{ key: string; checked: boolean }>;
+    if (!Array.isArray(saved)) return defaults.map(c => ({ ...c }));
+    return defaults.map(col => {
+      const s = saved.find(x => x.key === col.key);
+      return { ...col, checked: s !== undefined ? s.checked : col.checked };
+    });
+  } catch { return defaults.map(c => ({ ...c })); }
+}
+
+interface PdfOptions { includeSummary: boolean; includePageNumbers: boolean; includeEmpty: boolean; landscape: boolean; }
+function loadPdfOptions(): PdfOptions {
+  try {
+    const raw = localStorage.getItem('mulaqat_pdf_options');
+    if (raw) return { includeSummary: true, includePageNumbers: true, includeEmpty: false, landscape: true, ...JSON.parse(raw) };
+  } catch { /* ignore */ }
+  return { includeSummary: true, includePageNumbers: true, includeEmpty: false, landscape: true };
+}
+
+const DELEG_DETAIL_KEYS = ['designation', 'gender', 'religion', 'introduction', 'contact', 'departure', 'department', 'location'];
+const DELEG_COL_LABELS: Record<string, string> = {
+  slot: 'Slot', country: 'Country / Delegation', guestCount: 'Guests', head: 'Head of Delegation',
+  guestNames: 'Guest Names', designation: 'Designation', gender: 'Gender', religion: 'Religion',
+  introduction: 'Introduction', contact: 'Contact', departure: 'Departure', department: 'Department', location: 'Location',
+};
+const DAFTARI_COL_LABELS: Record<string, string> = {
+  slot: 'Slot', guestNames: 'Guest Name', country: 'Country', group: 'Group',
+  designation: 'Designation', contact: 'Contact', introduction: 'Introduction',
+  departure: 'Departure', department: 'Department', location: 'Location',
+};
+
+function getOverviewDates(): string[] {
+  const today = new Date();
+  return Array.from({ length: 4 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    return d.toISOString().split('T')[0];
+  });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -161,7 +337,7 @@ export default function AdminMulaqatPage() {
   const { guests } = useGuests();
 
   // Tab
-  const [activeTab, setActiveTab] = useState<'delegation' | 'daftari'>('delegation');
+  const [activeTab, setActiveTab] = useState<'all' | 'delegation' | 'daftari' | 'archives'>('all');
 
   // Delegation data
   const [days, setDays] = useState<MulaqatDay[]>([]);
@@ -283,11 +459,41 @@ export default function AdminMulaqatPage() {
   const [daftariSearch, setDaftariSearch] = useState('');
   const [daftariCountryFilter, setDaftariCountryFilter] = useState('');
 
+  // Overview ("All" tab)
+  const [overviewDelegationDays, setOverviewDelegationDays] = useState<OverviewMulaqatDay[]>([]);
+  const [overviewDaftariDays, setOverviewDaftariDays] = useState<OverviewDaftariDay[]>([]);
+  const [overviewLoading, setOverviewLoading] = useState(true);
+  const [activeDateFilter, setActiveDateFilter] = useState<Set<string>>(() => new Set(getOverviewDates()));
+
+  // Archives tab
+  const [archivedDelegationDays, setArchivedDelegationDays] = useState<ArchivedDelegationDay[]>([]);
+  const [archivedDaftariDays, setArchivedDaftariDays] = useState<ArchivedDaftariDay[]>([]);
+  const [archivesLoading, setArchivesLoading] = useState(false);
+  const [archivesTypeFilter, setArchivesTypeFilter] = useState<'all' | 'delegation' | 'daftari'>('all');
+  const [archivesSearch, setArchivesSearch] = useState('');
+  const [expandedArchiveId, setExpandedArchiveId] = useState<string | null>(null);
+  const [restoreDialog, setRestoreDialog] = useState<{ id: string; date: string; type: 'delegation' | 'daftari' } | null>(null);
+
+  // Archive day dialogs
+  const [archiveDayDialog, setArchiveDayDialog] = useState<MulaqatDay | null>(null);
+  const [archiveDaftariDayDialog, setArchiveDaftariDayDialog] = useState<DaftariDay | null>(null);
+
+  // PDF customization
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
+  const [pdfDelegColumns, setPdfDelegColumns] = useState<PdfColumn[]>(() => loadPdfColumns('mulaqat_pdf_delegation_columns', DEFAULT_DELEG_COLUMNS));
+  const [pdfDaftariColumns, setPdfDaftariColumns] = useState<PdfColumn[]>(() => loadPdfColumns('mulaqat_pdf_daftari_columns', DEFAULT_DAFTARI_COLUMNS));
+  const [pdfIncludeSummary, setPdfIncludeSummary] = useState(() => loadPdfOptions().includeSummary);
+  const [pdfIncludePageNumbers, setPdfIncludePageNumbers] = useState(() => loadPdfOptions().includePageNumbers);
+  const [pdfIncludeEmpty, setPdfIncludeEmpty] = useState(() => loadPdfOptions().includeEmpty);
+  const [pdfLandscape, setPdfLandscape] = useState(() => loadPdfOptions().landscape);
+  const [pdfTargetDates, setPdfTargetDates] = useState<string[]>([]);
+  const [pdfTargetType, setPdfTargetType] = useState<'all' | 'delegation' | 'daftari'>('all');
+
   // ── Fetch ────────────────────────────────────────────────────────────────────
 
   const fetchAll = useCallback(async () => {
     const [{ data: dayData }, { data: slotData }, { data: delData, error: delError }] = await Promise.all([
-      supabase.from('mulaqat_days').select('*').order('date'),
+      supabase.from('mulaqat_days').select('*').eq('is_archived', false).order('date'),
       supabase.from('mulaqat_slots').select('*').order('name'),
       supabase
         .from('delegations')
@@ -308,7 +514,7 @@ export default function AdminMulaqatPage() {
 
   const fetchDaftari = useCallback(async () => {
     const [{ data: ddData }, { data: dsData }, { data: gsData }] = await Promise.all([
-      supabase.from('daftari_days').select('*').order('date'),
+      supabase.from('daftari_days').select('*').eq('is_archived', false).order('date'),
       supabase.from('daftari_slots').select('*').order('name'),
       supabase.from('guests').select('id, daftari_slot_id').not('daftari_slot_id', 'is', null),
     ]);
@@ -324,9 +530,66 @@ export default function AdminMulaqatPage() {
     setDaftariLoading(false);
   }, []);
 
+  const fetchOverview = useCallback(async () => {
+    setOverviewLoading(true);
+    const dates = getOverviewDates();
+    const [{ data: delDays }, { data: dafDays }] = await Promise.all([
+      supabase
+        .from('mulaqat_days')
+        .select('*, mulaqat_slots(*, delegations(*, delegation_members(*)))')
+        .in('date', dates)
+        .eq('is_archived', false)
+        .order('date'),
+      supabase
+        .from('daftari_days')
+        .select('*, daftari_slots(*)')
+        .in('date', dates)
+        .eq('is_archived', false)
+        .order('date'),
+    ]);
+    if (delDays) setOverviewDelegationDays(delDays as OverviewMulaqatDay[]);
+    if (dafDays) setOverviewDaftariDays(dafDays as OverviewDaftariDay[]);
+    setOverviewLoading(false);
+  }, []);
+
+  const fetchArchives = useCallback(async () => {
+    setArchivesLoading(true);
+    const [{ data: delData }, { data: dafData }] = await Promise.all([
+      supabase
+        .from('mulaqat_days')
+        .select('*, mulaqat_slots(*, delegations(*, delegation_members(*)))')
+        .eq('is_archived', true)
+        .order('date', { ascending: false }),
+      supabase
+        .from('daftari_days')
+        .select('*, daftari_slots(*)')
+        .eq('is_archived', true)
+        .order('date', { ascending: false }),
+    ]);
+    if (delData) setArchivedDelegationDays(delData as ArchivedDelegationDay[]);
+    if (dafData) setArchivedDaftariDays(dafData as ArchivedDaftariDay[]);
+    setArchivesLoading(false);
+  }, []);
+
+  const archivePastDays = useCallback(async () => {
+    const today = new Date().toISOString().split('T')[0];
+    await Promise.all([
+      supabase.from('mulaqat_days')
+        .update({ is_archived: true, archived_at: new Date().toISOString() })
+        .lt('date', today).eq('is_archived', false),
+      supabase.from('daftari_days')
+        .update({ is_archived: true, archived_at: new Date().toISOString() })
+        .lt('date', today).eq('is_archived', false),
+    ]);
+  }, []);
+
   useEffect(() => {
-    fetchAll();
-    fetchDaftari();
+    archivePastDays().then(() => {
+      fetchAll();
+      fetchDaftari();
+      fetchOverview();
+      fetchArchives();
+    });
     const sub = supabase
       .channel('admin-mulaqat')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'mulaqat_days' }, fetchAll)
@@ -337,7 +600,18 @@ export default function AdminMulaqatPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daftari_slots' }, fetchDaftari)
       .subscribe();
     return () => { supabase.removeChannel(sub); };
-  }, [fetchAll, fetchDaftari]);
+  }, [fetchAll, fetchDaftari, fetchOverview, fetchArchives, archivePastDays]);
+
+  // ── localStorage persistence for PDF prefs ────────────────────────────────────
+  useEffect(() => {
+    localStorage.setItem('mulaqat_pdf_delegation_columns', JSON.stringify(pdfDelegColumns.map(c => ({ key: c.key, checked: c.checked }))));
+  }, [pdfDelegColumns]);
+  useEffect(() => {
+    localStorage.setItem('mulaqat_pdf_daftari_columns', JSON.stringify(pdfDaftariColumns.map(c => ({ key: c.key, checked: c.checked }))));
+  }, [pdfDaftariColumns]);
+  useEffect(() => {
+    localStorage.setItem('mulaqat_pdf_options', JSON.stringify({ includeSummary: pdfIncludeSummary, includePageNumbers: pdfIncludePageNumbers, includeEmpty: pdfIncludeEmpty, landscape: pdfLandscape }));
+  }, [pdfIncludeSummary, pdfIncludePageNumbers, pdfIncludeEmpty, pdfLandscape]);
 
   // ── Derived (delegation) ──────────────────────────────────────────────────────
 
@@ -451,6 +725,390 @@ export default function AdminMulaqatPage() {
   const toggleSelectAllDaftariGuests = () => {
     if (allDaftariGuestsSelected) setSelectedDaftariGuestIds(new Set());
     else setSelectedDaftariGuestIds(new Set(filteredDaftariGuests.map(g => g.id)));
+  };
+
+  // ── Derived (overview / "All" tab) ────────────────────────────────────────────
+
+  const overviewDates = useMemo(() => getOverviewDates(), []);
+
+  const combinedRows = useMemo((): CombinedRow[] => {
+    const rows: CombinedRow[] = [];
+
+    for (const day of overviewDelegationDays) {
+      for (const slot of (day.mulaqat_slots ?? [])) {
+        const delegs = slot.delegations ?? [];
+        if (delegs.length === 0) {
+          rows.push({
+            date: day.date, type: 'delegation', slotId: slot.id, slotName: slot.name,
+            delegationCountries: [], guestName: '', country: '',
+            guestCount: 0, headNames: [], groupLabel: '', managedBy: '—', isAssigned: false,
+          });
+        } else {
+          const countries = delegs.map(d => d.country);
+          const guestCount = delegs.reduce((s, d) => s + (d.delegation_members ?? []).length, 0);
+          const heads = delegs.map(d => d.head_of_delegation_name).filter(Boolean) as string[];
+          const managedBy = [...new Set(delegs.map(d => d.managed_by_name).filter(Boolean))].join(', ') || '—';
+          rows.push({
+            date: day.date, type: 'delegation', slotId: slot.id, slotName: slot.name,
+            delegationCountries: countries, guestName: '', country: countries.join(', '),
+            guestCount, headNames: heads, groupLabel: '', managedBy, isAssigned: true,
+          });
+        }
+      }
+    }
+
+    for (const day of overviewDaftariDays) {
+      for (const slot of (day.daftari_slots ?? [])) {
+        const guestObj = slot.guest_id ? guests.find(g => g.id === slot.guest_id) : null;
+        rows.push({
+          date: day.date, type: 'daftari', slotId: slot.id, slotName: slot.name,
+          delegationCountries: [], guestName: slot.guest_name ?? '',
+          country: guestObj?.country ?? '—',
+          guestCount: slot.guest_id ? 1 : 0,
+          headNames: [], groupLabel: slot.guest_id ? 'Individual' : '',
+          managedBy: slot.assigned_by_name ?? '—', isAssigned: !!slot.guest_id,
+        });
+      }
+    }
+
+    rows.sort((a, b) => {
+      if (a.date < b.date) return -1;
+      if (a.date > b.date) return 1;
+      if (a.type === 'delegation' && b.type === 'daftari') return -1;
+      if (a.type === 'daftari' && b.type === 'delegation') return 1;
+      return a.slotName.localeCompare(b.slotName);
+    });
+
+    return rows;
+  }, [overviewDelegationDays, overviewDaftariDays, guests]);
+
+  const filteredCombinedRows = useMemo(
+    () => combinedRows.filter(r => activeDateFilter.has(r.date)),
+    [combinedRows, activeDateFilter],
+  );
+
+  const dateGroups = useMemo(() => {
+    const groups: { date: string; rows: CombinedRow[] }[] = [];
+    for (const row of filteredCombinedRows) {
+      const last = groups[groups.length - 1];
+      if (last && last.date === row.date) last.rows.push(row);
+      else groups.push({ date: row.date, rows: [row] });
+    }
+    return groups;
+  }, [filteredCombinedRows]);
+
+  const overviewStats = useMemo(() => {
+    const delegSlots = overviewDelegationDays.reduce((s, d) => s + (d.mulaqat_slots ?? []).length, 0);
+    const dafSlots = overviewDaftariDays.reduce((s, d) => s + (d.daftari_slots ?? []).length, 0);
+    const totalDelegGuests = overviewDelegationDays.reduce((s, d) =>
+      s + (d.mulaqat_slots ?? []).reduce((ss, sl) =>
+        ss + (sl.delegations ?? []).reduce((sss, del) => sss + (del.delegation_members ?? []).length, 0), 0), 0);
+    const assignedDafSlots = overviewDaftariDays.reduce((s, d) =>
+      s + (d.daftari_slots ?? []).filter(sl => sl.guest_id).length, 0);
+    const totalGuests = totalDelegGuests + assignedDafSlots;
+    const usedDelegSlots = overviewDelegationDays.reduce((s, d) =>
+      s + (d.mulaqat_slots ?? []).filter(sl => (sl.delegations ?? []).length > 0).length, 0);
+    const availableSlots = (delegSlots - usedDelegSlots) + (dafSlots - assignedDafSlots);
+    return { delegSlots, dafSlots, totalGuests, availableSlots };
+  }, [overviewDelegationDays, overviewDaftariDays]);
+
+  const filteredArchiveRows = useMemo(() => {
+    const delRows = archivedDelegationDays.map(d => ({ ...d, type: 'delegation' as const }));
+    const dafRows = archivedDaftariDays.map(d => ({ ...d, type: 'daftari' as const }));
+    const allRows = [...delRows, ...dafRows].sort((a, b) => {
+      const at = a.archived_at ?? '';
+      const bt = b.archived_at ?? '';
+      return bt.localeCompare(at);
+    });
+    return allRows.filter(r => {
+      if (archivesTypeFilter !== 'all' && r.type !== archivesTypeFilter) return false;
+      if (archivesSearch) {
+        const q = archivesSearch.toLowerCase();
+        if (!r.date.includes(q) && !fmt(r.date).toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [archivedDelegationDays, archivedDaftariDays, archivesTypeFilter, archivesSearch]);
+
+  const generatePDF = (
+    dates: string[],
+    type: 'all' | 'delegation' | 'daftari',
+    delegColumns: PdfColumn[],
+    daftariColumns: PdfColumn[],
+    options: PdfOptions,
+  ) => {
+
+    const orientation = options.landscape ? 'landscape' : 'portrait';
+    const pageW = options.landscape ? 297 : 210;
+    const pageH = options.landscape ? 210 : 297;
+    const center = pageW / 2;
+    const margin = 14;
+    const footerY = pageH - 8;
+
+    const fmtPdfDate = (d: string) =>
+      new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const fmtPdfShort = (d: string) =>
+      new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    const fmtDepTime = (d: string | null | undefined) => {
+      if (!d) return '—';
+      const dt = new Date(d);
+      if (isNaN(dt.getTime())) return '—';
+      const datePart = dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const h = dt.getHours(), m = dt.getMinutes();
+      return (h === 0 && m === 0) ? datePart : `${datePart}, ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    };
+
+    const doc = new jsPDF(orientation as 'landscape' | 'portrait');
+    const lastTable = () => (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+
+    const dateRange = dates.length > 1
+      ? `${fmtPdfShort(dates[0])} — ${fmtPdfShort(dates[dates.length - 1])}`
+      : dates.length === 1 ? fmtPdfShort(dates[0]) : '';
+
+    // Draw a section header (title block + section name) on current page, returns new yPos
+    const drawSectionHeader = (sectionTitle: string, sectionColor: [number, number, number]): number => {
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text('JALSA SALANA UK 2026', center, 12, { align: 'center' });
+      doc.setFontSize(11);
+      doc.text('MULAQAT SCHEDULE', center, 19, { align: 'center' });
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.text(dateRange, center, 25, { align: 'center' });
+      doc.setLineWidth(0.3);
+      doc.line(margin, 28, pageW - margin, 28);
+      doc.setFontSize(13);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(sectionColor[0], sectionColor[1], sectionColor[2]);
+      doc.text(sectionTitle, margin, 36);
+      doc.setTextColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+      doc.line(margin, 38, margin + doc.getTextWidth(sectionTitle) + 2, 38);
+      return 44;
+    };
+
+    // Checked column keys in display order
+    const checkedDelegKeys = DEFAULT_DELEG_COLUMNS.map(c => c.key).filter(k => delegColumns.find(c => c.key === k)?.checked);
+    const checkedDaftariKeys = DEFAULT_DAFTARI_COLUMNS.map(c => c.key).filter(k => daftariColumns.find(c => c.key === k)?.checked);
+    const hasDetailCols = checkedDelegKeys.some(k => DELEG_DETAIL_KEYS.includes(k));
+
+    // Unified day sources
+    const allDelDays = [...overviewDelegationDays, ...archivedDelegationDays];
+    const allDafDays = [
+      ...overviewDaftariDays.map(d => ({ date: d.date, daftari_slots: d.daftari_slots })),
+      ...archivedDaftariDays.map(d => ({ date: d.date, daftari_slots: d.daftari_slots })),
+    ];
+
+    let totalDelegGuests = 0, totalDelegDays = 0;
+    let totalDafGuests = 0, totalDafDays = 0;
+
+    // ── DELEGATION SECTION ────────────────────────────────────────────────────
+    if (type !== 'daftari') {
+      let yPos = drawSectionHeader('DELEGATION MULAQAT', [45, 90, 69]);
+      let wroteAny = false;
+
+      for (const date of dates) {
+        const delDay = allDelDays.find(d => d.date === date);
+        if (!delDay) continue;
+
+        const delegRows: string[][] = [];
+        for (const slot of delDay.mulaqat_slots ?? []) {
+          const delegs = slot.delegations ?? [];
+          if (delegs.length === 0 && !options.includeEmpty) continue;
+
+          if (delegs.length === 0) {
+            if (options.includeEmpty) {
+              const rowMap: Record<string, string> = { slot: slot.name, country: '(Available)', guestCount: '0', head: '—', guestNames: '—', designation: '—', gender: '—', religion: '—', introduction: '—', contact: '—', departure: '—', department: '—', location: '—' };
+              delegRows.push(checkedDelegKeys.map(k => rowMap[k] ?? '—'));
+            }
+            continue;
+          }
+
+          if (hasDetailCols) {
+            // One row per member
+            for (const del of delegs) {
+              for (const member of del.delegation_members ?? []) {
+                const g = guests.find(x => x.id === member.guest_id);
+                const ga = g as unknown as Record<string, string | undefined>;
+                totalDelegGuests++;
+                const rowMap: Record<string, string> = {
+                  slot: slot.name, country: del.country,
+                  guestCount: String((del.delegation_members ?? []).length),
+                  head: member.is_head ? `* ${member.guest_name}` : del.head_of_delegation_name ?? '—',
+                  guestNames: member.is_head ? `* ${member.guest_name}` : member.guest_name,
+                  designation: g ? String(formatDesignation(g.designation ?? '')) : '—',
+                  gender: ga?.gender ?? '—', religion: ga?.religion ?? '—',
+                  introduction: ga?.introduction ?? '—', contact: ga?.phone ?? '—',
+                  departure: fmtDepTime(g?.departureTime), department: g?.assignedDepartment ?? '—',
+                  location: g?.placedLocation ?? '—',
+                };
+                delegRows.push(checkedDelegKeys.map(k => rowMap[k] ?? '—'));
+              }
+            }
+          } else {
+            // One row per delegation (summary)
+            for (const del of delegs) {
+              const gc = (del.delegation_members ?? []).length;
+              totalDelegGuests += gc;
+              const memberNames = [...(del.delegation_members ?? [])]
+                .sort((a, b) => (b.is_head ? 1 : 0) - (a.is_head ? 1 : 0))
+                .map(m => m.is_head ? `* ${m.guest_name}` : m.guest_name)
+                .join(', ') || '—';
+              const rowMap: Record<string, string> = {
+                slot: slot.name, country: del.country, guestCount: String(gc),
+                head: del.head_of_delegation_name ?? '—', guestNames: memberNames,
+                designation: '—', gender: '—', religion: '—', introduction: '—',
+                contact: '—', departure: '—', department: '—', location: '—',
+              };
+              delegRows.push(checkedDelegKeys.map(k => rowMap[k] ?? '—'));
+            }
+          }
+        }
+
+        if (delegRows.length === 0) continue;
+        totalDelegDays++;
+        wroteAny = true;
+
+        // Day header
+        if (yPos > pageH - 50) { doc.addPage(); yPos = drawSectionHeader('DELEGATION MULAQAT (cont.)', [45, 90, 69]); }
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text(fmtPdfDate(date), margin, yPos);
+        yPos += 4;
+
+        autoTable(doc, {
+          startY: yPos,
+          head: [checkedDelegKeys.map(k => DELEG_COL_LABELS[k] ?? k)],
+          body: delegRows,
+          styles: { fontSize: 7.5, cellPadding: 2 },
+          headStyles: { fillColor: [45, 90, 69] as [number, number, number], textColor: 255, fontStyle: 'bold' },
+          theme: 'grid',
+          margin: { left: margin, right: margin },
+          didDrawPage: () => { /* autoTable handles new pages */ },
+        });
+        yPos = lastTable() + 8;
+      }
+
+      if (!wroteAny) {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(9);
+        doc.text('No delegation data for selected dates.', margin, yPos);
+      }
+    }
+
+    // ── DAFTARI SECTION (new page) ────────────────────────────────────────────
+    if (type !== 'delegation') {
+      doc.addPage();
+      let yPos = drawSectionHeader('DAFTARI MULAQAT', [59, 130, 246]);
+      let wroteAny = false;
+
+      for (const date of dates) {
+        const dafDay = allDafDays.find(d => d.date === date);
+        if (!dafDay) continue;
+
+        const dafRows: string[][] = [];
+        for (const slot of dafDay.daftari_slots ?? []) {
+          if (!slot.guest_id && !options.includeEmpty) continue;
+          const g = slot.guest_id ? guests.find(x => x.id === slot.guest_id) : null;
+          const ga = g as unknown as Record<string, string | undefined>;
+          if (slot.guest_id) { totalDafGuests++; }
+
+          const rowMap: Record<string, string> = {
+            slot: slot.name, guestNames: slot.guest_name ?? '—',
+            country: g?.country ?? '—', group: slot.guest_id ? 'Individual' : '(Available)',
+            designation: g ? String(formatDesignation(g.designation ?? '')) : '—',
+            contact: ga?.phone ?? '—', introduction: ga?.introduction ?? '—',
+            departure: fmtDepTime(g?.departureTime), department: g?.assignedDepartment ?? '—',
+            location: g?.placedLocation ?? '—',
+          };
+          dafRows.push(checkedDaftariKeys.map(k => rowMap[k] ?? '—'));
+        }
+
+        if (dafRows.length === 0) continue;
+        totalDafDays++;
+        wroteAny = true;
+
+        if (yPos > pageH - 50) { doc.addPage(); yPos = drawSectionHeader('DAFTARI MULAQAT (cont.)', [59, 130, 246]); }
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text(fmtPdfDate(date), margin, yPos);
+        yPos += 4;
+
+        autoTable(doc, {
+          startY: yPos,
+          head: [checkedDaftariKeys.map(k => DAFTARI_COL_LABELS[k] ?? k)],
+          body: dafRows,
+          styles: { fontSize: 7.5, cellPadding: 2 },
+          headStyles: { fillColor: [59, 130, 246] as [number, number, number], textColor: 255, fontStyle: 'bold' },
+          theme: 'grid',
+          margin: { left: margin, right: margin },
+        });
+        yPos = lastTable() + 8;
+      }
+
+      if (!wroteAny) {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(9);
+        doc.text('No daftari data for selected dates.', margin, yPos);
+      }
+    }
+
+    // ── SUMMARY PAGE ─────────────────────────────────────────────────────────
+    if (options.includeSummary) {
+      doc.addPage();
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text('SUMMARY', center, 18, { align: 'center' });
+      doc.setLineWidth(0.4);
+      doc.line(margin, 21, pageW - margin, 21);
+
+      const summaryBody: string[][] = [];
+      if (type !== 'daftari') {
+        summaryBody.push(['Delegation days covered', String(totalDelegDays)]);
+        summaryBody.push(['Total delegation guests', String(totalDelegGuests)]);
+      }
+      if (type !== 'delegation') {
+        summaryBody.push(['Daftari days covered', String(totalDafDays)]);
+        summaryBody.push(['Total daftari guests', String(totalDafGuests)]);
+      }
+      summaryBody.push(['Grand Total', String(totalDelegGuests + totalDafGuests)]);
+
+      autoTable(doc, {
+        startY: 26,
+        head: [['Category', 'Total']],
+        body: summaryBody,
+        styles: { fontSize: 10, cellPadding: 4 },
+        headStyles: { fillColor: [45, 90, 69] as [number, number, number], textColor: 255 },
+        theme: 'grid',
+        margin: { left: center - 50, right: center - 50 },
+      });
+
+      const sy = lastTable() + 12;
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Generated: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}, ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`, center, sy, { align: 'center' });
+      if (user) {
+        doc.text(`By: ${user.name} (${ROLE_LABELS[user.role]})`, center, sy + 5, { align: 'center' });
+      }
+    }
+
+    // ── PAGE FOOTERS ──────────────────────────────────────────────────────────
+    if (options.includePageNumbers) {
+      const pageCount = doc.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(120, 120, 120);
+        doc.text(`Page ${i} of ${pageCount}`, center, footerY, { align: 'center' });
+        doc.text(`Generated: ${new Date().toLocaleString()}`, margin, footerY);
+        doc.text('Jalsa Guest — Jalsa Salana UK', pageW - margin, footerY, { align: 'right' });
+        doc.setTextColor(0, 0, 0);
+      }
+    }
+
+    doc.save(`Mulaqat-Schedule-${dates[0] ?? 'export'}.pdf`);
+    toast.success('PDF exported successfully');
   };
 
   // ── Delegation handlers ───────────────────────────────────────────────────────
@@ -839,6 +1497,37 @@ export default function AdminMulaqatPage() {
     fetchDaftari();
   };
 
+  // ── Archive / Restore handlers ────────────────────────────────────────────────
+
+  const handleArchiveDay = async (day: MulaqatDay) => {
+    await supabase.from('mulaqat_days')
+      .update({ is_archived: true, archived_at: new Date().toISOString() })
+      .eq('id', day.id);
+    toast.success(`${fmt(day.date)} archived`);
+    setArchiveDayDialog(null);
+    fetchAll(); fetchOverview(); fetchArchives();
+  };
+
+  const handleArchiveDaftariDay = async (day: DaftariDay) => {
+    await supabase.from('daftari_days')
+      .update({ is_archived: true, archived_at: new Date().toISOString() })
+      .eq('id', day.id);
+    toast.success(`${fmt(day.date)} archived`);
+    setArchiveDaftariDayDialog(null);
+    fetchDaftari(); fetchOverview(); fetchArchives();
+  };
+
+  const handleRestore = async () => {
+    if (!restoreDialog) return;
+    const table = restoreDialog.type === 'delegation' ? 'mulaqat_days' : 'daftari_days';
+    await supabase.from(table).update({ is_archived: false, archived_at: null }).eq('id', restoreDialog.id);
+    toast.success(`${fmt(restoreDialog.date)} restored to active schedule`);
+    setRestoreDialog(null);
+    setExpandedArchiveId(null);
+    if (restoreDialog.type === 'delegation') { fetchAll(); } else { fetchDaftari(); }
+    fetchOverview(); fetchArchives();
+  };
+
   // ── Drag-and-drop (delegation slots) ─────────────────────────────────────────
 
   const sensors = useSensors(
@@ -1053,6 +1742,12 @@ export default function AdminMulaqatPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={() => setActiveTab('all')}
+                    className={activeTab === 'all'
+                      ? 'bg-[#2D5A45] text-white rounded-full px-4 py-1.5 text-sm font-medium'
+                      : 'bg-white text-gray-600 border border-gray-200 rounded-full px-4 py-1.5 text-sm font-medium hover:border-[#2D5A45]'}
+                  >All</button>
+                  <button
                     onClick={() => setActiveTab('delegation')}
                     className={activeTab === 'delegation'
                       ? 'bg-[#2D5A45] text-white rounded-full px-4 py-1.5 text-sm font-medium'
@@ -1064,6 +1759,12 @@ export default function AdminMulaqatPage() {
                       ? 'bg-[#2D5A45] text-white rounded-full px-4 py-1.5 text-sm font-medium'
                       : 'bg-white text-gray-600 border border-gray-200 rounded-full px-4 py-1.5 text-sm font-medium hover:border-[#2D5A45]'}
                   >Daftari</button>
+                  <button
+                    onClick={() => setActiveTab('archives')}
+                    className={activeTab === 'archives'
+                      ? 'bg-[#2D5A45] text-white rounded-full px-4 py-1.5 text-sm font-medium flex items-center gap-1.5'
+                      : 'bg-white text-gray-600 border border-gray-200 rounded-full px-4 py-1.5 text-sm font-medium hover:border-[#2D5A45] flex items-center gap-1.5'}
+                  ><Archive className="w-3.5 h-3.5" />Archives</button>
                 </div>
               </div>
               <div className="relative">
@@ -1095,7 +1796,17 @@ export default function AdminMulaqatPage() {
           </header>
 
           {/* ── Stats bar ── */}
-          {activeTab === 'delegation' ? (
+          {activeTab === 'all' ? (
+            <div className="bg-white border-b border-[#E8E3DB] px-6 py-3 flex items-center gap-6 text-sm text-[#4A4A4A]">
+              <span><span className="font-semibold text-[#1A1A1A]">{overviewStats.delegSlots}</span> delegation slots</span>
+              <span className="text-[#D4CFC7]">|</span>
+              <span><span className="font-semibold text-[#1A1A1A]">{overviewStats.dafSlots}</span> daftari slots</span>
+              <span className="text-[#D4CFC7]">|</span>
+              <span><span className="font-semibold text-[#1A1A1A]">{overviewStats.totalGuests}</span> total guests</span>
+              <span className="text-[#D4CFC7]">|</span>
+              <span><span className="font-semibold text-green-700">{overviewStats.availableSlots}</span> available slots</span>
+            </div>
+          ) : activeTab === 'delegation' ? (
             <div className="bg-white border-b border-[#E8E3DB] px-6 py-3 flex items-center gap-6 text-sm text-[#4A4A4A]">
               <span><span className="font-semibold text-[#1A1A1A]">{days.length}</span> day{days.length !== 1 ? 's' : ''}</span>
               <span className="text-[#D4CFC7]">|</span>
@@ -1109,7 +1820,7 @@ export default function AdminMulaqatPage() {
                 <span className="font-semibold">{unassignedDelegations.length}</span> unassigned
               </span>
             </div>
-          ) : (
+          ) : activeTab === 'daftari' ? (
             <div className="bg-white border-b border-[#E8E3DB] px-6 py-3 flex items-center gap-6 text-sm text-[#4A4A4A]">
               <span><span className="font-semibold text-[#1A1A1A]">{daftariDays.length}</span> day{daftariDays.length !== 1 ? 's' : ''}</span>
               <span className="text-[#D4CFC7]">|</span>
@@ -1121,9 +1832,184 @@ export default function AdminMulaqatPage() {
               <span className="text-[#D4CFC7]">|</span>
               <span><span className="font-semibold text-[#1A1A1A]">{daftariGuests.length}</span> daftari guest{daftariGuests.length !== 1 ? 's' : ''}</span>
             </div>
+          ) : (
+            <div className="bg-white border-b border-[#E8E3DB] px-6 py-3 flex items-center gap-6 text-sm text-[#4A4A4A]">
+              <span><span className="font-semibold text-[#1A1A1A]">{archivedDelegationDays.length}</span> archived delegation day{archivedDelegationDays.length !== 1 ? 's' : ''}</span>
+              <span className="text-[#D4CFC7]">|</span>
+              <span><span className="font-semibold text-[#1A1A1A]">{archivedDaftariDays.length}</span> archived daftari day{archivedDaftariDays.length !== 1 ? 's' : ''}</span>
+              <span className="text-[#D4CFC7]">|</span>
+              <span><span className="font-semibold text-[#1A1A1A]">{archivedDelegationDays.length + archivedDaftariDays.length}</span> total</span>
+            </div>
           )}
 
           <div className="p-6 max-w-7xl mx-auto space-y-8">
+
+            {/* ══ ALL TAB ══ */}
+            {activeTab === 'all' && (
+              <section>
+                {/* Header row */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <CalendarDays className="w-5 h-5 text-[#2D5A45]" />
+                    <h2 className="text-lg font-semibold text-[#1A1A1A]">Mulaqat Overview — Today + Next 3 Days</h2>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => fetchOverview()}
+                      className="flex items-center gap-1.5 px-3 py-2 text-sm text-[#4A4A4A] border border-[#D4CFC7] rounded-lg bg-white hover:bg-[#F5F0E8] transition-colors"
+                    >
+                      <RefreshCw className="w-4 h-4" />Refresh
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPdfTargetDates(Array.from(activeDateFilter).sort());
+                        setPdfTargetType('all');
+                        setPdfDialogOpen(true);
+                      }}
+                      className="flex items-center gap-1.5 px-4 py-2 text-sm text-[#2D5A45] border border-[#2D5A45] rounded-lg bg-white hover:bg-[#F5F0E8] transition-colors"
+                    >
+                      <FileText className="w-4 h-4" />Export PDF
+                    </button>
+                  </div>
+                </div>
+
+                {/* Date filter pills */}
+                <div className="flex items-center gap-2 mb-4">
+                  {overviewDates.map((date, i) => {
+                    const active = activeDateFilter.has(date);
+                    const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : new Date(date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+                    return (
+                      <button
+                        key={date}
+                        onClick={() => setActiveDateFilter(prev => {
+                          const next = new Set(prev);
+                          next.has(date) ? next.delete(date) : next.add(date);
+                          return next;
+                        })}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                          active
+                            ? 'bg-[#2D5A45] text-white border-[#2D5A45]'
+                            : 'bg-white text-[#4A4A4A] border-[#D4CFC7] hover:border-[#2D5A45]'
+                        }`}
+                      >
+                        {label}{active && ' ✓'}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Table */}
+                {overviewLoading ? (
+                  <div className="flex items-center justify-center py-16">
+                    <div className="w-6 h-6 border-2 border-[#2D5A45] border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : filteredCombinedRows.length === 0 ? (
+                  <div className="bg-white rounded-lg border border-[#E8E3DB] flex flex-col items-center justify-center py-16 gap-2">
+                    <CalendarDays className="w-10 h-10 text-gray-300" />
+                    <p className="text-sm text-[#4A4A4A]">No mulaqat scheduled for the selected dates.</p>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-lg border border-[#E8E3DB] overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-[#F5F0E8] border-b border-[#E8E3DB]">
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider w-28">Day</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider w-24">Type</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider w-20">Slot</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Delegations / Guest</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider w-28">Country</th>
+                          <th className="px-3 py-2.5 text-center text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider w-16">Guests</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Head / Group</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Managed By</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider w-24">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dateGroups.map(group => {
+                          const isToday = group.date === overviewDates[0];
+                          return group.rows.map((row, rowIdx) => (
+                            <tr
+                              key={row.slotId}
+                              className={`border-b border-[#E8E3DB] last:border-b-0 ${
+                                row.type === 'daftari' ? 'bg-blue-50/20' : 'bg-white'
+                              } ${!row.isAssigned ? 'opacity-60' : ''}`}
+                            >
+                              {rowIdx === 0 && (
+                                <td
+                                  rowSpan={group.rows.length}
+                                  className={`px-3 py-2.5 align-top font-semibold text-[#1A1A1A] text-xs whitespace-nowrap ${
+                                    isToday ? 'border-l-4 border-[#2D5A45]' : ''
+                                  }`}
+                                >
+                                  {new Date(group.date + 'T12:00:00').toLocaleDateString('en-GB', {
+                                    weekday: 'short', day: 'numeric', month: 'short',
+                                  })}
+                                  {isToday && <span className="ml-1 text-[10px] text-[#2D5A45] font-bold">TODAY</span>}
+                                </td>
+                              )}
+                              <td className="px-3 py-2.5">
+                                {row.type === 'delegation' ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">Delegation</span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">Daftari</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2.5 text-[#4A4A4A] font-medium">{row.slotName}</td>
+                              <td className="px-3 py-2.5">
+                                {row.type === 'delegation' ? (
+                                  row.delegationCountries.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1">
+                                      {row.delegationCountries.map(c => (
+                                        <span key={c} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-[#F5F0E8] text-[#1A1A1A] border border-[#E8E3DB]">{c}</span>
+                                      ))}
+                                    </div>
+                                  ) : <span className="text-gray-400 italic text-xs">—</span>
+                                ) : (
+                                  <span className={row.guestName ? 'text-[#1A1A1A]' : 'text-gray-400 italic text-xs'}>
+                                    {row.guestName || '—'}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2.5 text-[#4A4A4A] text-xs">{row.country || '—'}</td>
+                              <td className="px-3 py-2.5 text-center">
+                                {row.guestCount > 0 ? (
+                                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#2D5A45]/10 text-[#2D5A45] text-xs font-semibold">{row.guestCount}</span>
+                                ) : <span className="text-gray-400">—</span>}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                {row.type === 'delegation' ? (
+                                  row.headNames.length > 0 ? (
+                                    <div className="flex flex-col gap-0.5">
+                                      {row.headNames.map((h, hi) => (
+                                        <span key={hi} className="flex items-center gap-1 text-xs text-[#1A1A1A]">
+                                          <Star className="w-3 h-3 text-amber-400 shrink-0" />{h}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : <span className="text-gray-400 text-xs">—</span>
+                                ) : (
+                                  row.groupLabel ? (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-purple-50 text-purple-700 border border-purple-200">{row.groupLabel}</span>
+                                  ) : <span className="text-gray-400 text-xs">—</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2.5 text-xs text-[#4A4A4A]">{row.managedBy}</td>
+                              <td className="px-3 py-2.5">
+                                {row.isAssigned ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">Assigned</span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-white text-green-700 border border-green-300">Available</span>
+                                )}
+                              </td>
+                            </tr>
+                          ));
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            )}
 
             {/* ══ DELEGATION TAB ══ */}
             {activeTab === 'delegation' && (
@@ -1136,9 +2022,17 @@ export default function AdminMulaqatPage() {
                       <h2 className="text-lg font-semibold text-[#1A1A1A]">Mulaqat Days</h2>
                       <span className="text-sm text-[#4A4A4A]">({days.length})</span>
                     </div>
-                    <Button onClick={() => setAddDayOpen(true)} className="bg-[#2D5A45] hover:bg-[#234839] text-white h-8 px-3 text-sm">
-                      <Plus className="w-3.5 h-3.5 mr-1.5" />Add Day
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => { setPdfTargetDates(days.map(d => d.date).sort()); setPdfTargetType('delegation'); setPdfDialogOpen(true); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#2D5A45] border border-[#2D5A45] rounded-lg bg-white hover:bg-[#F5F0E8] transition-colors"
+                      >
+                        <FileText className="w-4 h-4" />Export PDF
+                      </button>
+                      <Button onClick={() => setAddDayOpen(true)} className="bg-[#2D5A45] hover:bg-[#234839] text-white h-8 px-3 text-sm">
+                        <Plus className="w-3.5 h-3.5 mr-1.5" />Add Day
+                      </Button>
+                    </div>
                   </div>
 
                   {loading ? (
@@ -1184,6 +2078,9 @@ export default function AdminMulaqatPage() {
                                   <div className="flex items-center gap-0.5">
                                     <button onClick={() => openEditDay(day)} title="Edit day" className="p-1.5 rounded text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors">
                                       <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button onClick={() => setArchiveDayDialog(day)} title="Archive day" className="p-1.5 rounded text-amber-500 hover:bg-amber-50 transition-colors">
+                                      <Archive className="w-3.5 h-3.5" />
                                     </button>
                                     <button onClick={() => setDeleteDayDialog(day)} title="Delete day" className="p-1.5 rounded text-red-500 hover:bg-red-50 transition-colors">
                                       <Trash2 className="w-3.5 h-3.5" />
@@ -1656,9 +2553,17 @@ export default function AdminMulaqatPage() {
                       <h2 className="text-lg font-semibold text-[#1A1A1A]">Daftari Days</h2>
                       <span className="text-sm text-[#4A4A4A]">({daftariDays.length})</span>
                     </div>
-                    <Button onClick={() => setAddDaftariDayOpen(true)} className="bg-[#2D5A45] hover:bg-[#234839] text-white h-8 px-3 text-sm">
-                      <Plus className="w-3.5 h-3.5 mr-1.5" />Add Day
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => { setPdfTargetDates(daftariDays.map(d => d.date).sort()); setPdfTargetType('daftari'); setPdfDialogOpen(true); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#2D5A45] border border-[#2D5A45] rounded-lg bg-white hover:bg-[#F5F0E8] transition-colors"
+                      >
+                        <FileText className="w-4 h-4" />Export PDF
+                      </button>
+                      <Button onClick={() => setAddDaftariDayOpen(true)} className="bg-[#2D5A45] hover:bg-[#234839] text-white h-8 px-3 text-sm">
+                        <Plus className="w-3.5 h-3.5 mr-1.5" />Add Day
+                      </Button>
+                    </div>
                   </div>
 
                   {daftariLoading ? (
@@ -1704,6 +2609,9 @@ export default function AdminMulaqatPage() {
                                   <div className="flex items-center gap-0.5">
                                     <button onClick={() => openEditDaftariDay(day)} title="Edit day" className="p-1.5 rounded text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors">
                                       <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button onClick={() => setArchiveDaftariDayDialog(day)} title="Archive day" className="p-1.5 rounded text-amber-500 hover:bg-amber-50 transition-colors">
+                                      <Archive className="w-3.5 h-3.5" />
                                     </button>
                                     <button onClick={() => setDeleteDaftariDayDialog(day)} title="Delete day" className="p-1.5 rounded text-red-500 hover:bg-red-50 transition-colors">
                                       <Trash2 className="w-3.5 h-3.5" />
@@ -1983,6 +2891,226 @@ export default function AdminMulaqatPage() {
                   </Card>
                 </section>
               </>
+            )}
+
+            {/* ══ ARCHIVES TAB ══ */}
+            {activeTab === 'archives' && (
+              <section>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <Archive className="w-5 h-5 text-[#2D5A45]" />
+                    <h2 className="text-lg font-semibold text-[#1A1A1A]">Mulaqat Archives</h2>
+                    <span className="text-sm text-[#4A4A4A]">({filteredArchiveRows.length})</span>
+                  </div>
+                  <button
+                    onClick={fetchArchives}
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm text-[#4A4A4A] border border-[#D4CFC7] rounded-lg bg-white hover:bg-[#F5F0E8] transition-colors"
+                  >
+                    <RefreshCw className="w-4 h-4" />Refresh
+                  </button>
+                </div>
+
+                {/* Filters */}
+                <div className="flex items-center gap-3 mb-4 flex-wrap">
+                  {(['all', 'delegation', 'daftari'] as const).map(t => (
+                    <button
+                      key={t}
+                      onClick={() => setArchivesTypeFilter(t)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                        archivesTypeFilter === t
+                          ? 'bg-[#2D5A45] text-white border-[#2D5A45]'
+                          : 'bg-white text-[#4A4A4A] border-[#D4CFC7] hover:border-[#2D5A45]'
+                      }`}
+                    >
+                      {t === 'all' ? 'All Types' : t === 'delegation' ? 'Delegation Only' : 'Daftari Only'}
+                    </button>
+                  ))}
+                  <div className="relative ml-auto">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#4A4A4A]" />
+                    <input
+                      type="text"
+                      value={archivesSearch}
+                      onChange={e => setArchivesSearch(e.target.value)}
+                      placeholder="Search by date..."
+                      className="pl-9 pr-3 py-1.5 text-sm border border-[#D4CFC7] rounded-lg bg-white focus:outline-none focus:border-[#2D5A45] w-52"
+                    />
+                  </div>
+                </div>
+
+                {archivesLoading ? (
+                  <div className="flex items-center justify-center py-16">
+                    <div className="w-6 h-6 border-2 border-[#2D5A45] border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : filteredArchiveRows.length === 0 ? (
+                  <div className="bg-white rounded-lg border border-[#E8E3DB] flex flex-col items-center justify-center py-16 gap-2">
+                    <Archive className="w-10 h-10 text-gray-300" />
+                    <p className="text-sm text-[#4A4A4A]">No archived days found.</p>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-lg border border-[#E8E3DB] overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-[#F5F0E8] border-b border-[#E8E3DB]">
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Date</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Type</th>
+                          <th className="px-3 py-2.5 text-center text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Slots</th>
+                          <th className="px-3 py-2.5 text-center text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Delegations / Guests</th>
+                          <th className="px-3 py-2.5 text-center text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Total Guests</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Archived On</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredArchiveRows.map(row => {
+                          const rowId = `${row.type}-${row.id}`;
+                          const isExpanded = expandedArchiveId === rowId;
+                          let slotCount = 0, assignedCount = 0, totalGuestCount = 0;
+                          if (row.type === 'delegation') {
+                            const d = row as ArchivedDelegationDay;
+                            slotCount = (d.mulaqat_slots ?? []).length;
+                            assignedCount = (d.mulaqat_slots ?? []).filter(s => (s.delegations ?? []).length > 0).length;
+                            totalGuestCount = (d.mulaqat_slots ?? []).reduce((s, sl) =>
+                              s + (sl.delegations ?? []).reduce((ss, del) => ss + (del.delegation_members ?? []).length, 0), 0);
+                          } else {
+                            const d = row as ArchivedDaftariDay;
+                            slotCount = (d.daftari_slots ?? []).length;
+                            assignedCount = (d.daftari_slots ?? []).filter(s => s.guest_id).length;
+                            totalGuestCount = assignedCount;
+                          }
+                          return (
+                            <Fragment key={rowId}>
+                              <tr className="border-b border-[#E8E3DB] hover:bg-[#F5F0E8]/50 transition-colors">
+                                <td className="px-3 py-2.5 font-medium text-[#1A1A1A]">{fmt(row.date)}</td>
+                                <td className="px-3 py-2.5">
+                                  {row.type === 'delegation'
+                                    ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">Delegation</span>
+                                    : <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">Daftari</span>
+                                  }
+                                </td>
+                                <td className="px-3 py-2.5 text-center text-[#4A4A4A]">{slotCount}</td>
+                                <td className="px-3 py-2.5 text-center text-[#4A4A4A]">{assignedCount}</td>
+                                <td className="px-3 py-2.5 text-center">
+                                  {totalGuestCount > 0
+                                    ? <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#2D5A45]/10 text-[#2D5A45] text-xs font-semibold">{totalGuestCount}</span>
+                                    : <span className="text-gray-400">—</span>
+                                  }
+                                </td>
+                                <td className="px-3 py-2.5 text-xs text-[#4A4A4A]">
+                                  {row.archived_at
+                                    ? new Date(row.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) +
+                                      ', ' + new Date(row.archived_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+                                    : '—'
+                                  }
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={() => setExpandedArchiveId(isExpanded ? null : rowId)}
+                                      className="flex items-center gap-1 px-2 py-1 text-xs text-[#2D5A45] border border-[#2D5A45] rounded hover:bg-[#F5F0E8] transition-colors"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />{isExpanded ? 'Hide' : 'View'}
+                                    </button>
+                                    <button
+                                      onClick={() => setRestoreDialog({ id: row.id, date: row.date, type: row.type })}
+                                      className="flex items-center gap-1 px-2 py-1 text-xs text-amber-600 border border-amber-300 rounded hover:bg-amber-50 transition-colors"
+                                    >
+                                      <RefreshCw className="w-3.5 h-3.5" />Restore
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setPdfTargetDates([row.date]);
+                                        setPdfTargetType(row.type);
+                                        setPdfDialogOpen(true);
+                                      }}
+                                      className="flex items-center gap-1 px-2 py-1 text-xs text-[#4A4A4A] border border-[#D4CFC7] rounded hover:bg-[#F5F0E8] transition-colors"
+                                    >
+                                      <FileText className="w-3.5 h-3.5" />PDF
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr key={`${rowId}-expanded`}>
+                                  <td colSpan={7} className="px-4 py-3 bg-[#F5F0E8]/30">
+                                    {row.type === 'delegation' ? (() => {
+                                      const d = row as ArchivedDelegationDay;
+                                      return (
+                                        <table className="w-full text-xs border border-[#E8E3DB] rounded-lg overflow-hidden">
+                                          <thead>
+                                            <tr className="bg-green-50">
+                                              <th className="px-3 py-2 text-left font-semibold text-green-800">Slot</th>
+                                              <th className="px-3 py-2 text-left font-semibold text-green-800">Delegations</th>
+                                              <th className="px-3 py-2 text-center font-semibold text-green-800">Guests</th>
+                                              <th className="px-3 py-2 text-left font-semibold text-green-800">Head of Delegation</th>
+                                              <th className="px-3 py-2 text-left font-semibold text-green-800">Managed By</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {(d.mulaqat_slots ?? []).map(slot => {
+                                              const delegs = slot.delegations ?? [];
+                                              const gc = delegs.reduce((s, del) => s + (del.delegation_members ?? []).length, 0);
+                                              const heads = delegs.map(del => del.head_of_delegation_name).filter(Boolean).join(', ') || '—';
+                                              const mgr = [...new Set(delegs.map(del => del.managed_by_name).filter(Boolean))].join(', ') || '—';
+                                              return (
+                                                <tr key={slot.id} className="border-t border-[#E8E3DB] bg-white">
+                                                  <td className="px-3 py-1.5 font-medium">{slot.name}</td>
+                                                  <td className="px-3 py-1.5">
+                                                    <div className="flex flex-wrap gap-1">
+                                                      {delegs.length > 0
+                                                        ? delegs.map(del => (
+                                                          <span key={del.id} className="px-1.5 py-0.5 bg-[#F5F0E8] text-[#1A1A1A] border border-[#E8E3DB] rounded-full">
+                                                            {del.country} ({(del.delegation_members ?? []).length})
+                                                          </span>
+                                                        ))
+                                                        : <span className="text-gray-400 italic">—</span>
+                                                      }
+                                                    </div>
+                                                  </td>
+                                                  <td className="px-3 py-1.5 text-center">{gc}</td>
+                                                  <td className="px-3 py-1.5">{heads}</td>
+                                                  <td className="px-3 py-1.5">{mgr}</td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      );
+                                    })() : (() => {
+                                      const d = row as ArchivedDaftariDay;
+                                      return (
+                                        <table className="w-full text-xs border border-[#E8E3DB] rounded-lg overflow-hidden">
+                                          <thead>
+                                            <tr className="bg-blue-50">
+                                              <th className="px-3 py-2 text-left font-semibold text-blue-800">Slot</th>
+                                              <th className="px-3 py-2 text-left font-semibold text-blue-800">Guest</th>
+                                              <th className="px-3 py-2 text-left font-semibold text-blue-800">Group</th>
+                                              <th className="px-3 py-2 text-left font-semibold text-blue-800">Managed By</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {(d.daftari_slots ?? []).map(slot => (
+                                              <tr key={slot.id} className="border-t border-[#E8E3DB] bg-white">
+                                                <td className="px-3 py-1.5 font-medium">{slot.name}</td>
+                                                <td className="px-3 py-1.5">{slot.guest_name ?? <span className="text-gray-400 italic">—</span>}</td>
+                                                <td className="px-3 py-1.5">{slot.guest_id ? 'Individual' : <span className="text-gray-400 italic">—</span>}</td>
+                                                <td className="px-3 py-1.5">{slot.assigned_by_name ?? '—'}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      );
+                                    })()}
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
             )}
           </div>
         </main>
@@ -2746,6 +3874,200 @@ export default function AdminMulaqatPage() {
           </Dialog>
         );
       })()}
+
+      {/* ── Archive Day confirm (Delegation) ── */}
+      {archiveDayDialog && (
+        <Dialog open onOpenChange={o => { if (!o) setArchiveDayDialog(null); }}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Archive className="w-5 h-5 text-amber-500" />Archive Day
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-[#4A4A4A] py-2">
+              Archive <strong>{fmt(archiveDayDialog.date)}</strong>? You can restore it later from the Archives tab.
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setArchiveDayDialog(null)}>Cancel</Button>
+              <Button onClick={() => handleArchiveDay(archiveDayDialog)} className="bg-amber-500 hover:bg-amber-600 text-white">Archive</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ── Archive Day confirm (Daftari) ── */}
+      {archiveDaftariDayDialog && (
+        <Dialog open onOpenChange={o => { if (!o) setArchiveDaftariDayDialog(null); }}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Archive className="w-5 h-5 text-amber-500" />Archive Day
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-[#4A4A4A] py-2">
+              Archive <strong>{fmt(archiveDaftariDayDialog.date)}</strong>? You can restore it later from the Archives tab.
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setArchiveDaftariDayDialog(null)}>Cancel</Button>
+              <Button onClick={() => handleArchiveDaftariDay(archiveDaftariDayDialog)} className="bg-amber-500 hover:bg-amber-600 text-white">Archive</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ── Restore confirm ── */}
+      {restoreDialog && (
+        <Dialog open onOpenChange={o => { if (!o) setRestoreDialog(null); }}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <RefreshCw className="w-5 h-5 text-[#2D5A45]" />Restore Day
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-[#4A4A4A] py-2">
+              Restore <strong>{fmt(restoreDialog.date)}</strong> to the active {restoreDialog.type === 'delegation' ? 'Delegation' : 'Daftari'} schedule?
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRestoreDialog(null)}>Cancel</Button>
+              <Button onClick={handleRestore} className="bg-[#2D5A45] hover:bg-[#234839] text-white">Restore</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ── PDF Customization Dialog ── */}
+      <Dialog open={pdfDialogOpen} onOpenChange={o => { if (!o) setPdfDialogOpen(false); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-[#2D5A45]" />Export Mulaqat Schedule
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {/* Section A: Date range info */}
+            <div className="bg-[#F5F0E8] rounded-lg p-3 text-sm">
+              <p className="font-medium text-[#1A1A1A] mb-0.5">Exporting:</p>
+              <p className="text-[#4A4A4A]">
+                {pdfTargetDates.length > 0
+                  ? `${new Date(pdfTargetDates[0] + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} — ${new Date(pdfTargetDates[pdfTargetDates.length - 1] + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} (${pdfTargetDates.length} day${pdfTargetDates.length !== 1 ? 's' : ''})`
+                  : 'All available dates'
+                }
+                {pdfTargetType !== 'all' && <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-white border border-[#D4CFC7] text-[#4A4A4A]">{pdfTargetType === 'delegation' ? 'Delegation only' : 'Daftari only'}</span>}
+              </p>
+            </div>
+
+            {/* Section B: Columns — two column layout */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Delegation columns */}
+              {pdfTargetType !== 'daftari' && (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-xs font-semibold text-green-800 uppercase tracking-wide">Delegation Columns</p>
+                    <div className="flex gap-2 text-xs">
+                      <button onClick={() => setPdfDelegColumns(c => c.map(col => ({ ...col, checked: true })))} className="text-[#2D5A45] hover:underline">All</button>
+                      <button onClick={() => setPdfDelegColumns(c => c.map(col => ({ ...col, checked: false })))} className="text-[#4A4A4A] hover:underline">None</button>
+                    </div>
+                  </div>
+                  <div className="space-y-1 border border-green-100 rounded-lg p-2.5 bg-green-50/30">
+                    {pdfDelegColumns.map((col, i) => (
+                      <label key={col.key} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={col.checked}
+                          onChange={e => setPdfDelegColumns(prev => prev.map((c, ci) => ci === i ? { ...c, checked: e.target.checked } : c))}
+                          className="w-3.5 h-3.5 rounded border-gray-300 accent-[#2D5A45]"
+                        />
+                        <span className="text-xs text-gray-700">{col.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setPdfDelegColumns(DEFAULT_DELEG_COLUMNS.map(c => ({ ...c })))}
+                    className="mt-1 text-xs text-[#4A4A4A] hover:underline"
+                  >Reset to defaults</button>
+                </div>
+              )}
+
+              {/* Daftari columns */}
+              {pdfTargetType !== 'delegation' && (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide">Daftari Columns</p>
+                    <div className="flex gap-2 text-xs">
+                      <button onClick={() => setPdfDaftariColumns(c => c.map(col => ({ ...col, checked: true })))} className="text-blue-600 hover:underline">All</button>
+                      <button onClick={() => setPdfDaftariColumns(c => c.map(col => ({ ...col, checked: false })))} className="text-[#4A4A4A] hover:underline">None</button>
+                    </div>
+                  </div>
+                  <div className="space-y-1 border border-blue-100 rounded-lg p-2.5 bg-blue-50/30">
+                    {pdfDaftariColumns.map((col, i) => (
+                      <label key={col.key} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={col.checked}
+                          onChange={e => setPdfDaftariColumns(prev => prev.map((c, ci) => ci === i ? { ...c, checked: e.target.checked } : c))}
+                          className="w-3.5 h-3.5 rounded border-gray-300 accent-blue-600"
+                        />
+                        <span className="text-xs text-gray-700">{col.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setPdfDaftariColumns(DEFAULT_DAFTARI_COLUMNS.map(c => ({ ...c })))}
+                    className="mt-1 text-xs text-[#4A4A4A] hover:underline"
+                  >Reset to defaults</button>
+                </div>
+              )}
+            </div>
+
+            {/* Section C: Options */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wide mb-1.5">Include</p>
+                <div className="space-y-1">
+                  {[
+                    { label: 'Summary page', val: pdfIncludeSummary, set: setPdfIncludeSummary as (v: boolean) => void },
+                    { label: 'Page numbers', val: pdfIncludePageNumbers, set: setPdfIncludePageNumbers as (v: boolean) => void },
+                    { label: 'Available (empty) slots', val: pdfIncludeEmpty, set: setPdfIncludeEmpty as (v: boolean) => void },
+                  ].map(opt => (
+                    <label key={opt.label} className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={opt.val} onChange={e => opt.set(e.target.checked)} className="w-3.5 h-3.5 rounded border-gray-300 accent-[#2D5A45]" />
+                      <span className="text-xs text-gray-700">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wide mb-1.5">Orientation</p>
+                <div className="space-y-1">
+                  {[{ label: 'Landscape', val: true }, { label: 'Portrait', val: false }].map(opt => (
+                    <label key={opt.label} className="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" checked={pdfLandscape === opt.val} onChange={() => setPdfLandscape(opt.val)} className="w-3.5 h-3.5 accent-[#2D5A45]" />
+                      <span className="text-xs text-gray-700">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPdfDialogOpen(false)} className="border-[#D4CFC7] text-[#4A4A4A]">Cancel</Button>
+            <Button
+              onClick={() => {
+                setPdfDialogOpen(false);
+                generatePDF(pdfTargetDates, pdfTargetType, pdfDelegColumns, pdfDaftariColumns, {
+                  includeSummary: pdfIncludeSummary,
+                  includePageNumbers: pdfIncludePageNumbers,
+                  includeEmpty: pdfIncludeEmpty,
+                  landscape: pdfLandscape,
+                });
+              }}
+              className="bg-[#2D5A45] hover:bg-[#234839] text-white flex items-center gap-2"
+            >
+              <FileText className="w-4 h-4" />Generate PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} />
     </div>
