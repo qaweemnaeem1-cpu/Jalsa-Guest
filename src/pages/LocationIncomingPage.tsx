@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Inbox, Eye, Check, Search } from 'lucide-react';
+import { Inbox, Eye, Check, Search, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -15,6 +15,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { formatDesignation } from '@/lib/constants';
 import type { Guest, Room, BedAssignment } from '@/types';
 
 // ── Row model ─────────────────────────────────────────────────────────────────
@@ -32,6 +33,14 @@ interface PersonRow {
   familyGroupId: string | null;
   familyAllMembers: FamilyMemberInfo[];
   placedAt?: string;
+  designation: string | string[];
+  guestType: string;
+  arrivalTime?: string;
+  arrivalFlightNumber?: string;
+  arrivalAirport?: string;
+  departureTime?: string;
+  departureFlightNumber?: string;
+  departureAirport?: string;
 }
 
 function buildFamilyMemberListFromGroup(allGuests: Guest[], familyGroupId: string): FamilyMemberInfo[] {
@@ -71,6 +80,9 @@ function buildLocationRows(guests: Guest[], loc: string): PersonRow[] {
           familyGroupId: g.familyGroupId,
           familyAllMembers: buildFamilyMemberListFromGroup(guests, g.familyGroupId),
           placedAt: g.placedAt,
+          designation: g.designation, guestType: g.guestType,
+          arrivalTime: g.arrivalTime, arrivalFlightNumber: g.arrivalFlightNumber, arrivalAirport: g.arrivalAirport,
+          departureTime: g.departureTime, departureFlightNumber: g.departureFlightNumber, departureAirport: g.departureAirport,
         });
       }
       continue;
@@ -87,6 +99,9 @@ function buildLocationRows(guests: Guest[], loc: string): PersonRow[] {
         name: g.fullName, country: g.country, referenceNumber: g.referenceNumber,
         relationship: isFamily ? 'Head' : 'Individual',
         isFamily, familyLastName: lastName, familyGroupId: null, familyAllMembers, placedAt: g.placedAt,
+        designation: g.designation, guestType: g.guestType,
+        arrivalTime: g.arrivalTime, arrivalFlightNumber: g.arrivalFlightNumber, arrivalAirport: g.arrivalAirport,
+        departureTime: g.departureTime, departureFlightNumber: g.departureFlightNumber, departureAirport: g.departureAirport,
       });
     }
     if (isFamily) {
@@ -97,6 +112,9 @@ function buildLocationRows(guests: Guest[], loc: string): PersonRow[] {
             name: m.name, country: g.country, referenceNumber: g.referenceNumber,
             relationship: m.relationship,
             isFamily: true, familyLastName: lastName, familyGroupId: null, familyAllMembers, placedAt: m.placedAt,
+            designation: m.designation ?? g.designation, guestType: g.guestType,
+            arrivalTime: g.arrivalTime, arrivalFlightNumber: g.arrivalFlightNumber, arrivalAirport: g.arrivalAirport,
+            departureTime: g.departureTime, departureFlightNumber: g.departureFlightNumber, departureAirport: g.departureAirport,
           });
         }
       }
@@ -261,8 +279,10 @@ export default function LocationIncomingPage() {
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Family</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Role</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Date Placed</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Designation</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Arrival</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Departure</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Type</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Assign Room</th>
                       <th className="text-right px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
                     </tr>
@@ -293,16 +313,49 @@ export default function LocationIncomingPage() {
                               />
                             ) : <span className="text-gray-300 text-xs">—</span>}
                           </td>
-                          <td className="px-4 py-3 text-[#4A4A4A]">{row.country}</td>
-                          <td className="px-4 py-3 capitalize text-[#4A4A4A]">{row.relationship}</td>
-                          <td className="px-4 py-3 text-[#4A4A4A]">
-                            {row.placedAt ? new Date(row.placedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                          <td className="px-4 py-3 text-xs text-[#4A4A4A]">{row.country}</td>
+                          {/* Designation */}
+                          <td className="px-4 py-3 text-xs text-[#4A4A4A]">{formatDesignation(row.designation)}</td>
+                          {/* Arrival */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {row.arrivalTime ? (
+                              <div>
+                                <div className="text-xs text-[#1A1A1A]">
+                                  {new Date(row.arrivalTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                  {' '}{new Date(row.arrivalTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                                {(row.arrivalFlightNumber || row.arrivalAirport) && (
+                                  <div className="text-xs text-gray-400">
+                                    {[row.arrivalFlightNumber, row.arrivalAirport].filter(Boolean).join(' · ')}
+                                  </div>
+                                )}
+                              </div>
+                            ) : <span className="text-gray-300 text-xs">—</span>}
                           </td>
+                          {/* Departure */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {row.departureTime ? (
+                              <div>
+                                <div className="text-xs text-[#1A1A1A]">
+                                  {new Date(row.departureTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                  {' '}{new Date(row.departureTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                                {(row.departureFlightNumber || row.departureAirport) && (
+                                  <div className="text-xs text-gray-400">
+                                    {[row.departureFlightNumber, row.departureAirport].filter(Boolean).join(' · ')}
+                                  </div>
+                                )}
+                              </div>
+                            ) : <span className="text-gray-300 text-xs">—</span>}
+                          </td>
+                          {/* Type */}
+                          <td className="px-4 py-3 text-xs capitalize text-[#4A4A4A]">{row.guestType}</td>
+                          {/* Assign Room */}
                           <td className="px-4 py-3">
                             <select
                               value={sel}
                               onChange={e => setSelectedRoom(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
-                              className="border border-[#D4CFC7] rounded-lg px-2 py-1.5 text-xs text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45] min-w-[150px]"
+                              className="border border-[#D4CFC7] rounded-lg px-2 py-1.5 text-xs text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45] min-w-[160px]"
                             >
                               <option value="">Select room…</option>
                               {roomGroups.map(group => {
@@ -315,9 +368,14 @@ export default function LocationIncomingPage() {
                                       const occupied = beds.filter(b => !!b.guestName).length;
                                       const total = beds.length;
                                       const full = occupied >= total;
+                                      const almostFull = !full && (total - occupied) === 1;
+                                      const dot = full ? '🔴' : almostFull ? '🟡' : '🟢';
+                                      // Check date availability
+                                      const today = new Date().toISOString().split('T')[0];
+                                      const dateWarning = (room.availableFrom && room.availableFrom > today) || (room.availableTo && room.availableTo < today);
                                       return (
                                         <option key={room.id} value={room.id} disabled={full}>
-                                          {room.name} ({occupied}/{total}){full ? ' — Full' : ''}
+                                          {dot} {room.name} ({occupied}/{total}){full ? ' — Full' : ''}{dateWarning ? ' ⚠️' : ''}
                                         </option>
                                       );
                                     })}

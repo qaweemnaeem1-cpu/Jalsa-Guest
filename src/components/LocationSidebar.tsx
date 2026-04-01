@@ -49,7 +49,7 @@ export function LocationSidebar() {
 
   const NAV = [
     { icon: LayoutDashboard, label: 'Dashboard',        href: '/location/dashboard',     badge: 0 },
-    { icon: Inbox,           label: 'Incoming',          href: '/location/incoming',      badge: incomingCount,    badgeColor: 'bg-amber-500' },
+    { icon: Inbox,           label: 'Incoming',          href: '/location/incoming',      badge: incomingCount,    badgeColor: 'bg-red-500' },
     { icon: BedDouble,       label: 'Rooms & Blocks',    href: '/location/rooms',         badge: 0 },
     { icon: CheckCircle,     label: 'Accommodated',      href: '/location/accommodated',  badge: accommodatedCount, badgeColor: 'bg-green-500' },
     { icon: MessageSquare,   label: 'Messages',          href: '/location/messages',      badge: unreadMessages, badgeColor: 'bg-red-500' },
