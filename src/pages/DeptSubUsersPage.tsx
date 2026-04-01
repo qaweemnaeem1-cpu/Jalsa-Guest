@@ -148,8 +148,8 @@ export default function DeptSubUsersPage() {
               <div className="flex items-center gap-3">
                 <Users className="w-5 h-5 text-[#2D5A45]" />
                 <div>
-                  <h1 className="text-xl font-semibold text-[#1A1A1A]">Sub Users</h1>
-                  <p className="text-xs text-[#4A4A4A] mt-0.5">Manage users for {dept} locations</p>
+                  <h1 className="text-2xl font-semibold text-[#1A1A1A]">Sub Users</h1>
+                  <p className="text-sm text-[#4A4A4A] mt-0.5">Manage users for {dept} locations</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -178,16 +178,16 @@ export default function DeptSubUsersPage() {
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-[#E8E3DB] overflow-hidden">
-                <table className="w-full text-sm">
+                <table className="w-full">
                   <thead>
                     <tr className="border-b border-[#E8E3DB] bg-[#F9F8F6]">
-                      <th className="text-left px-4 py-3 text-xs font-medium text-[#4A4A4A] uppercase tracking-wider w-10">#</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-[#4A4A4A] uppercase tracking-wider">Name</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-[#4A4A4A] uppercase tracking-wider">Email</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-[#4A4A4A] uppercase tracking-wider">Location</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-[#4A4A4A] uppercase tracking-wider">Phone</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-[#4A4A4A] uppercase tracking-wider">Status</th>
-                      <th className="text-right px-4 py-3 text-xs font-medium text-[#4A4A4A] uppercase tracking-wider">Actions</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[#4A4A4A] uppercase tracking-wider w-10">#</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[#4A4A4A] uppercase tracking-wider">Name</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[#4A4A4A] uppercase tracking-wider">Email</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[#4A4A4A] uppercase tracking-wider">Location</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[#4A4A4A] uppercase tracking-wider">Phone</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[#4A4A4A] uppercase tracking-wider">Status</th>
+                      <th className="text-right px-4 py-3 text-sm font-medium text-[#4A4A4A] uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E8E3DB]">

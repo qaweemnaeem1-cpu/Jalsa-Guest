@@ -58,8 +58,8 @@ export default function DeptDashboardPage() {
               <div className="flex items-center gap-3">
                 <LayoutDashboard className="w-5 h-5 text-[#2D5A45]" />
                 <div>
-                  <h1 className="text-xl font-semibold text-[#1A1A1A]">{dept} Dashboard</h1>
-                  <p className="text-xs text-[#4A4A4A] mt-0.5">{locations.length} location{locations.length !== 1 ? 's' : ''}</p>
+                  <h1 className="text-2xl font-semibold text-[#1A1A1A]">{dept} Dashboard</h1>
+                  <p className="text-sm text-[#4A4A4A] mt-0.5">{locations.length} location{locations.length !== 1 ? 's' : ''}</p>
                 </div>
               </div>
               <DeptUserMenu />
@@ -152,14 +152,14 @@ export default function DeptDashboardPage() {
                       <p className="text-xs text-[#4A4A4A]">Guests assigned to your department will appear here.</p>
                     </div>
                   ) : (
-                    <table className="w-full text-sm">
+                    <table className="w-full">
                       <thead>
                         <tr className="border-b border-[#E8E3DB] bg-[#F9F8F6]">
-                          <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
-                          <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
-                          <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Status</th>
-                          <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Location</th>
-                          <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Assigned</th>
+                          <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
+                          <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
+                          <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Status</th>
+                          <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Location</th>
+                          <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Assigned</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#E8E3DB]">

@@ -249,8 +249,8 @@ export default function DeptPlacedPage() {
               <div className="flex items-center gap-3">
                 <CheckCircle className="w-5 h-5 text-[#2D5A45]" />
                 <div>
-                  <h1 className="text-xl font-semibold text-[#1A1A1A]">Placed Guests</h1>
-                  <p className="text-xs text-[#4A4A4A] mt-0.5">Guests assigned to a location in {dept}</p>
+                  <h1 className="text-2xl font-semibold text-[#1A1A1A]">Placed Guests</h1>
+                  <p className="text-sm text-[#4A4A4A] mt-0.5">Guests assigned to a location in {dept}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -285,31 +285,31 @@ export default function DeptPlacedPage() {
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-[#E8E3DB] overflow-hidden">
-                <table className="w-full text-sm">
+                <table className="w-full">
                   <thead>
                     <tr className="border-b border-[#E8E3DB] bg-[#F9F8F6]">
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Designation</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Location</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Room</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Arrival</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Departure</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Date Placed</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Assign Room</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Designation</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Location</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Room</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Arrival</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Departure</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Date Placed</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Assign Room</th>
+                      <th className="text-right px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E8E3DB]">
                     {filteredRows.map(row => (
                       <tr key={row.rowKey} className="hover:bg-[#F9F8F6]">
-                        <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">{row.referenceNumber}</td>
+                        <td className="px-4 py-3 font-mono text-sm text-[#4A4A4A]">{row.referenceNumber}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2.5 flex-wrap">
-                            <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium shrink-0">
+                            <div className="w-9 h-9 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-base font-medium shrink-0">
                               {row.name.charAt(0)}
                             </div>
-                            <span className="font-medium text-[#1A1A1A]">{row.name}</span>
+                            <span className="font-medium text-base text-[#1A1A1A]">{row.name}</span>
                             {row.isFamily && (
                               <FamilyBadge
                                 lastName={row.familyLastName}
@@ -319,7 +319,7 @@ export default function DeptPlacedPage() {
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-[#4A4A4A] text-xs">{formatDesignation(row.designation)}</td>
+                        <td className="px-4 py-3 text-[#4A4A4A] text-sm">{formatDesignation(row.designation)}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getLocPillCls(dept, row.placedLocation)}`}>
                             {row.placedLocation}
@@ -366,7 +366,7 @@ export default function DeptPlacedPage() {
                             <select
                               value={selectedRooms[row.rowKey] ?? ''}
                               onChange={e => setSelectedRooms(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
-                              className="border border-[#D4CFC7] rounded-lg px-2 py-1.5 text-xs text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45] min-w-[130px]"
+                              className="border border-[#D4CFC7] rounded-lg px-2 py-1.5 text-sm text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45] min-w-[150px]"
                             >
                               <option value="">Select room…</option>
                               {(roomsByLocation[row.placedLocation] ?? []).map(room => {
@@ -394,7 +394,7 @@ export default function DeptPlacedPage() {
                             {selectedRooms[row.rowKey] && !row.roomAssignment && (
                               <button
                                 onClick={() => assignRoom(row, selectedRooms[row.rowKey])}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
                               >
                                 Assign Room
                               </button>

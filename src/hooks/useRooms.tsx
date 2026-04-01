@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useState, useEffect, useRef, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -91,6 +91,9 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [bedAssignments, setBedAssignments] = useState<Record<string, BedAssignment[]>>({});
 
+  // Keep a ref to the latest location map so real-time handlers can resolve UUIDs → names
+  const locMapRef = useRef<Record<string, string>>({});
+
   // ── Initial fetch ────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -103,6 +106,7 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
         if (locData) {
           for (const l of locData) locMap[l.id] = l.name;
         }
+        locMapRef.current = locMap;
 
     // Fetch blocks
     supabase
@@ -162,6 +166,75 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
       }); // end locations fetch
   }, []);
 
+  // ── Real-time subscriptions ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    const roomsChannel = supabase
+      .channel('rooms-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, (payload) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const lm = locMapRef.current;
+        if (payload.eventType === 'INSERT') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const row = payload.new as any;
+          const room: Room = { ...rowToRoom(row), locationId: lm[row.location_id] ?? row.location_id };
+          setRooms(prev => prev.some(r => r.id === room.id) ? prev : [...prev, room]);
+          setBedAssignments(prev => prev[room.id] ? prev : { ...prev, [room.id]: buildBedSlots(room.capacity) });
+        }
+        if (payload.eventType === 'UPDATE') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const row = payload.new as any;
+          const updated: Room = { ...rowToRoom(row), locationId: lm[row.location_id] ?? row.location_id };
+          setRooms(prev => prev.map(r => r.id === updated.id ? updated : r));
+          // Resize bed slots if capacity changed
+          setBedAssignments(prev => {
+            const existing = prev[updated.id] ?? [];
+            if (existing.length === updated.capacity) return prev;
+            const newBeds: BedAssignment[] = Array.from({ length: updated.capacity }, (_, i) =>
+              existing[i] ?? { bedNumber: i + 1 }
+            );
+            return { ...prev, [updated.id]: newBeds };
+          });
+        }
+        if (payload.eventType === 'DELETE') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const id = (payload.old as any).id as string;
+          setRooms(prev => prev.filter(r => r.id !== id));
+          setBedAssignments(prev => { const n = { ...prev }; delete n[id]; return n; });
+        }
+      })
+      .subscribe();
+
+    const blocksChannel = supabase
+      .channel('blocks-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'blocks' }, (payload) => {
+        const lm = locMapRef.current;
+        if (payload.eventType === 'INSERT') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const row = payload.new as any;
+          const block: Block = { ...rowToBlock(row), locationId: lm[row.location_id] ?? row.location_id };
+          setBlocks(prev => prev.some(b => b.id === block.id) ? prev : [...prev, block]);
+        }
+        if (payload.eventType === 'UPDATE') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const row = payload.new as any;
+          const updated: Block = { ...rowToBlock(row), locationId: lm[row.location_id] ?? row.location_id };
+          setBlocks(prev => prev.map(b => b.id === updated.id ? updated : b));
+        }
+        if (payload.eventType === 'DELETE') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const id = (payload.old as any).id as string;
+          setBlocks(prev => prev.filter(b => b.id !== id));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(roomsChannel);
+      supabase.removeChannel(blocksChannel);
+    };
+  }, []);
+
   // ── Block CRUD ───────────────────────────────────────────────────────────────
 
   const addBlock = useCallback(async (locationId: string, name: string): Promise<Block | null> => {
@@ -204,19 +277,22 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
     locationId: string, name: string, capacity: number, blockId?: string,
     availableFrom?: string, availableTo?: string,
   ): Promise<Room | null> => {
+    const insertPayload = {
+      name: name.trim(),
+      location_id: locationId,
+      block_id: blockId || null,
+      capacity: typeof capacity === 'number' ? capacity : parseInt(String(capacity), 10) || 1,
+      is_active: true,
+      available_from: availableFrom || null,
+      available_to: availableTo || null,
+    };
+    console.log('[addRoom] Insert data:', insertPayload);
     const { data, error } = await supabase
       .from('rooms')
-      .insert({
-        name: name.trim(),
-        location_id: locationId,
-        block_id: blockId ?? null,
-        capacity,
-        is_active: true,
-        available_from: availableFrom ?? null,
-        available_to: availableTo ?? null,
-      })
+      .insert(insertPayload)
       .select()
       .single();
+    console.log('[addRoom] Result:', { data, error });
 
     if (error) { toast.error('Failed to add room'); return null; }
     const room = rowToRoom(data);

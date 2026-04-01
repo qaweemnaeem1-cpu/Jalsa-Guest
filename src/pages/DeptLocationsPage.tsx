@@ -26,6 +26,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -252,7 +253,7 @@ export default function DeptLocationsPage() {
       updateBlock(blockEditTarget.id, trimmed);
       toast.success('Block updated');
     } else if (selectedLocation) {
-      addBlock(selectedLocation.name, trimmed);
+      addBlock(selectedLocation.id, trimmed);
       toast.success('Block added');
     }
     setBlockDialogOpen(false);
@@ -308,7 +309,7 @@ export default function DeptLocationsPage() {
       updateRoom(roomEditTarget.id, trimmedName, cap, roomFormAvailFrom || undefined, roomFormAvailTo || undefined);
       toast.success('Room updated');
     } else if (selectedLocation) {
-      addRoom(selectedLocation.name, trimmedName, cap, roomFormBlockId || undefined, roomFormAvailFrom || undefined, roomFormAvailTo || undefined);
+      addRoom(selectedLocation.id, trimmedName, cap, roomFormBlockId || undefined, roomFormAvailFrom || undefined, roomFormAvailTo || undefined);
       toast.success('Room added');
     }
     setRoomDialogOpen(false);
@@ -372,10 +373,10 @@ export default function DeptLocationsPage() {
                     <ArrowLeft className="w-5 h-5" />
                   </button>
                   <div>
-                    <h1 className="text-xl font-semibold text-[#1A1A1A]">
+                    <h1 className="text-2xl font-semibold text-[#1A1A1A]">
                       {selectedLocation.name} — Rooms &amp; Blocks
                     </h1>
-                    <p className="text-xs text-[#4A4A4A] mt-0.5">
+                    <p className="text-sm text-[#4A4A4A] mt-0.5">
                       {totalRooms} rooms &middot; {totalBeds} beds &middot; {occupiedBeds} occupied &middot; {availableBeds} available
                     </p>
                   </div>
@@ -649,6 +650,9 @@ export default function DeptLocationsPage() {
               <DialogTitle className="text-[#1A1A1A]">
                 {roomEditTarget ? 'Edit Room' : 'Add New Room'}
               </DialogTitle>
+              <DialogDescription>
+                {roomEditTarget ? 'Update room details.' : 'Add a new room to this location.'}
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-1">
               <div>
@@ -770,8 +774,8 @@ export default function DeptLocationsPage() {
               <div className="flex items-center gap-3">
                 <MapPin className="w-5 h-5 text-[#2D5A45]" />
                 <div>
-                  <h1 className="text-xl font-semibold text-[#1A1A1A]">Locations</h1>
-                  <p className="text-xs text-[#4A4A4A] mt-0.5">Manage accommodation locations for {dept}</p>
+                  <h1 className="text-2xl font-semibold text-[#1A1A1A]">Locations</h1>
+                  <p className="text-sm text-[#4A4A4A] mt-0.5">Manage accommodation locations for {dept}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -803,15 +807,15 @@ export default function DeptLocationsPage() {
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-[#E8E3DB] overflow-hidden">
-                <table className="w-full text-sm">
+                <table className="w-full">
                   <thead>
                     <tr className="border-b border-[#E8E3DB] bg-[#F9F8F6]">
-                      <th className="text-left px-4 py-3 text-xs font-medium text-[#4A4A4A] uppercase tracking-wider w-10">#</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-[#4A4A4A] uppercase tracking-wider">Name</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-[#4A4A4A] uppercase tracking-wider">Rooms</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-[#4A4A4A] uppercase tracking-wider">Beds</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-[#4A4A4A] uppercase tracking-wider">Status</th>
-                      <th className="text-right px-4 py-3 text-xs font-medium text-[#4A4A4A] uppercase tracking-wider">Actions</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[#4A4A4A] uppercase tracking-wider w-10">#</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[#4A4A4A] uppercase tracking-wider">Name</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[#4A4A4A] uppercase tracking-wider">Rooms</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[#4A4A4A] uppercase tracking-wider">Beds</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[#4A4A4A] uppercase tracking-wider">Status</th>
+                      <th className="text-right px-4 py-3 text-sm font-medium text-[#4A4A4A] uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E8E3DB]">

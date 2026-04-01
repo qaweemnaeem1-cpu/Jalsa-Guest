@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import { Inbox, Eye, Check, Search, Users, AlertTriangle } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, Inbox, Eye, Check, Search, Users, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -23,6 +23,15 @@ import {
 import type { Guest } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { formatDesignation } from '@/lib/constants';
+
+// ── Location colour palette ──────────────────────────────────────────────────
+const LOCATION_COLORS = [
+  { dot: 'bg-blue-500',   ring: 'ring-blue-200',   text: 'text-blue-700',   bg: 'bg-blue-50'   },
+  { dot: 'bg-purple-500', ring: 'ring-purple-200', text: 'text-purple-700', bg: 'bg-purple-50' },
+  { dot: 'bg-teal-500',   ring: 'ring-teal-200',   text: 'text-teal-700',   bg: 'bg-teal-50'   },
+  { dot: 'bg-orange-500', ring: 'ring-orange-200', text: 'text-orange-700', bg: 'bg-orange-50' },
+  { dot: 'bg-rose-500',   ring: 'ring-rose-200',   text: 'text-rose-700',   bg: 'bg-rose-50'   },
+];
 
 // A flattened row representing a single person (head or family member)
 interface PersonRow {
@@ -208,9 +217,29 @@ export default function DeptIncomingPage() {
     guestArrival?: string; guestDeparture?: string;
     roomFrom?: string; roomTo?: string;
   } | null>(null);
+  const [openLocationDropdown, setOpenLocationDropdown] = useState<string | null>(null);
+  const [openRoomDropdown, setOpenRoomDropdown] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpenLocationDropdown(null);
+        setOpenRoomDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const dept = user?.department ?? '';
   const locations = departments[dept] ?? [];
+
+  const getLocationColor = useCallback((loc: string) => {
+    const idx = locations.indexOf(loc);
+    return LOCATION_COLORS[(idx >= 0 ? idx : 0) % LOCATION_COLORS.length];
+  }, [locations]);
 
   const allRows = useMemo(() => buildRows(guests, dept), [guests, dept]);
 
@@ -455,8 +484,8 @@ export default function DeptIncomingPage() {
               <div className="flex items-center gap-3">
                 <Inbox className="w-5 h-5 text-[#2D5A45]" />
                 <div>
-                  <h1 className="text-xl font-semibold text-[#1A1A1A]">Incoming Guests</h1>
-                  <p className="text-xs text-[#4A4A4A] mt-0.5">Guests assigned to {dept} — awaiting placement</p>
+                  <h1 className="text-2xl font-semibold text-[#1A1A1A]">Incoming Guests</h1>
+                  <p className="text-sm text-[#4A4A4A] mt-0.5">Guests assigned to {dept} — awaiting placement</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -496,18 +525,18 @@ export default function DeptIncomingPage() {
                 <p className="text-xs text-[#4A4A4A]">Try a different name, country, or reference number.</p>
               </div>
             ) : (
-              <div className="bg-white rounded-xl border border-[#E8E3DB] overflow-hidden">
-                <table className="w-full text-sm">
+              <div ref={dropdownRef} className="bg-white rounded-xl border border-[#E8E3DB] overflow-visible">
+                <table className="w-full">
                   <thead>
                     <tr className="border-b border-[#E8E3DB] bg-[#F9F8F6]">
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Designation</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Arrival</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Departure</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Assign Location</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Assign Room</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Designation</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Arrival</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Departure</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Assign Location</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Assign Room</th>
+                      <th className="text-right px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E8E3DB]">
@@ -568,13 +597,13 @@ export default function DeptIncomingPage() {
 
                           {/* Person row */}
                           <tr className="hover:bg-[#F9F8F6]">
-                            <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">{row.referenceNumber}</td>
+                            <td className="px-4 py-3 font-mono text-sm text-[#4A4A4A]">{row.referenceNumber}</td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2.5 flex-wrap">
-                                <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium shrink-0">
+                                <div className="w-9 h-9 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-base font-medium shrink-0">
                                   {row.name.charAt(0)}
                                 </div>
-                                <span className="font-medium text-[#1A1A1A]">{row.name}</span>
+                                <span className="font-medium text-base text-[#1A1A1A]">{row.name}</span>
                                 {row.isFamily && (
                                   <FamilyBadge
                                     lastName={row.familyLastName}
@@ -584,7 +613,7 @@ export default function DeptIncomingPage() {
                                 )}
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-[#4A4A4A] text-xs">{formatDesignation(row.designation)}</td>
+                            <td className="px-4 py-3 text-[#4A4A4A] text-sm">{formatDesignation(row.designation)}</td>
                             <td className="px-4 py-3">
                               {row.arrivalTime ? (
                                 <div>
@@ -618,53 +647,126 @@ export default function DeptIncomingPage() {
                               ) : <span className="text-gray-400">—</span>}
                             </td>
                             <td className="px-4 py-3">
-                              <select
-                                value={selected}
-                                onChange={e => {
-                                  const val = e.target.value;
-                                  setSelectedLocations(prev => ({ ...prev, [row.rowKey]: val }));
-                                  if (val) fetchRoomsForLocation(val);
-                                }}
-                                className="border border-[#D4CFC7] rounded-lg px-2 py-1.5 text-xs text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45] min-w-[130px]"
-                              >
-                                <option value="">Select location…</option>
-                                {locations.map(loc => (
-                                  <option key={loc} value={loc}>{loc}</option>
-                                ))}
-                              </select>
+                              <div className="relative">
+                                <button
+                                  onClick={() => {
+                                    setOpenRoomDropdown(null);
+                                    setOpenLocationDropdown(prev => prev === row.rowKey ? null : row.rowKey);
+                                  }}
+                                  className="flex items-center justify-between gap-2 border border-[#D4CFC7] rounded-lg px-3 py-2 text-sm bg-white hover:border-[#2D5A45] min-w-[160px] transition-colors"
+                                >
+                                  {selected ? (
+                                    <span className="flex items-center gap-2">
+                                      <span className={`w-2.5 h-2.5 rounded-full ${getLocationColor(selected).dot} shrink-0`} />
+                                      <span className="text-[#1A1A1A]">{selected}</span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400">Select location…</span>
+                                  )}
+                                  <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                                </button>
+                                {openLocationDropdown === row.rowKey && (
+                                  <div className="absolute z-50 top-full mt-1 left-0 bg-white border border-[#E8E3DB] rounded-xl shadow-xl min-w-[180px] overflow-hidden">
+                                    {locations.map(loc => {
+                                      const color = getLocationColor(loc);
+                                      return (
+                                        <button
+                                          key={loc}
+                                          onClick={() => {
+                                            setSelectedLocations(prev => ({ ...prev, [row.rowKey]: loc }));
+                                            fetchRoomsForLocation(loc);
+                                            setOpenLocationDropdown(null);
+                                          }}
+                                          className={`flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-left transition-colors hover:bg-[#F5F0E8] ${selected === loc ? 'bg-[#F5F0E8] font-medium' : ''}`}
+                                        >
+                                          <span className={`w-2.5 h-2.5 rounded-full ${color.dot} shrink-0`} />
+                                          <span className="text-[#1A1A1A]">{loc}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
                             </td>
                             <td className="px-4 py-3">
-                              {!selectedLocations[row.rowKey] ? (
-                                <span className="text-gray-300 text-xs">—</span>
-                              ) : (
-                                (() => {
-                                  const locRooms = roomsByLocation[selectedLocations[row.rowKey]] ?? [];
-                                  return (
-                                    <select
-                                      value={selectedRooms[row.rowKey] ?? ''}
-                                      onChange={e => setSelectedRooms(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
-                                      className="border border-[#D4CFC7] rounded-lg px-2 py-1.5 text-xs text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45] min-w-[130px]"
+                              {(() => {
+                                const hasLocation = !!selectedLocations[row.rowKey];
+                                const locRooms = hasLocation ? (roomsByLocation[selectedLocations[row.rowKey]] ?? []) : [];
+                                const selectedRoom = locRooms.find(r => r.id === selectedRooms[row.rowKey]);
+                                return (
+                                  <div className="relative">
+                                    <button
+                                      disabled={!hasLocation}
+                                      onClick={() => {
+                                        setOpenLocationDropdown(null);
+                                        setOpenRoomDropdown(prev => prev === row.rowKey ? null : row.rowKey);
+                                      }}
+                                      className="flex items-center justify-between gap-2 border border-[#D4CFC7] rounded-lg px-3 py-2 text-sm bg-white hover:border-[#2D5A45] min-w-[180px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                      <option value="">Select room…</option>
-                                      {locRooms.map(room => {
-                                        const isFull = room.occupancy >= room.capacity;
-                                        const guestArrival = guests.find(g => g.id === row.guestId)?.arrivalTime?.substring(0, 10);
-                                        const guestDeparture = guests.find(g => g.id === row.guestId)?.departureTime?.substring(0, 10);
-                                        const dateMismatchFlag = (room.available_from && guestArrival && guestArrival < room.available_from) ||
-                                          (room.available_to && guestDeparture && guestDeparture > room.available_to);
-                                        return (
-                                          <option key={room.id} value={room.id} disabled={isFull}>
-                                            {isFull ? '🔴 ' : dateMismatchFlag ? '⚠️ ' : ''}{room.name} ({room.occupancy}/{room.capacity} beds)
-                                            {room.available_from && room.available_to
-                                              ? ` · ${new Date(room.available_from + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${new Date(room.available_to + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
-                                              : ''}
-                                          </option>
-                                        );
-                                      })}
-                                    </select>
-                                  );
-                                })()
-                              )}
+                                      {!hasLocation ? (
+                                        <span className="text-gray-400 text-xs">Assign location first</span>
+                                      ) : selectedRoom ? (
+                                        <span className="text-[#1A1A1A] truncate">{selectedRoom.name}</span>
+                                      ) : (
+                                        <span className="text-gray-400">Select room…</span>
+                                      )}
+                                      <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                                    </button>
+                                    {openRoomDropdown === row.rowKey && hasLocation && (
+                                      <div className="absolute z-50 top-full mt-1 left-0 bg-white border border-[#E8E3DB] rounded-xl shadow-xl w-72 overflow-hidden">
+                                        {locRooms.length === 0 ? (
+                                          <div className="px-4 py-4 text-sm text-gray-400 text-center">No rooms available</div>
+                                        ) : locRooms.map(room => {
+                                          const isFull = room.occupancy >= room.capacity;
+                                          const guestArrival = guests.find(g => g.id === row.guestId)?.arrivalTime?.substring(0, 10);
+                                          const guestDeparture = guests.find(g => g.id === row.guestId)?.departureTime?.substring(0, 10);
+                                          const hasMismatch = !!(
+                                            (room.available_from && guestArrival && guestArrival < room.available_from) ||
+                                            (room.available_to && guestDeparture && guestDeparture > room.available_to)
+                                          );
+                                          const fillPct = room.capacity > 0 ? Math.round((room.occupancy / room.capacity) * 100) : 0;
+                                          const isSelected = selectedRooms[row.rowKey] === room.id;
+                                          return (
+                                            <button
+                                              key={room.id}
+                                              disabled={isFull}
+                                              onClick={() => {
+                                                setSelectedRooms(prev => ({ ...prev, [row.rowKey]: room.id }));
+                                                setOpenRoomDropdown(null);
+                                              }}
+                                              className={`flex flex-col gap-1.5 w-full px-4 py-3 text-left border-b border-[#E8E3DB] last:border-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isSelected ? 'bg-emerald-50' : 'hover:bg-[#F5F0E8]'}`}
+                                            >
+                                              <div className="flex items-center justify-between gap-2">
+                                                <span className="text-sm font-medium text-[#1A1A1A] flex items-center gap-1.5">
+                                                  {isFull && <span className="text-red-500">●</span>}
+                                                  {!isFull && hasMismatch && <span className="text-amber-500">⚠</span>}
+                                                  {!isFull && !hasMismatch && <span className="text-emerald-500">●</span>}
+                                                  {room.name}
+                                                </span>
+                                                <span className="text-xs text-[#4A4A4A] shrink-0">{room.occupancy}/{room.capacity}</span>
+                                              </div>
+                                              <div className="w-full bg-gray-100 rounded-full h-1.5">
+                                                <div
+                                                  className={`h-1.5 rounded-full transition-all ${isFull ? 'bg-red-400' : fillPct > 70 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                                                  style={{ width: `${fillPct}%` }}
+                                                />
+                                              </div>
+                                              {(room.available_from || room.available_to || hasMismatch) && (
+                                                <div className="text-xs text-gray-400 flex items-center gap-1">
+                                                  {room.available_from && room.available_to
+                                                    ? `${new Date(room.available_from + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${new Date(room.available_to + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
+                                                    : room.available_from ? `From ${room.available_from}` : room.available_to ? `Until ${room.available_to}` : ''}
+                                                  {hasMismatch && <span className="text-amber-500 font-medium">· date mismatch</span>}
+                                                </div>
+                                              )}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-end gap-2">
@@ -680,19 +782,18 @@ export default function DeptIncomingPage() {
                                 <button
                                   onClick={() => placeRow(row)}
                                   disabled={!selected}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#2D5A45] text-white hover:bg-[#234839] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-[#2D5A45] text-white hover:bg-[#234839] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                                 >
                                   <Check className="w-3.5 h-3.5" />
                                   Place
                                 </button>
-                                {selectedRooms[row.rowKey] && (
-                                  <button
-                                    onClick={() => assignRoom(row, selectedRooms[row.rowKey])}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
-                                  >
-                                    Assign Room
-                                  </button>
-                                )}
+                                <button
+                                  onClick={() => selectedRooms[row.rowKey] && assignRoom(row, selectedRooms[row.rowKey])}
+                                  disabled={!selectedRooms[row.rowKey]}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                >
+                                  Assign Room
+                                </button>
                               </div>
                             </td>
                           </tr>

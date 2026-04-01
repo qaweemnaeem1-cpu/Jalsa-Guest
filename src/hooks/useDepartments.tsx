@@ -109,6 +109,33 @@ export function DepartmentsProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
+  // ── Real-time subscription for locations ─────────────────────────────────────
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('locations-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'locations' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const loc = rowToLocation(payload.new as any);
+          setLocationsList(prev => prev.some(l => l.id === loc.id) ? prev : [...prev, loc]);
+        }
+        if (payload.eventType === 'UPDATE') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const updated = rowToLocation(payload.new as any);
+          setLocationsList(prev => prev.map(l => l.id === updated.id ? updated : l));
+        }
+        if (payload.eventType === 'DELETE') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const id = (payload.old as any).id as string;
+          setLocationsList(prev => prev.filter(l => l.id !== id));
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   // ── Computed backward-compat values ─────────────────────────────────────────
 
   const departmentList = deptList.map(d => d.name);

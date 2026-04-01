@@ -88,6 +88,35 @@ export function UsersProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
+  // ── Real-time subscription for users ─────────────────────────────────────────
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('users-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { password_hash: _, ...safeRow } = payload.new as any;
+          const user = rowToUser(safeRow);
+          setUsers(prev => prev.some(u => u.id === user.id) ? prev : [...prev, user]);
+        }
+        if (payload.eventType === 'UPDATE') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { password_hash: _, ...safeRow } = payload.new as any;
+          const updated = rowToUser(safeRow);
+          setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
+        }
+        if (payload.eventType === 'DELETE') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const id = (payload.old as any).id as string;
+          setUsers(prev => prev.filter(u => u.id !== id));
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   const activeUsers = users.filter(u => u.isActive);
 
   const addUser = useCallback(async (
