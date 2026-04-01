@@ -1,6 +1,10 @@
-import { useMemo, useState } from 'react';
-import { BedDouble, Plus, Pencil, Trash2, ChevronDown, ChevronRight, UserX, MoveRight } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  BedDouble, Plus, Pencil, Trash2, MoveRight, UserX,
+  LayoutGrid, Layers, StickyNote, Settings2,
+} from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { useRooms } from '@/hooks/useRooms';
@@ -19,28 +23,117 @@ import {
 } from '@/components/ui/alert-dialog';
 import type { Block, Room } from '@/types';
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-function OccupancyBar({ occupied, total }: { occupied: number; total: number }) {
+type DialogMode = 'addBlock' | 'editBlock' | 'addRoom' | 'editRoom' | null;
+type ViewMode = 'grid' | 'block';
+type StatusFilter = 'all' | 'available' | 'partial' | 'full' | 'maintenance' | 'cleaning' | 'reserved';
+type RoomStatus = 'available' | 'maintenance' | 'cleaning' | 'reserved';
+
+interface RoomExtras {
+  status: string;
+  notes: string;
+}
+
+interface MovePending {
+  roomId: string;
+  bedNumber: number;
+  guestId: string;
+  guestName: string;
+  familyMemberId?: string;
+}
+
+type MoveMode = 'same-room' | 'different-room';
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function occLabel(occupied: number, total: number): 'empty' | 'partial' | 'full' {
+  if (occupied === 0) return 'empty';
+  if (occupied >= total) return 'full';
+  return 'partial';
+}
+
+function occBarColor(occupied: number, total: number): string {
+  const label = occLabel(occupied, total);
+  if (label === 'full') return 'bg-red-500';
+  if (label === 'partial') return 'bg-amber-400';
+  return 'bg-[#2D5A45]';
+}
+
+function cardBorderClass(occState: 'empty' | 'partial' | 'full', roomStatus: string): string {
+  if (roomStatus === 'maintenance') return 'border-gray-300 bg-gray-100';
+  if (roomStatus === 'cleaning') return 'border-blue-200 bg-blue-50';
+  if (roomStatus === 'reserved') return 'border-purple-200 bg-purple-50';
+  if (occState === 'full') return 'border-red-200 bg-white';
+  if (occState === 'partial') return 'border-amber-200 bg-white';
+  return 'border-green-200 bg-white';
+}
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === 'maintenance') return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-300">
+      🔧 Maintenance
+    </span>
+  );
+  if (status === 'cleaning') return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+      🧹 Cleaning
+    </span>
+  );
+  if (status === 'reserved') return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
+      🔒 Reserved
+    </span>
+  );
+  return null;
+}
+
+// ── Room Card ─────────────────────────────────────────────────────────────────
+
+interface RoomCardProps {
+  room: Room;
+  blockName: string;
+  occupied: number;
+  total: number;
+  roomStatus: string;
+  isExpanded: boolean;
+  onClick: () => void;
+}
+
+function RoomCard({ room, blockName, occupied, total, roomStatus, isExpanded, onClick }: RoomCardProps) {
+  const state = occLabel(occupied, total);
   const pct = total > 0 ? Math.round((occupied / total) * 100) : 0;
+
   return (
-    <div className="flex items-center gap-2">
-      <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden shrink-0">
-        <div className="h-full bg-[#2D5A45] rounded-full" style={{ width: `${pct}%` }} />
+    <button
+      onClick={onClick}
+      className={`text-left rounded-xl border-2 p-3 transition-all hover:shadow-md ${cardBorderClass(state, roomStatus)} ${isExpanded ? 'ring-2 ring-[#2D5A45] ring-offset-1' : ''}`}
+    >
+      <div className="flex items-start justify-between gap-1 mb-1">
+        <span className="font-semibold text-sm text-[#1A1A1A] leading-tight">{room.name}</span>
+        <StatusBadge status={roomStatus} />
       </div>
-      <span className="text-xs text-gray-500">{occupied}/{total} beds</span>
-    </div>
+      {blockName && (
+        <p className="text-xs text-gray-400 mb-2">{blockName}</p>
+      )}
+      <div className="mb-1.5">
+        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full transition-all ${occBarColor(occupied, total)}`} style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+      <p className="text-xs text-[#4A4A4A]">{occupied}/{total} beds</p>
+      {(room.availableFrom || room.availableTo) && (
+        <p className="text-[10px] text-gray-400 mt-1">
+          {room.availableFrom && `From ${room.availableFrom}`}
+          {room.availableFrom && room.availableTo && ' · '}
+          {room.availableTo && `To ${room.availableTo}`}
+        </p>
+      )}
+    </button>
   );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
-
-type DialogMode = 'addBlock' | 'editBlock' | 'addRoom' | 'editRoom' | null;
-
-interface MovePending {
-  roomId: string; bedNumber: number;
-  guestId: string; guestName: string; familyMemberId?: string;
-}
 
 export default function LocationRoomsPage() {
   const { user } = useAuth();
@@ -56,58 +149,179 @@ export default function LocationRoomsPage() {
 
   const loc = user?.location ?? '';
 
-  // Expand/collapse blocks and rooms
-  const [expandedBlocks, setExpandedBlocks] = useState<Set<string>>(new Set(['blk-1', 'blk-2', 'none']));
-  const [expandedRooms, setExpandedRooms]   = useState<Set<string>>(new Set());
+  // ── View state ───────────────────────────────────────────────────────────────
 
-  // Dialogs
-  const [dialogMode, setDialogMode]       = useState<DialogMode>(null);
-  const [formName, setFormName]           = useState('');
-  const [formCapacity, setFormCapacity]   = useState(2);
-  const [formBlockId, setFormBlockId]     = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [search, setSearch] = useState('');
+  const [expandedRoomId, setExpandedRoomId] = useState<string | null>(null);
+
+  // ── Room extras (status + notes from DB) ────────────────────────────────────
+
+  const [roomExtras, setRoomExtras] = useState<Record<string, RoomExtras>>({});
+  const extrasLoaded = useRef(false);
+
+  const locRooms = useMemo(() => rooms.filter(r => r.locationId === loc && r.isActive), [rooms, loc]);
+
+  useEffect(() => {
+    if (locRooms.length === 0) return;
+    if (extrasLoaded.current) return;
+    extrasLoaded.current = true;
+
+    const ids = locRooms.map(r => r.id);
+    supabase
+      .from('rooms')
+      .select('id, status, notes')
+      .in('id', ids)
+      .then(({ data }) => {
+        if (!data) return;
+        const map: Record<string, RoomExtras> = {};
+        for (const row of data) {
+          map[row.id] = { status: row.status ?? 'available', notes: row.notes ?? '' };
+        }
+        setRoomExtras(map);
+      });
+  }, [locRooms]);
+
+  // ── Notes editing ────────────────────────────────────────────────────────────
+
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesDraft, setNotesDraft] = useState('');
+  const [addingNotes, setAddingNotes] = useState(false);
+  const [addNotesDraft, setAddNotesDraft] = useState('');
+
+  const openEditNotes = () => {
+    setNotesDraft(roomExtras[expandedRoomId ?? '']?.notes ?? '');
+    setEditingNotes(true);
+  };
+
+  const saveNotes = async (roomId: string, notes: string) => {
+    await supabase.from('rooms').update({ notes }).eq('id', roomId);
+    setRoomExtras(prev => ({ ...prev, [roomId]: { ...prev[roomId] ?? { status: 'available', notes: '' }, notes } }));
+    setEditingNotes(false);
+    setAddingNotes(false);
+  };
+
+  const clearNotes = async (roomId: string) => {
+    await supabase.from('rooms').update({ notes: '' }).eq('id', roomId);
+    setRoomExtras(prev => ({ ...prev, [roomId]: { ...prev[roomId] ?? { status: 'available', notes: '' }, notes: '' } }));
+  };
+
+  const changeRoomStatus = async (roomId: string, newStatus: RoomStatus) => {
+    await supabase.from('rooms').update({ status: newStatus }).eq('id', roomId);
+    setRoomExtras(prev => ({ ...prev, [roomId]: { ...prev[roomId] ?? { status: 'available', notes: '' }, status: newStatus } }));
+    toast.success('Room status updated');
+  };
+
+  // ── Dialogs ──────────────────────────────────────────────────────────────────
+
+  const [dialogMode, setDialogMode] = useState<DialogMode>(null);
+  const [formName, setFormName] = useState('');
+  const [formCapacity, setFormCapacity] = useState(2);
+  const [formBlockId, setFormBlockId] = useState('');
   const [formAvailFrom, setFormAvailFrom] = useState('');
-  const [formAvailTo, setFormAvailTo]     = useState('');
-  const [formError, setFormError]         = useState('');
-  const [editTarget, setEditTarget]     = useState<Block | Room | null>(null);
+  const [formAvailTo, setFormAvailTo] = useState('');
+  const [formError, setFormError] = useState('');
+  const [editTarget, setEditTarget] = useState<Block | Room | null>(null);
+
+  // Block management dialog
+  const [manageBlocksOpen, setManageBlocksOpen] = useState(false);
+  const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
+  const [editingBlockName, setEditingBlockName] = useState('');
+  const [addingBlock, setAddingBlock] = useState(false);
+  const [newBlockName, setNewBlockName] = useState('');
 
   // Delete confirmation
-  const [deleteType, setDeleteType]     = useState<'block' | 'room' | null>(null);
+  const [deleteType, setDeleteType] = useState<'block' | 'room' | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Block | Room | null>(null);
 
   // Move guest
-  const [movePending, setMovePending]   = useState<MovePending | null>(null);
+  const [movePending, setMovePending] = useState<MovePending | null>(null);
+  const [moveMode, setMoveMode] = useState<MoveMode>('same-room');
+  const [moveToBedNumber, setMoveToBedNumber] = useState<number>(0);
   const [moveToRoomId, setMoveToRoomId] = useState('');
+  const [moveToDiffBed, setMoveToDiffBed] = useState<number>(0);
+
+  // Assign guest to empty bed
+  const [assigningBed, setAssigningBed] = useState<{ roomId: string; bedNumber: number } | null>(null);
+  const [assignGuestId, setAssignGuestId] = useState('');
+
+  // ── Computed ──────────────────────────────────────────────────────────────────
 
   const roomGroups = useMemo(() => getRoomsByLocation(loc), [getRoomsByLocation, loc]);
-  const locOcc     = useMemo(() => getLocationOccupancy(loc), [getLocationOccupancy, loc]);
-  const locBlocks  = useMemo(() => blocks.filter(b => b.locationId === loc), [blocks, loc]);
-  const locRooms   = useMemo(() => rooms.filter(r => r.locationId === loc && r.isActive), [rooms, loc]);
+  const locOcc = useMemo(() => getLocationOccupancy(loc), [getLocationOccupancy, loc]);
+  const locBlocks = useMemo(() => blocks.filter(b => b.locationId === loc), [blocks, loc]);
 
-  // Available rooms for "move to" (rooms with space, excluding source)
+  const blockNameMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const b of locBlocks) m[b.id] = b.name;
+    return m;
+  }, [locBlocks]);
+
+  // Guests available for assignment (placed at this location, not yet accommodated)
+  const assignableGuests = useMemo(() =>
+    guests.filter(g => g.placedLocation === loc && !g.roomAssignment && g.status !== 'Accommodated'),
+    [guests, loc]
+  );
+
+  // Available beds in same room (for move dialog)
+  const sameBedOptions = useMemo(() => {
+    if (!movePending) return [];
+    const beds = bedAssignments[movePending.roomId] ?? [];
+    return beds.filter(b => !b.guestName && b.bedNumber !== movePending.bedNumber);
+  }, [movePending, bedAssignments]);
+
+  // Rooms with available beds (for move to different room)
   const moveableRooms = useMemo(() => {
     if (!movePending) return [];
     return locRooms.filter(r => {
       if (r.id === movePending.roomId) return false;
-      const occ = getOccupancy(r.id);
-      return occ.available > 0;
+      return getOccupancy(r.id).available > 0;
     });
   }, [movePending, locRooms, getOccupancy]);
 
-  const toggleBlock = (id: string) =>
-    setExpandedBlocks(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const toggleRoom = (id: string) =>
-    setExpandedRooms(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  // Available beds in target room
+  const diffRoomBedOptions = useMemo(() => {
+    if (!moveToRoomId) return [];
+    const beds = bedAssignments[moveToRoomId] ?? [];
+    return beds.filter(b => !b.guestName);
+  }, [moveToRoomId, bedAssignments]);
 
-  // ── Block dialog ─────────────────────────────────────────────────────────────
+  // Filtered rooms for grid
+  const filteredRooms = useMemo(() => {
+    return locRooms.filter(room => {
+      const extras = roomExtras[room.id] ?? { status: 'available', notes: '' };
+      const occ = getOccupancy(room.id);
+      const oState = occLabel(occ.occupied, occ.total);
 
-  const openAddBlock = () => {
-    setDialogMode('addBlock'); setEditTarget(null);
-    setFormName(''); setFormError('');
-  };
-  const openEditBlock = (b: Block) => {
-    setDialogMode('editBlock'); setEditTarget(b);
-    setFormName(b.name); setFormError('');
-  };
+      // Status filter
+      if (statusFilter === 'available' && (oState !== 'empty' || extras.status !== 'available')) return false;
+      if (statusFilter === 'partial' && oState !== 'partial') return false;
+      if (statusFilter === 'full' && oState !== 'full') return false;
+      if (statusFilter === 'maintenance' && extras.status !== 'maintenance') return false;
+      if (statusFilter === 'cleaning' && extras.status !== 'cleaning') return false;
+      if (statusFilter === 'reserved' && extras.status !== 'reserved') return false;
+
+      // Search
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        const blockName = room.blockId ? (blockNameMap[room.blockId] ?? '') : '';
+        if (!room.name.toLowerCase().includes(q) && !blockName.toLowerCase().includes(q)) return false;
+      }
+
+      return true;
+    });
+  }, [locRooms, roomExtras, getOccupancy, statusFilter, search, blockNameMap]);
+
+  // ── Expanded room data ────────────────────────────────────────────────────────
+
+  const expandedRoom = useMemo(() => locRooms.find(r => r.id === expandedRoomId) ?? null, [locRooms, expandedRoomId]);
+  const expandedBeds = useMemo(() => expandedRoomId ? (bedAssignments[expandedRoomId] ?? []) : [], [expandedRoomId, bedAssignments]);
+  const expandedExtras = useMemo(() => expandedRoomId ? (roomExtras[expandedRoomId] ?? { status: 'available', notes: '' }) : null, [expandedRoomId, roomExtras]);
+  const expandedOcc = useMemo(() => expandedRoomId ? getOccupancy(expandedRoomId) : null, [expandedRoomId, getOccupancy]);
+
+  // ── Handlers ──────────────────────────────────────────────────────────────────
+
   const openAddRoom = () => {
     setDialogMode('addRoom'); setEditTarget(null);
     setFormName(''); setFormCapacity(2); setFormBlockId('');
@@ -147,8 +361,6 @@ export default function LocationRoomsPage() {
     setDialogMode(null);
   };
 
-  // ── Delete ────────────────────────────────────────────────────────────────────
-
   const handleDeleteBlock = (b: Block) => {
     const hasRooms = rooms.some(r => r.blockId === b.id);
     if (hasRooms) { toast.error(`Cannot delete — remove all rooms in ${b.name} first`); return; }
@@ -163,45 +375,117 @@ export default function LocationRoomsPage() {
     if (!deleteTarget || !deleteType) return;
     if (deleteType === 'block') deleteBlock(deleteTarget.id);
     else deleteRoom(deleteTarget.id);
+    if (deleteType === 'room' && deleteTarget.id === expandedRoomId) setExpandedRoomId(null);
     setDeleteTarget(null); setDeleteType(null);
   };
 
-  // ── Move guest ────────────────────────────────────────────────────────────────
+  // Move dialog
+  const openMoveDialog = (bed: { roomId: string; bedNumber: number; guestId: string; guestName: string; familyMemberId?: string }) => {
+    setMovePending(bed);
+    setMoveMode('same-room');
+    setMoveToBedNumber(0);
+    setMoveToRoomId('');
+    setMoveToDiffBed(0);
+  };
 
-  const handleConfirmMove = () => {
-    if (!movePending || !moveToRoomId || !user) return;
+  const handleConfirmMove = useCallback(() => {
+    if (!movePending || !user) return;
     const { roomId, bedNumber, guestId, guestName, familyMemberId } = movePending;
     const sourceRoom = rooms.find(r => r.id === roomId);
-    const targetRoom = rooms.find(r => r.id === moveToRoomId);
-    const nextBed = (bedAssignments[moveToRoomId] ?? []).find(b => !b.guestName)?.bedNumber;
-    if (!nextBed || !targetRoom) { toast.error('No available beds in target room'); return; }
     const guest = guests.find(g => g.id === guestId);
-    removeGuestFromRoom(roomId, bedNumber);
-    assignGuestToRoom(moveToRoomId, nextBed, guestId, guestName, familyMemberId);
-    if (guest) {
-      addEntry2({
-        guestId, guestName, guestReference: guest.referenceNumber,
-        locationId: loc, locationName: loc,
-        departmentId: guest.assignedDepartment ?? '', departmentName: guest.assignedDepartment ?? '',
-        type: 'room_change',
-        action: `Guest moved from ${sourceRoom?.name ?? roomId} to ${targetRoom.name}`,
-        oldValue: sourceRoom?.name ?? roomId,
-        newValue: targetRoom.name,
-        createdBy: { id: user.id, name: user.name, role: 'location-manager' },
-        createdAt: new Date().toISOString(),
-      });
+
+    if (moveMode === 'same-room') {
+      if (!moveToBedNumber) { toast.error('Select a bed'); return; }
+      removeGuestFromRoom(roomId, bedNumber);
+      assignGuestToRoom(roomId, moveToBedNumber, guestId, guestName, familyMemberId);
+      if (guest) {
+        addEntry2({
+          guestId, guestName, guestReference: guest.referenceNumber,
+          locationId: loc, locationName: loc,
+          departmentId: guest.assignedDepartment ?? '', departmentName: guest.assignedDepartment ?? '',
+          type: 'room_change',
+          action: `Guest moved within ${sourceRoom?.name ?? roomId}: Bed ${bedNumber} → Bed ${moveToBedNumber}`,
+          oldValue: `${sourceRoom?.name} / Bed ${bedNumber}`,
+          newValue: `${sourceRoom?.name} / Bed ${moveToBedNumber}`,
+          createdBy: { id: user.id, name: user.name, role: 'location-manager' },
+          createdAt: new Date().toISOString(),
+        });
+      }
+      toast.success(`${guestName} moved to Bed ${moveToBedNumber}`);
+    } else {
+      if (!moveToRoomId || !moveToDiffBed) { toast.error('Select a room and bed'); return; }
+      const targetRoom = rooms.find(r => r.id === moveToRoomId);
+      if (!targetRoom) return;
+      removeGuestFromRoom(roomId, bedNumber);
+      assignGuestToRoom(moveToRoomId, moveToDiffBed, guestId, guestName, familyMemberId);
+      if (guest) {
+        addEntry2({
+          guestId, guestName, guestReference: guest.referenceNumber,
+          locationId: loc, locationName: loc,
+          departmentId: guest.assignedDepartment ?? '', departmentName: guest.assignedDepartment ?? '',
+          type: 'room_change',
+          action: `Guest moved from ${sourceRoom?.name ?? roomId}/Bed ${bedNumber} to ${targetRoom.name}/Bed ${moveToDiffBed}`,
+          oldValue: `${sourceRoom?.name} / Bed ${bedNumber}`,
+          newValue: `${targetRoom.name} / Bed ${moveToDiffBed}`,
+          createdBy: { id: user.id, name: user.name, role: 'location-manager' },
+          createdAt: new Date().toISOString(),
+        });
+      }
+      toast.success(`${guestName} moved to ${targetRoom.name}, Bed ${moveToDiffBed}`);
     }
-    toast.success(`${guestName} moved to ${targetRoom.name} · Bed ${nextBed}`);
-    setMovePending(null); setMoveToRoomId('');
+
+    setMovePending(null);
+  }, [movePending, moveMode, moveToBedNumber, moveToRoomId, moveToDiffBed, user, rooms, guests, loc, removeGuestFromRoom, assignGuestToRoom, addEntry2]);
+
+  // Assign guest to empty bed
+  const handleAssignGuest = () => {
+    if (!assigningBed || !assignGuestId) { toast.error('Select a guest'); return; }
+    const guest = guests.find(g => g.id === assignGuestId);
+    if (!guest) return;
+    assignGuestToRoom(assigningBed.roomId, assigningBed.bedNumber, guest.id, guest.fullName);
+    toast.success(`${guest.fullName} assigned to Bed ${assigningBed.bedNumber}`);
+    setAssigningBed(null);
+    setAssignGuestId('');
+  };
+
+  // Block management
+  const handleSaveNewBlock = async () => {
+    const name = newBlockName.trim();
+    if (!name) return;
+    await addBlock(loc, name);
+    setNewBlockName('');
+    setAddingBlock(false);
+  };
+  const handleSaveEditBlock = (blockId: string) => {
+    const name = editingBlockName.trim();
+    if (!name) return;
+    updateBlock(blockId, name);
+    setEditingBlockId(null);
   };
 
   if (!user) return null;
+
+  // ── Filter bar labels ────────────────────────────────────────────────────────
+
+  const filterOptions: { key: StatusFilter; label: string }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'available', label: 'Available' },
+    { key: 'partial', label: 'Partial' },
+    { key: 'full', label: 'Full' },
+    { key: 'maintenance', label: 'Maintenance' },
+    { key: 'cleaning', label: 'Cleaning' },
+    { key: 'reserved', label: 'Reserved' },
+  ];
+
+  // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-[#F5F0E8]">
       <div className="flex">
         <LocationSidebar />
         <main className="flex-1 ml-64">
+
+          {/* ── Header ── */}
           <header className="bg-white border-b border-[#E8E3DB] px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -214,7 +498,17 @@ export default function LocationRoomsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Button onClick={openAddRoom} className="bg-[#2D5A45] hover:bg-[#234839] text-white h-9 px-4 text-sm flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setManageBlocksOpen(true)}
+                  className="border-[#D4CFC7] text-[#4A4A4A] h-9 px-4 text-sm flex items-center gap-2"
+                >
+                  <Settings2 className="w-4 h-4" /> Manage Blocks
+                </Button>
+                <Button
+                  onClick={openAddRoom}
+                  className="bg-[#2D5A45] hover:bg-[#234839] text-white h-9 px-4 text-sm flex items-center gap-2"
+                >
                   <Plus className="w-4 h-4" /> Add Room
                 </Button>
                 <LocationUserMenu />
@@ -222,8 +516,54 @@ export default function LocationRoomsPage() {
             </div>
           </header>
 
-          <div className="p-6 space-y-4">
-            {roomGroups.length === 0 ? (
+          <div className="p-6 space-y-6">
+
+            {/* ── Filter + Search + View Toggle ── */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Status filter buttons */}
+              <div className="flex items-center gap-1 flex-wrap">
+                {filterOptions.map(opt => (
+                  <button
+                    key={opt.key}
+                    onClick={() => setStatusFilter(opt.key)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                      statusFilter === opt.key
+                        ? 'bg-[#2D5A45] text-white border-[#2D5A45]'
+                        : 'bg-white text-[#4A4A4A] border-[#D4CFC7] hover:border-[#2D5A45] hover:text-[#2D5A45]'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Search */}
+              <Input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search rooms…"
+                className="border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm w-48"
+              />
+
+              {/* View toggle */}
+              <div className="flex items-center border border-[#D4CFC7] rounded-lg overflow-hidden ml-auto">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === 'grid' ? 'bg-[#2D5A45] text-white' : 'bg-white text-[#4A4A4A] hover:bg-[#F5F0E8]'}`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" /> Grid
+                </button>
+                <button
+                  onClick={() => setViewMode('block')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-l border-[#D4CFC7] ${viewMode === 'block' ? 'bg-[#2D5A45] text-white' : 'bg-white text-[#4A4A4A] hover:bg-[#F5F0E8]'}`}
+                >
+                  <Layers className="w-3.5 h-3.5" /> Block
+                </button>
+              </div>
+            </div>
+
+            {/* ── No rooms empty state ── */}
+            {locRooms.length === 0 ? (
               <div className="bg-white rounded-xl border border-[#E8E3DB] p-12 text-center">
                 <BedDouble className="w-12 h-12 mx-auto mb-4 text-[#D4CFC7]" />
                 <h2 className="text-base font-semibold text-[#1A1A1A] mb-1">No rooms yet</h2>
@@ -232,128 +572,342 @@ export default function LocationRoomsPage() {
                   <Plus className="w-4 h-4 mr-2" /> Add Room
                 </Button>
               </div>
+            ) : viewMode === 'grid' ? (
+              /* ── Grid View ── */
+              filteredRooms.length === 0 ? (
+                <p className="text-sm text-[#4A4A4A] text-center py-8">No rooms match the current filter.</p>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                  {filteredRooms.map(room => {
+                    const occ = getOccupancy(room.id);
+                    const extras = roomExtras[room.id] ?? { status: 'available', notes: '' };
+                    const blockName = room.blockId ? (blockNameMap[room.blockId] ?? '') : '';
+                    return (
+                      <RoomCard
+                        key={room.id}
+                        room={room}
+                        blockName={blockName}
+                        occupied={occ.occupied}
+                        total={occ.total}
+                        roomStatus={extras.status}
+                        isExpanded={expandedRoomId === room.id}
+                        onClick={() => {
+                          setExpandedRoomId(prev => prev === room.id ? null : room.id);
+                          setEditingNotes(false);
+                          setAddingNotes(false);
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              )
             ) : (
-              <>
+              /* ── Block View ── */
+              <div className="space-y-4">
                 {roomGroups.map(group => {
                   const groupKey = group.block?.id ?? 'none';
-                  const isExpanded = expandedBlocks.has(groupKey);
                   const groupLabel = group.block ? group.block.name : 'Unassigned Rooms';
-                  const roomCount = group.rooms.length;
-
+                  const groupRooms = group.rooms.filter(r =>
+                    filteredRooms.some(fr => fr.id === r.id)
+                  );
+                  if (groupRooms.length === 0) return null;
                   return (
-                    <div key={groupKey} className="bg-white rounded-xl border border-[#E8E3DB] overflow-hidden">
+                    <div key={groupKey}>
                       {/* Block header */}
-                      <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8E3DB] bg-[#F9F8F6]">
-                        <button
-                          onClick={() => toggleBlock(groupKey)}
-                          className="flex items-center gap-2 text-left flex-1"
-                        >
-                          {isExpanded ? <ChevronDown className="w-4 h-4 text-[#4A4A4A]" /> : <ChevronRight className="w-4 h-4 text-[#4A4A4A]" />}
-                          <span className="font-semibold text-sm text-[#1A1A1A]">{groupLabel}</span>
-                          <span className="text-xs text-[#4A4A4A]">({roomCount} room{roomCount !== 1 ? 's' : ''})</span>
-                        </button>
-                        {group.block && (
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => openEditBlock(group.block!)} className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Edit block">
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button onClick={() => handleDeleteBlock(group.block!)} className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-red-50 hover:text-red-600 transition-colors" title="Delete block">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        )}
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="h-px bg-[#D4CFC7] flex-1" />
+                        <span className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">
+                          {groupLabel}
+                        </span>
+                        <div className="h-px bg-[#D4CFC7] flex-1" />
                       </div>
-
-                      {/* Rooms in block */}
-                      {isExpanded && (
-                        <div className="divide-y divide-[#E8E3DB]">
-                          {group.rooms.length === 0 ? (
-                            <p className="px-6 py-4 text-sm text-[#4A4A4A]">No rooms in this block.</p>
-                          ) : (
-                            group.rooms.map(room => {
-                              const occ = getOccupancy(room.id);
-                              const isRoomExpanded = expandedRooms.has(room.id);
-                              const beds = bedAssignments[room.id] ?? [];
-                              return (
-                                <div key={room.id}>
-                                  {/* Room row */}
-                                  <div
-                                    className="flex items-center gap-4 px-6 py-3 hover:bg-[#F9F8F6] cursor-pointer"
-                                    onClick={() => toggleRoom(room.id)}
-                                  >
-                                    {isRoomExpanded ? <ChevronDown className="w-3.5 h-3.5 text-[#4A4A4A] shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-[#4A4A4A] shrink-0" />}
-                                    <span className="font-medium text-sm text-[#1A1A1A] w-16 shrink-0">{room.name}</span>
-                                    <span className="text-xs text-[#4A4A4A] shrink-0">Capacity: {room.capacity}</span>
-                                    <OccupancyBar occupied={occ.occupied} total={occ.total} />
-                                    <div className="flex items-center gap-1 ml-auto" onClick={e => e.stopPropagation()}>
-                                      <button onClick={() => openEditRoom(room)} className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Edit room">
-                                        <Pencil className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button onClick={() => handleDeleteRoom(room)} className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-red-50 hover:text-red-600 transition-colors" title="Delete room">
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                  </div>
-
-                                  {/* Bed list */}
-                                  {isRoomExpanded && (
-                                    <div className="ml-10 mr-6 mb-3 rounded-lg border border-[#E8E3DB] divide-y divide-[#E8E3DB] overflow-hidden">
-                                      {beds.map(bed => (
-                                        <div key={bed.bedNumber} className="flex items-center gap-3 px-4 py-2 bg-white text-sm">
-                                          <span className="text-[#4A4A4A] w-12 shrink-0">Bed {bed.bedNumber}</span>
-                                          {bed.guestName ? (
-                                            <>
-                                              <div className="w-6 h-6 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-[10px] font-medium shrink-0">
-                                                {bed.guestName.charAt(0)}
-                                              </div>
-                                              <span className="font-medium text-[#1A1A1A] flex-1">{bed.guestName}</span>
-                                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">✓ Assigned</span>
-                                              <button
-                                                onClick={() => setMovePending({ roomId: room.id, bedNumber: bed.bedNumber, guestId: bed.guestId!, guestName: bed.guestName, familyMemberId: bed.familyMemberId })}
-                                                className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 transition-colors shrink-0"
-                                                title="Move guest to another room"
-                                              >
-                                                <MoveRight className="w-3.5 h-3.5" /> Move
-                                              </button>
-                                              <button
-                                                onClick={() => removeGuestFromRoom(room.id, bed.bedNumber)}
-                                                className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors shrink-0"
-                                                title="Remove guest from bed"
-                                              >
-                                                <UserX className="w-3.5 h-3.5" />
-                                              </button>
-                                            </>
-                                          ) : (
-                                            <span className="text-[#4A4A4A] italic">empty</span>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-                      )}
+                      {/* Room cards */}
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                        {groupRooms.map(room => {
+                          const occ = getOccupancy(room.id);
+                          const extras = roomExtras[room.id] ?? { status: 'available', notes: '' };
+                          return (
+                            <RoomCard
+                              key={room.id}
+                              room={room}
+                              blockName=""
+                              occupied={occ.occupied}
+                              total={occ.total}
+                              roomStatus={extras.status}
+                              isExpanded={expandedRoomId === room.id}
+                              onClick={() => {
+                                setExpandedRoomId(prev => prev === room.id ? null : room.id);
+                                setEditingNotes(false);
+                                setAddingNotes(false);
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })}
-
-                {/* Add Block button */}
-                <button
-                  onClick={openAddBlock}
-                  className="flex items-center gap-2 text-sm text-[#2D5A45] font-medium hover:underline"
-                >
-                  <Plus className="w-4 h-4" /> Add Block
-                </button>
-              </>
+              </div>
             )}
+
+            {/* ── Bed-Level View ── */}
+            {expandedRoom && expandedExtras && expandedOcc && (
+              <div className="bg-white rounded-xl border border-[#E8E3DB] overflow-hidden">
+                {/* Room header row */}
+                <div className="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-[#E8E3DB] bg-[#F9F8F6]">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-base text-[#1A1A1A]">{expandedRoom.name}</span>
+                      {expandedRoom.blockId && blockNameMap[expandedRoom.blockId] && (
+                        <span className="text-xs text-gray-400">· {blockNameMap[expandedRoom.blockId]}</span>
+                      )}
+                      <span className="text-xs text-[#4A4A4A]">· {expandedRoom.capacity} beds</span>
+                      <StatusBadge status={expandedExtras.status} />
+                    </div>
+                    {(expandedRoom.availableFrom || expandedRoom.availableTo) && (
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {expandedRoom.availableFrom && `From ${expandedRoom.availableFrom}`}
+                        {expandedRoom.availableFrom && expandedRoom.availableTo && ' · '}
+                        {expandedRoom.availableTo && `To ${expandedRoom.availableTo}`}
+                      </p>
+                    )}
+                  </div>
+                  <div className="ml-auto flex items-center gap-2">
+                    <button
+                      onClick={() => setExpandedRoomId(null)}
+                      className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      ✕ Close
+                    </button>
+                  </div>
+                </div>
+
+                {/* Notes bar */}
+                {expandedExtras.notes && !editingNotes && (
+                  <div className="flex items-start gap-3 px-5 py-3 bg-amber-50 border-b border-amber-200">
+                    <StickyNote className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                    <p className="text-sm text-amber-800 flex-1">{expandedExtras.notes}</p>
+                    <button
+                      onClick={openEditNotes}
+                      className="text-xs text-amber-700 hover:text-amber-900 font-medium shrink-0"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => clearNotes(expandedRoom.id)}
+                      className="text-xs text-amber-700 hover:text-amber-900 font-medium shrink-0"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+
+                {/* Edit notes inline */}
+                {editingNotes && (
+                  <div className="px-5 py-3 border-b border-[#E8E3DB] bg-amber-50 space-y-2">
+                    <Label className="text-xs text-[#4A4A4A]">Room Notes</Label>
+                    <textarea
+                      value={notesDraft}
+                      onChange={e => setNotesDraft(e.target.value)}
+                      rows={3}
+                      className="w-full border border-[#D4CFC7] rounded-lg px-3 py-2 text-sm text-[#1A1A1A] focus:outline-none focus:border-[#2D5A45] resize-none"
+                      placeholder="Add notes about this room…"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => saveNotes(expandedRoom.id, notesDraft)}
+                        className="bg-[#2D5A45] hover:bg-[#234839] text-white h-8 px-3 text-xs"
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setEditingNotes(false)}
+                        className="border-[#D4CFC7] text-[#4A4A4A] h-8 px-3 text-xs"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Beds */}
+                <div className="px-5 py-4">
+                  <div className="flex flex-wrap gap-3">
+                    {expandedBeds.map(bed => {
+                      const guestData = bed.guestId ? guests.find(g => g.id === bed.guestId) : null;
+                      const isAssigning = assigningBed?.roomId === expandedRoom.id && assigningBed.bedNumber === bed.bedNumber;
+
+                      if (bed.guestName) {
+                        return (
+                          <div
+                            key={bed.bedNumber}
+                            className="bg-[#D6E4D9] border border-[#2D5A45]/20 rounded-lg p-3 min-w-[140px] max-w-[200px] flex-1"
+                          >
+                            <p className="text-[10px] text-[#4A4A4A] mb-1">Bed {bed.bedNumber}</p>
+                            <p className="font-semibold text-sm text-[#1A1A1A] leading-tight">{bed.guestName}</p>
+                            {guestData && (
+                              <p className="text-xs text-[#4A4A4A] mt-0.5">{guestData.country}</p>
+                            )}
+                            {guestData?.arrivalTime && (
+                              <p className="text-[10px] text-gray-400 mt-0.5">Arrival: {guestData.arrivalTime}</p>
+                            )}
+                            <div className="flex items-center gap-1.5 mt-2">
+                              <button
+                                onClick={() => openMoveDialog({
+                                  roomId: expandedRoom.id,
+                                  bedNumber: bed.bedNumber,
+                                  guestId: bed.guestId!,
+                                  guestName: bed.guestName!,
+                                  familyMemberId: bed.familyMemberId,
+                                })}
+                                className="flex items-center gap-1 text-[10px] text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                              >
+                                <MoveRight className="w-3 h-3" /> Move
+                              </button>
+                              <span className="text-gray-300">|</span>
+                              <button
+                                onClick={() => removeGuestFromRoom(expandedRoom.id, bed.bedNumber)}
+                                className="text-[10px] text-red-500 hover:text-red-700 font-medium transition-colors flex items-center gap-0.5"
+                              >
+                                <UserX className="w-3 h-3" /> Remove
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // Empty bed
+                      return (
+                        <div
+                          key={bed.bedNumber}
+                          className="bg-gray-50 border border-dashed border-gray-300 rounded-lg p-3 min-w-[140px] max-w-[200px] flex-1"
+                        >
+                          <p className="text-[10px] text-[#4A4A4A] mb-1">Bed {bed.bedNumber}</p>
+                          <p className="text-xs text-gray-400 italic mb-2">empty</p>
+
+                          {isAssigning ? (
+                            <div className="space-y-1.5">
+                              <select
+                                value={assignGuestId}
+                                onChange={e => setAssignGuestId(e.target.value)}
+                                className="w-full border border-[#D4CFC7] rounded px-2 py-1 text-xs text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45]"
+                              >
+                                <option value="">Select guest…</option>
+                                {assignableGuests.map(g => (
+                                  <option key={g.id} value={g.id}>{g.fullName}</option>
+                                ))}
+                              </select>
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={handleAssignGuest}
+                                  className="flex-1 text-[10px] font-medium bg-[#2D5A45] text-white rounded px-2 py-1 hover:bg-[#234839] transition-colors"
+                                >
+                                  Assign
+                                </button>
+                                <button
+                                  onClick={() => { setAssigningBed(null); setAssignGuestId(''); }}
+                                  className="text-[10px] text-gray-500 hover:text-gray-700 px-1"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setAssigningBed({ roomId: expandedRoom.id, bedNumber: bed.bedNumber });
+                                setAssignGuestId('');
+                              }}
+                              className="text-[10px] font-medium text-[#2D5A45] hover:underline"
+                            >
+                              + Assign
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Add notes inline */}
+                {addingNotes && !editingNotes && (
+                  <div className="px-5 pb-4 space-y-2">
+                    <Label className="text-xs text-[#4A4A4A]">Add Notes</Label>
+                    <textarea
+                      value={addNotesDraft}
+                      onChange={e => setAddNotesDraft(e.target.value)}
+                      rows={3}
+                      className="w-full border border-[#D4CFC7] rounded-lg px-3 py-2 text-sm text-[#1A1A1A] focus:outline-none focus:border-[#2D5A45] resize-none"
+                      placeholder="Add notes about this room…"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => { saveNotes(expandedRoom.id, addNotesDraft); setAddNotesDraft(''); }}
+                        className="bg-[#2D5A45] hover:bg-[#234839] text-white h-8 px-3 text-xs"
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => { setAddingNotes(false); setAddNotesDraft(''); }}
+                        className="border-[#D4CFC7] text-[#4A4A4A] h-8 px-3 text-xs"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Bottom action row */}
+                <div className="flex items-center gap-3 px-5 py-3 border-t border-[#E8E3DB] bg-[#F9F8F6]">
+                  <select
+                    value={expandedExtras.status}
+                    onChange={e => changeRoomStatus(expandedRoom.id, e.target.value as RoomStatus)}
+                    className="border border-[#D4CFC7] rounded-lg px-3 py-1.5 text-xs text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45] h-8"
+                  >
+                    <option value="available">Available</option>
+                    <option value="maintenance">Maintenance</option>
+                    <option value="cleaning">Cleaning</option>
+                    <option value="reserved">Reserved</option>
+                  </select>
+                  <span className="text-xs text-gray-400">Change Status</span>
+                  <div className="flex-1" />
+                  <Button
+                    variant="outline"
+                    onClick={() => openEditRoom(expandedRoom)}
+                    className="border-[#D4CFC7] text-[#4A4A4A] h-8 px-3 text-xs flex items-center gap-1.5"
+                  >
+                    <Pencil className="w-3 h-3" /> Edit Room
+                  </Button>
+                  {!addingNotes && !editingNotes && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (expandedExtras.notes) { openEditNotes(); }
+                        else { setAddingNotes(true); setAddNotesDraft(''); }
+                      }}
+                      className="border-[#D4CFC7] text-[#4A4A4A] h-8 px-3 text-xs flex items-center gap-1.5"
+                    >
+                      <StickyNote className="w-3 h-3" /> {expandedExtras.notes ? 'Edit Notes' : 'Add Notes'}
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    onClick={() => handleDeleteRoom(expandedRoom)}
+                    className="border-red-200 text-red-600 hover:bg-red-50 h-8 px-3 text-xs flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3 h-3" /> Delete
+                  </Button>
+                </div>
+              </div>
+            )}
+
           </div>
         </main>
       </div>
 
-      {/* Add/Edit Dialog */}
+      {/* ── Add/Edit Room or Block Dialog ── */}
       <Dialog open={dialogMode !== null} onOpenChange={o => { if (!o) setDialogMode(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -367,7 +921,8 @@ export default function LocationRoomsPage() {
           <div className="space-y-4 py-1">
             <div>
               <Label className="text-xs text-[#4A4A4A] mb-1 block">
-                {dialogMode?.includes('Block') ? 'Block Name' : 'Room Name'}<span className="text-red-500 ml-0.5">*</span>
+                {dialogMode?.includes('Block') ? 'Block Name' : 'Room Name'}
+                <span className="text-red-500 ml-0.5">*</span>
               </Label>
               <Input
                 value={formName}
@@ -380,7 +935,9 @@ export default function LocationRoomsPage() {
             {(dialogMode === 'addRoom' || dialogMode === 'editRoom') && (
               <>
                 <div>
-                  <Label className="text-xs text-[#4A4A4A] mb-1 block">Capacity (beds)<span className="text-red-500 ml-0.5">*</span></Label>
+                  <Label className="text-xs text-[#4A4A4A] mb-1 block">
+                    Capacity (beds)<span className="text-red-500 ml-0.5">*</span>
+                  </Label>
                   <Input
                     type="number" min={1} max={20}
                     value={formCapacity}
@@ -402,13 +959,21 @@ export default function LocationRoomsPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-xs text-[#4A4A4A] mb-1 block">Available From</Label>
-                    <Input type="date" value={formAvailFrom} onChange={e => setFormAvailFrom(e.target.value)}
-                      className="border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm" />
+                    <Input
+                      type="date"
+                      value={formAvailFrom}
+                      onChange={e => setFormAvailFrom(e.target.value)}
+                      className="border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm"
+                    />
                   </div>
                   <div>
                     <Label className="text-xs text-[#4A4A4A] mb-1 block">Available To</Label>
-                    <Input type="date" value={formAvailTo} onChange={e => setFormAvailTo(e.target.value)}
-                      className="border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm" />
+                    <Input
+                      type="date"
+                      value={formAvailTo}
+                      onChange={e => setFormAvailTo(e.target.value)}
+                      className="border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm"
+                    />
                   </div>
                 </div>
                 <p className="text-xs text-gray-400">Leave blank if always available.</p>
@@ -417,16 +982,28 @@ export default function LocationRoomsPage() {
             {formError && <p className="text-xs text-red-600">{formError}</p>}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogMode(null)} className="border-[#D4CFC7] text-[#4A4A4A] h-9 text-sm">Cancel</Button>
-            <Button onClick={handleDialogSave} className="bg-[#2D5A45] hover:bg-[#234839] text-white h-9 text-sm">
+            <Button
+              variant="outline"
+              onClick={() => setDialogMode(null)}
+              className="border-[#D4CFC7] text-[#4A4A4A] h-9 text-sm"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDialogSave}
+              className="bg-[#2D5A45] hover:bg-[#234839] text-white h-9 text-sm"
+            >
               {dialogMode?.startsWith('edit') ? 'Save Changes' : dialogMode?.includes('Block') ? 'Add Block' : 'Add Room'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={o => { if (!o) { setDeleteTarget(null); setDeleteType(null); } }}>
+      {/* ── Delete confirmation ── */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={o => { if (!o) { setDeleteTarget(null); setDeleteType(null); } }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {deleteType === 'block' ? 'Block' : 'Room'}</AlertDialogTitle>
@@ -436,34 +1013,263 @@ export default function LocationRoomsPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700 text-white">Delete</AlertDialogAction>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Delete
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Move guest dialog */}
-      <Dialog open={!!movePending} onOpenChange={o => { if (!o) { setMovePending(null); setMoveToRoomId(''); } }}>
-        <DialogContent className="max-w-sm">
+      {/* ── Move Guest Dialog ── */}
+      <Dialog
+        open={!!movePending}
+        onOpenChange={o => { if (!o) setMovePending(null); }}
+      >
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-[#1A1A1A]">Move Guest</DialogTitle>
+            <DialogTitle className="text-[#1A1A1A]">
+              Move Guest — {movePending?.guestName}
+            </DialogTitle>
           </DialogHeader>
-          <div className="py-1 space-y-3">
-            <p className="text-sm text-[#1A1A1A]">Move <strong>{movePending?.guestName}</strong> to:</p>
-            <select
-              value={moveToRoomId}
-              onChange={e => setMoveToRoomId(e.target.value)}
-              className="w-full border border-[#D4CFC7] rounded-md px-3 py-2 text-sm text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45]"
-            >
-              <option value="">Select room…</option>
-              {moveableRooms.map(r => {
-                const occ = getOccupancy(r.id);
-                return <option key={r.id} value={r.id}>{r.name} ({occ.occupied}/{occ.total})</option>;
-              })}
-            </select>
+          <div className="py-2 space-y-4">
+            {/* Mode selection */}
+            <div className="space-y-2">
+              <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border border-[#E8E3DB] hover:border-[#2D5A45] transition-colors">
+                <input
+                  type="radio"
+                  name="moveMode"
+                  value="same-room"
+                  checked={moveMode === 'same-room'}
+                  onChange={() => { setMoveMode('same-room'); setMoveToBedNumber(0); }}
+                  className="accent-[#2D5A45]"
+                />
+                <div>
+                  <p className="text-sm font-medium text-[#1A1A1A]">Same room — different bed</p>
+                  <p className="text-xs text-gray-400">Move within the same room</p>
+                </div>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border border-[#E8E3DB] hover:border-[#2D5A45] transition-colors">
+                <input
+                  type="radio"
+                  name="moveMode"
+                  value="different-room"
+                  checked={moveMode === 'different-room'}
+                  onChange={() => { setMoveMode('different-room'); setMoveToRoomId(''); setMoveToDiffBed(0); }}
+                  className="accent-[#2D5A45]"
+                />
+                <div>
+                  <p className="text-sm font-medium text-[#1A1A1A]">Different room</p>
+                  <p className="text-xs text-gray-400">Move to another room in this location</p>
+                </div>
+              </label>
+            </div>
+
+            {/* Same room — bed select */}
+            {moveMode === 'same-room' && (
+              <div>
+                <Label className="text-xs text-[#4A4A4A] mb-1 block">Select bed</Label>
+                <select
+                  value={moveToBedNumber}
+                  onChange={e => setMoveToBedNumber(Number(e.target.value))}
+                  className="w-full border border-[#D4CFC7] rounded-md px-3 py-2 text-sm text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45]"
+                >
+                  <option value={0}>Select bed…</option>
+                  {sameBedOptions.map(b => (
+                    <option key={b.bedNumber} value={b.bedNumber}>Bed {b.bedNumber}</option>
+                  ))}
+                </select>
+                {sameBedOptions.length === 0 && (
+                  <p className="text-xs text-amber-600 mt-1">No other available beds in this room.</p>
+                )}
+              </div>
+            )}
+
+            {/* Different room — room + bed select */}
+            {moveMode === 'different-room' && (
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-[#4A4A4A] mb-1 block">Select room</Label>
+                  <select
+                    value={moveToRoomId}
+                    onChange={e => { setMoveToRoomId(e.target.value); setMoveToDiffBed(0); }}
+                    className="w-full border border-[#D4CFC7] rounded-md px-3 py-2 text-sm text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45]"
+                  >
+                    <option value="">Select room…</option>
+                    {moveableRooms.map(r => {
+                      const occ = getOccupancy(r.id);
+                      return (
+                        <option key={r.id} value={r.id}>
+                          {r.name} ({occ.occupied}/{occ.total})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                {moveToRoomId && (
+                  <div>
+                    <Label className="text-xs text-[#4A4A4A] mb-1 block">Select bed</Label>
+                    <select
+                      value={moveToDiffBed}
+                      onChange={e => setMoveToDiffBed(Number(e.target.value))}
+                      className="w-full border border-[#D4CFC7] rounded-md px-3 py-2 text-sm text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45]"
+                    >
+                      <option value={0}>Select bed…</option>
+                      {diffRoomBedOptions.map(b => (
+                        <option key={b.bedNumber} value={b.bedNumber}>Bed {b.bedNumber}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setMovePending(null); setMoveToRoomId(''); }} className="border-[#D4CFC7] text-[#4A4A4A] h-9 text-sm">Cancel</Button>
-            <Button disabled={!moveToRoomId} onClick={handleConfirmMove} className="bg-[#2D5A45] hover:bg-[#234839] text-white h-9 text-sm">Move Guest</Button>
+            <Button
+              variant="outline"
+              onClick={() => setMovePending(null)}
+              className="border-[#D4CFC7] text-[#4A4A4A] h-9 text-sm"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmMove}
+              disabled={moveMode === 'same-room' ? !moveToBedNumber : (!moveToRoomId || !moveToDiffBed)}
+              className="bg-[#2D5A45] hover:bg-[#234839] text-white h-9 text-sm"
+            >
+              Move Guest
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Manage Blocks Dialog ── */}
+      <Dialog open={manageBlocksOpen} onOpenChange={setManageBlocksOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-[#1A1A1A]">Manage Blocks</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            {locBlocks.length === 0 ? (
+              <p className="text-sm text-[#4A4A4A] text-center py-4">No blocks yet.</p>
+            ) : (
+              <div className="rounded-lg border border-[#E8E3DB] overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-[#F5F0E8] border-b border-[#E8E3DB]">
+                      <th className="text-left px-4 py-2.5 font-semibold text-[#4A4A4A] text-xs uppercase tracking-wider">Block Name</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-[#4A4A4A] text-xs uppercase tracking-wider">Rooms</th>
+                      <th className="px-4 py-2.5 text-xs uppercase tracking-wider text-right"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E8E3DB]">
+                    {locBlocks.map(block => {
+                      const blockRoomCount = rooms.filter(r => r.blockId === block.id).length;
+                      const isEditingThis = editingBlockId === block.id;
+                      return (
+                        <tr key={block.id} className="bg-white">
+                          <td className="px-4 py-2.5">
+                            {isEditingThis ? (
+                              <Input
+                                value={editingBlockName}
+                                onChange={e => setEditingBlockName(e.target.value)}
+                                className="border-[#D4CFC7] focus:border-[#2D5A45] h-8 text-sm w-full"
+                                autoFocus
+                                onKeyDown={e => { if (e.key === 'Enter') handleSaveEditBlock(block.id); if (e.key === 'Escape') setEditingBlockId(null); }}
+                              />
+                            ) : (
+                              <span className="font-medium text-[#1A1A1A]">{block.name}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 text-[#4A4A4A]">{blockRoomCount}</td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-1 justify-end">
+                              {isEditingThis ? (
+                                <>
+                                  <button
+                                    onClick={() => handleSaveEditBlock(block.id)}
+                                    className="text-xs text-[#2D5A45] font-medium hover:underline"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingBlockId(null)}
+                                    className="text-xs text-gray-400 hover:text-gray-600 ml-1"
+                                  >
+                                    Cancel
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => { setEditingBlockId(block.id); setEditingBlockName(block.name); }}
+                                    className="p-1.5 rounded text-[#4A4A4A] hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteBlock(block)}
+                                    disabled={blockRoomCount > 0}
+                                    className="p-1.5 rounded text-[#4A4A4A] hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                    title={blockRoomCount > 0 ? 'Remove all rooms first' : 'Delete block'}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Add block inline */}
+            {addingBlock ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={newBlockName}
+                  onChange={e => setNewBlockName(e.target.value)}
+                  placeholder="Block name…"
+                  className="border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm flex-1"
+                  autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') handleSaveNewBlock(); if (e.key === 'Escape') { setAddingBlock(false); setNewBlockName(''); } }}
+                />
+                <Button
+                  onClick={handleSaveNewBlock}
+                  className="bg-[#2D5A45] hover:bg-[#234839] text-white h-9 px-4 text-sm"
+                >
+                  Add
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => { setAddingBlock(false); setNewBlockName(''); }}
+                  className="border-[#D4CFC7] text-[#4A4A4A] h-9 text-sm"
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setAddingBlock(true)}
+                className="flex items-center gap-2 text-sm text-[#2D5A45] font-medium hover:underline"
+              >
+                <Plus className="w-4 h-4" /> Add Block
+              </button>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => setManageBlocksOpen(false)}
+              className="bg-[#2D5A45] hover:bg-[#234839] text-white h-9 text-sm"
+            >
+              Done
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
