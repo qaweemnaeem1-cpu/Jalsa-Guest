@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Inbox, Eye, Check, Search, Users, AlertTriangle } from 'lucide-react';
+import { ChevronDown, Inbox, Eye, MapPin, Search, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -8,43 +8,40 @@ import { DeptUserMenu } from '@/components/DeptUserMenu';
 import { useDepartments } from '@/hooks/useDepartments';
 import { useAuditTrail2 } from '@/hooks/useAuditTrail2';
 import { GuestViewModal } from '@/components/GuestViewModal';
+import { PlaceGuestDialog } from '@/components/PlaceGuestDialog';
 import { FamilyBadge, type FamilyMemberInfo } from '@/components/FamilyBadge';
 import { Input } from '@/components/ui/input';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import type { Guest } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { formatDesignation } from '@/lib/constants';
 
-// ── Location colour palette ──────────────────────────────────────────────────
+// ── Location colour palette ───────────────────────────────────────────────────
 const LOCATION_COLORS = [
-  { dot: 'bg-blue-500',   ring: 'ring-blue-200',   text: 'text-blue-700',   bg: 'bg-blue-50'   },
-  { dot: 'bg-purple-500', ring: 'ring-purple-200', text: 'text-purple-700', bg: 'bg-purple-50' },
-  { dot: 'bg-teal-500',   ring: 'ring-teal-200',   text: 'text-teal-700',   bg: 'bg-teal-50'   },
-  { dot: 'bg-orange-500', ring: 'ring-orange-200', text: 'text-orange-700', bg: 'bg-orange-50' },
-  { dot: 'bg-rose-500',   ring: 'ring-rose-200',   text: 'text-rose-700',   bg: 'bg-rose-50'   },
+  { dot: 'bg-blue-500' },
+  { dot: 'bg-purple-500' },
+  { dot: 'bg-teal-500' },
+  { dot: 'bg-orange-500' },
+  { dot: 'bg-rose-500' },
 ];
 
-// A flattened row representing a single person (head or family member)
+function getLocColor(locations: string[], loc: string) {
+  const idx = locations.indexOf(loc);
+  return LOCATION_COLORS[(idx >= 0 ? idx : 0) % LOCATION_COLORS.length];
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
 interface PersonRow {
   rowKey: string;
   guestId: string;
-  memberId: string | null; // null = the head guest itself
+  memberId: string | null;
   name: string;
   country: string;
   referenceNumber: string;
   relationship: string;
   isFamily: boolean;
   familyLastName: string;
-  familyGroupId: string; // = guestId, used to cluster siblings
+  familyGroupId: string;
   familyAllMembers: FamilyMemberInfo[];
   assignedDepartmentAt?: string;
   status: string;
@@ -54,8 +51,18 @@ interface PersonRow {
   departureTime?: string;
   departureAirport?: string;
   designation: string | string[];
-  roomAssignment?: string;
 }
+
+type RoomOption = {
+  id: string;
+  name: string;
+  capacity: number;
+  occupancy: number;
+  available_from?: string;
+  available_to?: string;
+};
+
+// ── Build helpers ─────────────────────────────────────────────────────────────
 
 function buildFamilyMemberListFromGroup(allGuests: Guest[], familyGroupId: string): FamilyMemberInfo[] {
   return allGuests
@@ -70,107 +77,66 @@ function buildFamilyMemberListFromGroup(allGuests: Guest[], familyGroupId: strin
 }
 
 function buildFamilyMemberList(g: Guest): FamilyMemberInfo[] {
-  const head: FamilyMemberInfo = {
-    name: g.fullName,
-    relationship: 'Head',
-    status: g.status,
-    assignedDepartment: g.assignedDepartment,
-    placedLocation: g.placedLocation,
-  };
-  const rest: FamilyMemberInfo[] = (g.familyMembers ?? []).map(m => ({
-    name: m.name,
-    relationship: m.relationship,
-    status: m.status ?? g.status,
-    assignedDepartment: m.assignedDepartment,
-    placedLocation: m.placedLocation,
-  }));
-  return [head, ...rest];
+  return [
+    { name: g.fullName, relationship: 'Head', status: g.status, assignedDepartment: g.assignedDepartment, placedLocation: g.placedLocation },
+    ...(g.familyMembers ?? []).map(m => ({
+      name: m.name, relationship: m.relationship,
+      status: m.status ?? g.status,
+      assignedDepartment: m.assignedDepartment, placedLocation: m.placedLocation,
+    })),
+  ];
 }
 
 function buildRows(guests: Guest[], dept: string): PersonRow[] {
   const rows: PersonRow[] = [];
   for (const g of guests) {
-    // New model: guest has familyGroupId — it IS its own row
     if (g.familyGroupId) {
       if (g.assignedDepartment === dept && !g.placedLocation) {
         const lastName = (g.familyName ?? g.fullName).replace(' Family', '').split(' ').pop() ?? g.fullName;
         rows.push({
-          rowKey: g.id,
-          guestId: g.id,
-          memberId: null,
-          name: g.fullName,
-          country: g.country,
-          referenceNumber: g.referenceNumber,
+          rowKey: g.id, guestId: g.id, memberId: null,
+          name: g.fullName, country: g.country, referenceNumber: g.referenceNumber,
           relationship: g.isHeadOfFamily ? 'Head' : (g.relationship ?? '—'),
-          isFamily: true,
-          familyLastName: lastName,
+          isFamily: true, familyLastName: lastName,
           familyGroupId: g.familyGroupId,
           familyAllMembers: buildFamilyMemberListFromGroup(guests, g.familyGroupId),
-          assignedDepartmentAt: g.assignedDepartmentAt,
-          status: g.status,
-          arrivalTime: g.arrivalTime,
-          arrivalAirport: g.arrivalAirport,
+          assignedDepartmentAt: g.assignedDepartmentAt, status: g.status,
+          arrivalTime: g.arrivalTime, arrivalAirport: g.arrivalAirport,
           arrivalFlightNumber: g.arrivalFlightNumber,
-          departureTime: g.departureTime,
-          departureAirport: g.departureAirport,
+          departureTime: g.departureTime, departureAirport: g.departureAirport,
           designation: g.designation,
         });
       }
       continue;
     }
-
-    // Old model: single guest row with familyMembers sub-array
     const isFamily = g.guestType === 'family' && (g.familyMembers?.length ?? 0) > 0;
     const lastName = g.fullName.split(' ').pop() ?? g.fullName;
     const familyAllMembers = isFamily ? buildFamilyMemberList(g) : [];
-
     if (g.assignedDepartment === dept && !g.placedLocation) {
       rows.push({
-        rowKey: g.id,
-        guestId: g.id,
-        memberId: null,
-        name: g.fullName,
-        country: g.country,
-        referenceNumber: g.referenceNumber,
+        rowKey: g.id, guestId: g.id, memberId: null,
+        name: g.fullName, country: g.country, referenceNumber: g.referenceNumber,
         relationship: isFamily ? 'Head' : 'Individual',
-        isFamily,
-        familyLastName: lastName,
-        familyGroupId: g.id,
-        familyAllMembers,
-        assignedDepartmentAt: g.assignedDepartmentAt,
-        status: g.status,
-        arrivalTime: g.arrivalTime,
-        arrivalAirport: g.arrivalAirport,
+        isFamily, familyLastName: lastName, familyGroupId: g.id, familyAllMembers,
+        assignedDepartmentAt: g.assignedDepartmentAt, status: g.status,
+        arrivalTime: g.arrivalTime, arrivalAirport: g.arrivalAirport,
         arrivalFlightNumber: g.arrivalFlightNumber,
-        departureTime: g.departureTime,
-        departureAirport: g.departureAirport,
+        departureTime: g.departureTime, departureAirport: g.departureAirport,
         designation: g.designation,
       });
     }
-
     if (isFamily) {
       for (const m of g.familyMembers ?? []) {
         if (m.assignedDepartment === dept && !m.placedLocation) {
           rows.push({
-            rowKey: `${g.id}-${m.id}`,
-            guestId: g.id,
-            memberId: m.id,
-            name: m.name,
-            country: g.country,
-            referenceNumber: g.referenceNumber,
+            rowKey: `${g.id}-${m.id}`, guestId: g.id, memberId: m.id,
+            name: m.name, country: g.country, referenceNumber: g.referenceNumber,
             relationship: m.relationship,
-            isFamily: true,
-            familyLastName: lastName,
-            familyGroupId: g.id,
-            familyAllMembers,
-            assignedDepartmentAt: m.assignedDepartmentAt,
-            status: m.status ?? g.status,
-            // Family members inherit flight info from parent guest
-            arrivalTime: g.arrivalTime,
-            arrivalAirport: g.arrivalAirport,
+            isFamily: true, familyLastName: lastName, familyGroupId: g.id, familyAllMembers,
+            assignedDepartmentAt: m.assignedDepartmentAt, status: m.status ?? g.status,
+            arrivalTime: g.arrivalTime, arrivalAirport: g.arrivalAirport,
             arrivalFlightNumber: g.arrivalFlightNumber,
-            departureTime: g.departureTime,
-            departureAirport: g.departureAirport,
+            departureTime: g.departureTime, departureAirport: g.departureAirport,
             designation: g.designation,
           });
         }
@@ -180,19 +146,7 @@ function buildRows(guests: Guest[], dept: string): PersonRow[] {
   return rows;
 }
 
-interface PendingPlacement {
-  rowKey: string;
-  guestId: string;
-  memberId: string | null;
-  name: string;
-  location: string;
-}
-
-interface BulkPending {
-  guestId: string;
-  location: string;
-  rows: PersonRow[];
-}
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function DeptIncomingPage() {
   const { user } = useAuth();
@@ -201,31 +155,25 @@ export default function DeptIncomingPage() {
   const { addEntry: addEntry2 } = useAuditTrail2();
 
   const [viewGuestId, setViewGuestId] = useState<string | null>(null);
-  const [pendingPlacement, setPendingPlacement] = useState<PendingPlacement | null>(null);
-  const [bulkPending, setBulkPending] = useState<BulkPending | null>(null);
-  const [selectedLocations, setSelectedLocations] = useState<Record<string, string>>({});
-  const [bulkLocations, setBulkLocations] = useState<Record<string, string>>({});
+  const [placeDialogRow, setPlaceDialogRow] = useState<PersonRow | null>(null);
   const [search, setSearch] = useState('');
 
-  const [selectedRooms, setSelectedRooms] = useState<Record<string, string>>({}); // rowKey → roomId
-  const [roomsByLocation, setRoomsByLocation] = useState<Record<string, Array<{
-    id: string; name: string; capacity: number; available_from?: string; available_to?: string; occupancy: number;
-  }>>>({}); // locationName → rooms
-  const [dateMismatch, setDateMismatch] = useState<{
-    rowKey: string; guestId: string; memberId: string | null; name: string;
-    roomId: string; roomName: string;
-    guestArrival?: string; guestDeparture?: string;
-    roomFrom?: string; roomTo?: string;
-  } | null>(null);
-  const [openLocationDropdown, setOpenLocationDropdown] = useState<string | null>(null);
+  // Inline dropdown state
+  const [selectedLocations, setSelectedLocations] = useState<Record<string, string>>({});
+  const [selectedRooms, setSelectedRooms] = useState<Record<string, string>>({});
+  const [roomsByLocation, setRoomsByLocation] = useState<Record<string, RoomOption[]>>({});
+  const [openLocDropdown, setOpenLocDropdown] = useState<string | null>(null);
   const [openRoomDropdown, setOpenRoomDropdown] = useState<string | null>(null);
+  const [placingRows, setPlacingRows] = useState<Set<string>>(new Set());
+  const [dialogSaving, setDialogSaving] = useState(false);
+
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdowns on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpenLocationDropdown(null);
+        setOpenLocDropdown(null);
         setOpenRoomDropdown(null);
       }
     };
@@ -235,11 +183,6 @@ export default function DeptIncomingPage() {
 
   const dept = user?.department ?? '';
   const locations = departments[dept] ?? [];
-
-  const getLocationColor = useCallback((loc: string) => {
-    const idx = locations.indexOf(loc);
-    return LOCATION_COLORS[(idx >= 0 ? idx : 0) % LOCATION_COLORS.length];
-  }, [locations]);
 
   const allRows = useMemo(() => buildRows(guests, dept), [guests, dept]);
 
@@ -254,7 +197,6 @@ export default function DeptIncomingPage() {
     );
   }, [allRows, search]);
 
-  // Precompute group metadata for bulk banner
   const groupMeta = useMemo(() => {
     const counts = new Map<string, number>();
     const firstRowKey = new Map<string, string>();
@@ -267,210 +209,232 @@ export default function DeptIncomingPage() {
     return { counts, firstRowKey };
   }, [filteredRows]);
 
+  const guestCountByLocation = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const loc of locations) {
+      counts[loc] = guests.filter(g => g.placedLocation === loc && g.assignedDepartment === dept).length;
+    }
+    return counts;
+  }, [guests, locations, dept]);
+
   const viewGuest = useMemo(
     () => guests.find(g => g.id === viewGuestId) ?? null,
     [guests, viewGuestId],
   );
 
-  // Fetch rooms whenever a location is selected for any row
-  useEffect(() => {
-    for (const locationName of Object.values(selectedLocations)) {
-      if (locationName) {
-        fetchRoomsForLocation(locationName);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLocations]);
+  // ── Room fetching ────────────────────────────────────────────────────────────
 
-  const fetchRoomsForLocation = async (locationName: string) => {
+  const fetchRoomsForLocation = useCallback(async (locationName: string) => {
     if (roomsByLocation[locationName]) return; // cached
-    const { data } = await supabase
+
+    const { data: locData } = await supabase
+      .from('locations').select('id').eq('name', locationName).maybeSingle();
+    if (!locData?.id) {
+      setRoomsByLocation(prev => ({ ...prev, [locationName]: [] }));
+      return;
+    }
+
+    const { data: roomData } = await supabase
       .from('rooms')
       .select('id, name, capacity, available_from, available_to')
+      .eq('location_id', locData.id)
       .eq('is_active', true)
       .order('name');
-    if (!data) return;
-    // Filter by location — rooms table has location_id which may be a UUID or name
-    // Fetch the location id first
-    const { data: locData } = await supabase
-      .from('locations')
-      .select('id')
-      .eq('name', locationName)
-      .maybeSingle();
-    const locationId = locData?.id;
-    const filtered = locationId
-      ? data.filter((r: any) => r.location_id === locationId)
-      : data;
-    // Get occupancy counts
-    const { data: beds } = await supabase
-      .from('bed_assignments')
-      .select('room_id');
+
+    if (!roomData) return;
+
+    const roomIds = roomData.map((r: any) => r.id);
+    const { data: beds } = roomIds.length
+      ? await supabase.from('bed_assignments').select('room_id').in('room_id', roomIds)
+      : { data: [] };
     const occMap: Record<string, number> = {};
-    if (beds) { for (const b of beds) { occMap[b.room_id] = (occMap[b.room_id] ?? 0) + 1; } }
+    if (beds) for (const b of beds) occMap[b.room_id] = (occMap[b.room_id] ?? 0) + 1;
+
     setRoomsByLocation(prev => ({
       ...prev,
-      [locationName]: filtered.map((r: any) => ({
+      [locationName]: roomData.map((r: any) => ({
         id: r.id, name: r.name, capacity: r.capacity,
+        occupancy: occMap[r.id] ?? 0,
         available_from: r.available_from ?? undefined,
         available_to: r.available_to ?? undefined,
-        occupancy: occMap[r.id] ?? 0,
       })),
     }));
-  };
+  }, [roomsByLocation]);
 
-  const assignRoom = async (row: PersonRow, roomId: string) => {
-    const locationName = selectedLocations[row.rowKey] ?? '';
-    const rooms = roomsByLocation[locationName] ?? [];
-    const room = rooms.find(r => r.id === roomId);
-    if (!room) return;
+  // ── Place action ─────────────────────────────────────────────────────────────
 
+  const handlePlace = useCallback(async (row: PersonRow) => {
+    const locationName = selectedLocations[row.rowKey];
+    if (!locationName || !user) return;
+
+    const roomId = selectedRooms[row.rowKey];
+    const locRooms = roomsByLocation[locationName] ?? [];
+    const room = locRooms.find(r => r.id === roomId);
+    const now = new Date().toISOString();
     const guest = guests.find(g => g.id === row.guestId);
 
-    // Date mismatch check
-    const guestArrival = guest?.arrivalTime?.substring(0, 10); // YYYY-MM-DD
-    const guestDeparture = guest?.departureTime?.substring(0, 10);
-    const mismatch = (room.available_from && guestArrival && guestArrival < room.available_from) ||
-      (room.available_to && guestDeparture && guestDeparture > room.available_to);
+    setPlacingRows(prev => new Set([...prev, row.rowKey]));
 
-    if (mismatch) {
-      setDateMismatch({
-        rowKey: row.rowKey, guestId: row.guestId, memberId: row.memberId, name: row.name,
-        roomId, roomName: room.name,
-        guestArrival, guestDeparture,
-        roomFrom: room.available_from, roomTo: room.available_to,
-      });
-      return;
-    }
+    try {
+      if (room) {
+        // Check capacity
+        const { data: existingBeds } = await supabase
+          .from('bed_assignments').select('bed_number').eq('room_id', room.id);
+        const nextBed = (existingBeds?.length ?? 0) + 1;
+        if (nextBed > room.capacity) {
+          toast.error('Room is full');
+          return;
+        }
 
-    await doAssignRoom(row, roomId, room.name, room.capacity);
-  };
+        // Date mismatch — warn but proceed
+        const guestArrival = row.arrivalTime?.substring(0, 10);
+        const guestDeparture = row.departureTime?.substring(0, 10);
+        if (
+          (room.available_from && guestArrival && guestArrival < room.available_from) ||
+          (room.available_to && guestDeparture && guestDeparture > room.available_to)
+        ) {
+          toast.warning(
+            `Date mismatch: guest stay may be outside room availability (${room.available_from ?? '?'} – ${room.available_to ?? '?'})`,
+            { duration: 6000 },
+          );
+        }
 
-  const doAssignRoom = async (row: PersonRow, roomId: string, roomName: string, roomCapacity: number) => {
-    if (!user) return;
-
-    // Find next bed
-    const { data: beds } = await supabase
-      .from('bed_assignments')
-      .select('bed_number')
-      .eq('room_id', roomId);
-    const nextBed = (beds?.length ?? 0) + 1;
-    if (nextBed > roomCapacity) {
-      toast.error('Room is full');
-      return;
-    }
-
-    const now = new Date().toISOString();
-
-    // Insert bed_assignment
-    await supabase.from('bed_assignments').insert({
-      room_id: roomId,
-      bed_number: nextBed,
-      guest_id: row.guestId,
-      guest_name: row.name,
-      assigned_at: now,
-    });
-
-    // Update guest
-    await supabase.from('guests').update({
-      room_assignment: roomName,
-      status: 'Accommodated',
-      accommodated_at: now,
-      accommodated_by: user.id,
-    }).eq('id', row.guestId);
-
-    // Update local state via updateGuest
-    updateGuest(row.guestId, {
-      roomAssignment: roomName,
-      status: 'Accommodated',
-      accommodatedAt: now,
-      accommodatedBy: user.id,
-    });
-
-    toast.success(`${row.name} assigned to ${roomName} (Bed ${nextBed})`);
-    setSelectedRooms(prev => { const n = { ...prev }; delete n[row.rowKey]; return n; });
-
-    // Invalidate room cache for this location
-    const locationName = selectedLocations[row.rowKey] ?? '';
-    setRoomsByLocation(prev => { const n = { ...prev }; delete n[locationName]; return n; });
-  };
-
-  const handleConfirmPlacement = () => {
-    if (!pendingPlacement || !user) return;
-    const { guestId, memberId, location, name } = pendingPlacement;
-    const guest = guests.find(g => g.id === guestId);
-    if (memberId) {
-      placeFamilyMember(guestId, memberId, location);
-    } else {
-      updateGuest(guestId, {
-        status: 'Placed',
-        placedLocation: location,
-        placedAt: new Date().toISOString(),
-        placedBy: user.id,
-      });
-    }
-    if (guest) {
-      addEntry2({
-        guestId, guestName: name, guestReference: guest.referenceNumber,
-        locationId: location, locationName: location,
-        departmentId: dept, departmentName: dept,
-        type: 'guest_placed',
-        action: `Guest placed at ${location}`,
-        newValue: location,
-        createdBy: { id: user.id, name: user.name, role: 'department-head' },
-        createdAt: new Date().toISOString(),
-      });
-    }
-    toast.success(`${name} placed at ${location}`);
-    setSelectedLocations(prev => {
-      const next = { ...prev };
-      delete next[pendingPlacement.rowKey];
-      return next;
-    });
-    setPendingPlacement(null);
-  };
-
-  const handleConfirmBulk = () => {
-    if (!bulkPending || !user) return;
-    const { guestId, location, rows } = bulkPending;
-    const guest = guests.find(g => g.id === guestId);
-    for (const r of rows) {
-      if (r.memberId) {
-        placeFamilyMember(guestId, r.memberId, location);
-      } else {
-        updateGuest(guestId, {
-          status: 'Placed',
-          placedLocation: location,
-          placedAt: new Date().toISOString(),
-          placedBy: user.id,
+        await supabase.from('bed_assignments').insert({
+          room_id: room.id, bed_number: nextBed,
+          guest_id: row.guestId, guest_name: row.name, assigned_at: now,
         });
+
+        await supabase.from('guests').update({
+          placed_location: locationName, placed_at: now, placed_by: user.id,
+          room_assignment: room.name,
+          status: 'Accommodated',
+          accommodated_at: now, accommodated_by: user.id,
+          updated_at: now,
+        }).eq('id', row.guestId);
+
+        if (row.memberId) {
+          placeFamilyMember(row.guestId, row.memberId, locationName);
+        } else {
+          updateGuest(row.guestId, {
+            status: 'Accommodated',
+            placedLocation: locationName, placedAt: now, placedBy: user.id,
+            roomAssignment: room.name, accommodatedAt: now, accommodatedBy: user.id,
+          });
+        }
+
+        toast.success(`${row.name} placed at ${locationName} — Room ${room.name} (Bed ${nextBed})`);
+
+        // Bust room cache so occupancy updates
+        setRoomsByLocation(prev => { const n = { ...prev }; delete n[locationName]; return n; });
+        fetchRoomsForLocation(locationName);
+      } else {
+        // Location only
+        await supabase.from('guests').update({
+          placed_location: locationName, placed_at: now, placed_by: user.id,
+          status: 'Placed', updated_at: now,
+        }).eq('id', row.guestId);
+
+        if (row.memberId) {
+          placeFamilyMember(row.guestId, row.memberId, locationName);
+        } else {
+          updateGuest(row.guestId, {
+            status: 'Placed', placedLocation: locationName, placedAt: now, placedBy: user.id,
+          });
+        }
+
+        toast.success(`${row.name} placed at ${locationName}`);
       }
+
       if (guest) {
         addEntry2({
-          guestId, guestName: r.name, guestReference: guest.referenceNumber,
-          locationId: location, locationName: location,
+          guestId: row.guestId, guestName: row.name, guestReference: guest.referenceNumber,
+          locationId: locationName, locationName,
           departmentId: dept, departmentName: dept,
           type: 'guest_placed',
-          action: `Guest placed at ${location}`,
-          newValue: location,
+          action: room
+            ? `Guest placed at ${locationName} — Room ${room.name}`
+            : `Guest placed at ${locationName}`,
+          newValue: locationName,
           createdBy: { id: user.id, name: user.name, role: 'department-head' },
-          createdAt: new Date().toISOString(),
+          createdAt: now,
         });
       }
-    }
-    toast.success(`${rows.length} members placed at ${location}`);
-    setBulkLocations(prev => {
-      const next = { ...prev };
-      delete next[guestId];
-      return next;
-    });
-    setBulkPending(null);
-  };
 
-  const placeRow = (row: PersonRow) => {
-    const selected = selectedLocations[row.rowKey] ?? '';
-    if (!selected) { toast.error('Please select a location first'); return; }
-    setPendingPlacement({ rowKey: row.rowKey, guestId: row.guestId, memberId: row.memberId, name: row.name, location: selected });
-  };
+      // Clean up row selections (guest leaves the list on next render)
+      setSelectedLocations(prev => { const n = { ...prev }; delete n[row.rowKey]; return n; });
+      setSelectedRooms(prev => { const n = { ...prev }; delete n[row.rowKey]; return n; });
+    } finally {
+      setPlacingRows(prev => { const s = new Set(prev); s.delete(row.rowKey); return s; });
+    }
+  }, [user, selectedLocations, selectedRooms, roomsByLocation, guests, dept,
+      addEntry2, updateGuest, placeFamilyMember, fetchRoomsForLocation]);
+
+  // ── Dialog-based placement (fallback) ────────────────────────────────────────
+
+  const handleDialogConfirm = useCallback(async (
+    locationName: string,
+    room?: { id: string; name: string; capacity: number },
+  ) => {
+    if (!user || !placeDialogRow) return;
+    setDialogSaving(true);
+    const now = new Date().toISOString();
+    const { guestId, memberId, name } = placeDialogRow;
+    const guest = guests.find(g => g.id === guestId);
+
+    try {
+      if (room) {
+        const { data: existingBeds } = await supabase
+          .from('bed_assignments').select('bed_number').eq('room_id', room.id);
+        const nextBed = (existingBeds?.length ?? 0) + 1;
+        if (nextBed > room.capacity) { toast.error('Room is full'); return; }
+
+        await supabase.from('bed_assignments').insert({
+          room_id: room.id, bed_number: nextBed,
+          guest_id: guestId, guest_name: name, assigned_at: now,
+        });
+        await supabase.from('guests').update({
+          placed_location: locationName, placed_at: now, placed_by: user.id,
+          room_assignment: room.name, status: 'Accommodated',
+          accommodated_at: now, accommodated_by: user.id, updated_at: now,
+        }).eq('id', guestId);
+
+        if (memberId) placeFamilyMember(guestId, memberId, locationName);
+        else updateGuest(guestId, {
+          status: 'Accommodated', placedLocation: locationName, placedAt: now, placedBy: user.id,
+          roomAssignment: room.name, accommodatedAt: now, accommodatedBy: user.id,
+        });
+        toast.success(`${name} placed at ${locationName} — Room ${room.name} (Bed ${nextBed})`);
+      } else {
+        await supabase.from('guests').update({
+          placed_location: locationName, placed_at: now, placed_by: user.id,
+          status: 'Placed', updated_at: now,
+        }).eq('id', guestId);
+
+        if (memberId) placeFamilyMember(guestId, memberId, locationName);
+        else updateGuest(guestId, {
+          status: 'Placed', placedLocation: locationName, placedAt: now, placedBy: user.id,
+        });
+        toast.success(`${name} placed at ${locationName}`);
+      }
+
+      if (guest) {
+        addEntry2({
+          guestId, guestName: name, guestReference: guest.referenceNumber,
+          locationId: locationName, locationName,
+          departmentId: dept, departmentName: dept,
+          type: 'guest_placed',
+          action: room ? `Guest placed at ${locationName} — Room ${room.name}` : `Guest placed at ${locationName}`,
+          newValue: locationName,
+          createdBy: { id: user.id, name: user.name, role: 'department-head' },
+          createdAt: now,
+        });
+      }
+
+      setPlaceDialogRow(null);
+    } finally {
+      setDialogSaving(false);
+    }
+  }, [user, placeDialogRow, guests, dept, addEntry2, updateGuest, placeFamilyMember]);
 
   if (!user) return null;
 
@@ -529,81 +493,56 @@ export default function DeptIncomingPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-[#E8E3DB] bg-[#F9F8F6]">
-                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
-                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
-                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Designation</th>
-                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Arrival</th>
-                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Departure</th>
-                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Assign Location</th>
-                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Assign Room</th>
-                      <th className="text-right px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Ref</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Designation</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Arrival</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Departure</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Type</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Location</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Room</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Place</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E8E3DB]">
                     {filteredRows.map(row => {
-                      const selected = selectedLocations[row.rowKey] ?? '';
-                      const isFirstInGroup =
-                        row.isFamily &&
-                        groupMeta.firstRowKey.get(row.familyGroupId) === row.rowKey;
-                      const groupCount = groupMeta.counts.get(row.familyGroupId) ?? 0;
-                      const showBulkBanner = isFirstInGroup && groupCount > 1;
-                      const bulkLoc = bulkLocations[row.familyGroupId] ?? '';
+                      const selectedLoc = selectedLocations[row.rowKey] ?? '';
+                      const selectedRoomId = selectedRooms[row.rowKey] ?? '';
+                      const locRooms = selectedLoc ? (roomsByLocation[selectedLoc] ?? []) : [];
+                      const selectedRoom = locRooms.find(r => r.id === selectedRoomId);
+                      const isPlacing = placingRows.has(row.rowKey);
 
-                      // Collect sibling rows in this group for bulk action
-                      const siblingRows = showBulkBanner
-                        ? filteredRows.filter(r => r.familyGroupId === row.familyGroupId)
-                        : [];
+                      const isFirstInGroup = row.isFamily && groupMeta.firstRowKey.get(row.familyGroupId) === row.rowKey;
+                      const groupCount = groupMeta.counts.get(row.familyGroupId) ?? 0;
 
                       return (
                         <Fragment key={row.rowKey}>
-                          {/* Bulk assignment banner — rendered before first sibling row */}
-                          {showBulkBanner && (
+                          {isFirstInGroup && groupCount > 1 && (
                             <tr className="bg-indigo-50 border-b border-indigo-100">
-                              <td colSpan={8} className="px-4 py-2">
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="flex items-center gap-2">
-                                    <Users className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                                    <span className="text-xs text-indigo-700 font-medium">
-                                      {groupCount} members from {row.familyLastName} Family — assign all to the same location?
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <select
-                                      value={bulkLoc}
-                                      onChange={e => setBulkLocations(prev => ({ ...prev, [row.familyGroupId]: e.target.value }))}
-                                      className="border border-indigo-200 rounded-lg px-2 py-1 text-xs text-[#1A1A1A] bg-white focus:outline-none focus:border-indigo-400 min-w-[130px]"
-                                    >
-                                      <option value="">Select location…</option>
-                                      {locations.map(loc => (
-                                        <option key={loc} value={loc}>{loc}</option>
-                                      ))}
-                                    </select>
-                                    <button
-                                      disabled={!bulkLoc}
-                                      onClick={() => {
-                                        if (bulkLoc) setBulkPending({ guestId: row.familyGroupId, location: bulkLoc, rows: siblingRows });
-                                        else toast.error('Please select a location first');
-                                      }}
-                                      className="flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                                    >
-                                      <Check className="w-3 h-3" />
-                                      Assign All
-                                    </button>
-                                  </div>
+                              <td colSpan={11} className="px-4 py-1.5">
+                                <div className="flex items-center gap-2">
+                                  <Users className="w-3 h-3 text-indigo-600 shrink-0" />
+                                  <span className="text-xs text-indigo-700 font-medium">
+                                    {groupCount} members — {row.familyLastName} Family
+                                  </span>
                                 </div>
                               </td>
                             </tr>
                           )}
 
-                          {/* Person row */}
                           <tr className="hover:bg-[#F9F8F6]">
-                            <td className="px-4 py-3 font-mono text-sm text-[#4A4A4A]">{row.referenceNumber}</td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2.5 flex-wrap">
-                                <div className="w-9 h-9 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-base font-medium shrink-0">
+                            {/* Reference */}
+                            <td className="px-4 py-2.5 font-mono text-xs text-[#4A4A4A] whitespace-nowrap">{row.referenceNumber}</td>
+
+                            {/* Name */}
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium shrink-0">
                                   {row.name.charAt(0)}
                                 </div>
-                                <span className="font-medium text-base text-[#1A1A1A]">{row.name}</span>
+                                <span className="font-medium text-sm text-[#1A1A1A]">{row.name}</span>
                                 {row.isFamily && (
                                   <FamilyBadge
                                     lastName={row.familyLastName}
@@ -613,14 +552,20 @@ export default function DeptIncomingPage() {
                                 )}
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-[#4A4A4A] text-sm">{formatDesignation(row.designation)}</td>
-                            <td className="px-4 py-3">
+
+                            {/* Country */}
+                            <td className="px-4 py-2.5 text-xs text-[#4A4A4A] whitespace-nowrap">{row.country}</td>
+
+                            {/* Designation */}
+                            <td className="px-4 py-2.5 text-xs text-[#4A4A4A]">{formatDesignation(row.designation)}</td>
+
+                            {/* Arrival */}
+                            <td className="px-4 py-2.5 whitespace-nowrap">
                               {row.arrivalTime ? (
                                 <div>
-                                  <div className="text-sm text-[#1A1A1A]">
-                                    {new Date(row.arrivalTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                    {' '}
-                                    {new Date(row.arrivalTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                  <div className="text-xs text-[#1A1A1A]">
+                                    {new Date(row.arrivalTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                    {' '}{new Date(row.arrivalTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
                                   </div>
                                   {(row.arrivalFlightNumber || row.arrivalAirport) && (
                                     <div className="text-xs text-gray-400">
@@ -628,59 +573,143 @@ export default function DeptIncomingPage() {
                                     </div>
                                   )}
                                 </div>
-                              ) : <span className="text-gray-400">—</span>}
+                              ) : <span className="text-gray-300 text-xs">—</span>}
                             </td>
-                            <td className="px-4 py-3">
+
+                            {/* Departure */}
+                            <td className="px-4 py-2.5 whitespace-nowrap">
                               {row.departureTime ? (
                                 <div>
-                                  <div className="text-sm text-[#1A1A1A]">
-                                    {new Date(row.departureTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                    {' '}
-                                    {new Date(row.departureTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                  <div className="text-xs text-[#1A1A1A]">
+                                    {new Date(row.departureTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                    {' '}{new Date(row.departureTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
                                   </div>
                                   {row.departureAirport && (
-                                    <div className="text-xs text-gray-400">
-                                      {row.departureAirport}
-                                    </div>
+                                    <div className="text-xs text-gray-400">{row.departureAirport}</div>
                                   )}
                                 </div>
-                              ) : <span className="text-gray-400">—</span>}
+                              ) : <span className="text-gray-300 text-xs">—</span>}
                             </td>
-                            <td className="px-4 py-3">
+
+                            {/* Type */}
+                            <td className="px-4 py-2.5">
+                              <span className="text-xs text-[#4A4A4A]">{row.relationship}</span>
+                            </td>
+
+                            {/* Location dropdown */}
+                            <td className="px-3 py-2.5">
                               <div className="relative">
                                 <button
                                   onClick={() => {
                                     setOpenRoomDropdown(null);
-                                    setOpenLocationDropdown(prev => prev === row.rowKey ? null : row.rowKey);
+                                    setOpenLocDropdown(prev => prev === row.rowKey ? null : row.rowKey);
                                   }}
-                                  className="flex items-center justify-between gap-2 border border-[#D4CFC7] rounded-lg px-3 py-2 text-sm bg-white hover:border-[#2D5A45] min-w-[160px] transition-colors"
+                                  className="flex items-center justify-between gap-1 border border-[#D4CFC7] rounded-md px-2 py-1.5 text-xs bg-white hover:border-[#2D5A45] min-w-[110px] max-w-[130px] transition-colors"
                                 >
-                                  {selected ? (
-                                    <span className="flex items-center gap-2">
-                                      <span className={`w-2.5 h-2.5 rounded-full ${getLocationColor(selected).dot} shrink-0`} />
-                                      <span className="text-[#1A1A1A]">{selected}</span>
+                                  {selectedLoc ? (
+                                    <span className="flex items-center gap-1.5 truncate">
+                                      <span className={`w-2 h-2 rounded-full ${getLocColor(locations, selectedLoc).dot} shrink-0`} />
+                                      <span className="text-[#1A1A1A] truncate">{selectedLoc}</span>
                                     </span>
                                   ) : (
-                                    <span className="text-gray-400">Select location…</span>
+                                    <span className="text-gray-400 truncate">Location…</span>
                                   )}
-                                  <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                                  <ChevronDown className="w-3 h-3 text-gray-400 shrink-0 ml-1" />
                                 </button>
-                                {openLocationDropdown === row.rowKey && (
-                                  <div className="absolute z-50 top-full mt-1 left-0 bg-white border border-[#E8E3DB] rounded-xl shadow-xl min-w-[180px] overflow-hidden">
-                                    {locations.map(loc => {
-                                      const color = getLocationColor(loc);
+                                {openLocDropdown === row.rowKey && (
+                                  <div className="absolute z-50 top-full mt-1 left-0 bg-white border border-[#E8E3DB] rounded-xl shadow-xl min-w-[160px] overflow-hidden">
+                                    {locations.map(loc => (
+                                      <button
+                                        key={loc}
+                                        onClick={() => {
+                                          setSelectedLocations(prev => ({ ...prev, [row.rowKey]: loc }));
+                                          setSelectedRooms(prev => { const n = { ...prev }; delete n[row.rowKey]; return n; });
+                                          fetchRoomsForLocation(loc);
+                                          setOpenLocDropdown(null);
+                                        }}
+                                        className={`flex items-center gap-2 w-full px-3 py-2 text-xs text-left hover:bg-[#F5F0E8] transition-colors ${selectedLoc === loc ? 'bg-[#F5F0E8] font-medium' : ''}`}
+                                      >
+                                        <span className={`w-2 h-2 rounded-full ${getLocColor(locations, loc).dot} shrink-0`} />
+                                        <span className="text-[#1A1A1A]">{loc}</span>
+                                        <span className="ml-auto text-gray-400 text-xs">
+                                          {guestCountByLocation[loc] ?? 0}
+                                        </span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Room dropdown */}
+                            <td className="px-3 py-2.5">
+                              <div className="relative">
+                                <button
+                                  disabled={!selectedLoc}
+                                  onClick={() => {
+                                    setOpenLocDropdown(null);
+                                    setOpenRoomDropdown(prev => prev === row.rowKey ? null : row.rowKey);
+                                  }}
+                                  className="flex items-center justify-between gap-1 border border-[#D4CFC7] rounded-md px-2 py-1.5 text-xs bg-white hover:border-[#2D5A45] min-w-[120px] max-w-[150px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {!selectedLoc ? (
+                                    <span className="text-gray-400 truncate">Location first</span>
+                                  ) : selectedRoom ? (
+                                    <span className="flex items-center gap-1.5 truncate">
+                                      <span className={`w-2 h-2 rounded-full shrink-0 ${
+                                        selectedRoom.occupancy >= selectedRoom.capacity ? 'bg-red-400'
+                                        : selectedRoom.capacity - selectedRoom.occupancy <= 1 ? 'bg-amber-400'
+                                        : 'bg-emerald-400'
+                                      }`} />
+                                      <span className="text-[#1A1A1A] truncate">{selectedRoom.name}</span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400 truncate">Room (opt.)</span>
+                                  )}
+                                  <ChevronDown className="w-3 h-3 text-gray-400 shrink-0 ml-1" />
+                                </button>
+                                {openRoomDropdown === row.rowKey && selectedLoc && (
+                                  <div className="absolute z-50 top-full mt-1 left-0 bg-white border border-[#E8E3DB] rounded-xl shadow-xl w-52 overflow-hidden">
+                                    {/* Clear / no room */}
+                                    <button
+                                      onClick={() => {
+                                        setSelectedRooms(prev => { const n = { ...prev }; delete n[row.rowKey]; return n; });
+                                        setOpenRoomDropdown(null);
+                                      }}
+                                      className="w-full px-3 py-2 text-xs text-left text-gray-400 italic hover:bg-[#F5F0E8] border-b border-[#E8E3DB] transition-colors"
+                                    >
+                                      No room — place only
+                                    </button>
+                                    {locRooms.length === 0 ? (
+                                      <div className="px-3 py-3 text-xs text-gray-400 text-center">No rooms found</div>
+                                    ) : locRooms.map(room => {
+                                      const isFull = room.occupancy >= room.capacity;
+                                      const almostFull = !isFull && (room.capacity - room.occupancy) <= 1;
+                                      const guestArrival = row.arrivalTime?.substring(0, 10);
+                                      const guestDep = row.departureTime?.substring(0, 10);
+                                      const hasMismatch = !!(
+                                        (room.available_from && guestArrival && guestArrival < room.available_from) ||
+                                        (room.available_to && guestDep && guestDep > room.available_to)
+                                      );
+                                      const dotColor = isFull ? 'bg-red-400' : almostFull ? 'bg-amber-400' : 'bg-emerald-400';
                                       return (
                                         <button
-                                          key={loc}
+                                          key={room.id}
+                                          disabled={isFull}
                                           onClick={() => {
-                                            setSelectedLocations(prev => ({ ...prev, [row.rowKey]: loc }));
-                                            fetchRoomsForLocation(loc);
-                                            setOpenLocationDropdown(null);
+                                            setSelectedRooms(prev => ({ ...prev, [row.rowKey]: room.id }));
+                                            setOpenRoomDropdown(null);
                                           }}
-                                          className={`flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-left transition-colors hover:bg-[#F5F0E8] ${selected === loc ? 'bg-[#F5F0E8] font-medium' : ''}`}
+                                          className={`flex items-center justify-between w-full px-3 py-2 text-xs text-left transition-colors border-b border-[#E8E3DB] last:border-0 ${isFull ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#F5F0E8]'} ${selectedRoomId === room.id ? 'bg-emerald-50' : ''}`}
                                         >
-                                          <span className={`w-2.5 h-2.5 rounded-full ${color.dot} shrink-0`} />
-                                          <span className="text-[#1A1A1A]">{loc}</span>
+                                          <span className="flex items-center gap-1.5 min-w-0">
+                                            <span className={`w-2 h-2 rounded-full ${dotColor} shrink-0`} />
+                                            <span className="text-[#1A1A1A] truncate">{room.name}</span>
+                                            {hasMismatch && <span className="text-amber-500 shrink-0">⚠</span>}
+                                          </span>
+                                          <span className="text-gray-400 shrink-0 ml-2">
+                                            {room.occupancy}/{room.capacity}
+                                          </span>
                                         </button>
                                       );
                                     })}
@@ -688,88 +717,22 @@ export default function DeptIncomingPage() {
                                 )}
                               </div>
                             </td>
-                            <td className="px-4 py-3">
-                              {(() => {
-                                const hasLocation = !!selectedLocations[row.rowKey];
-                                const locRooms = hasLocation ? (roomsByLocation[selectedLocations[row.rowKey]] ?? []) : [];
-                                const selectedRoom = locRooms.find(r => r.id === selectedRooms[row.rowKey]);
-                                return (
-                                  <div className="relative">
-                                    <button
-                                      disabled={!hasLocation}
-                                      onClick={() => {
-                                        setOpenLocationDropdown(null);
-                                        setOpenRoomDropdown(prev => prev === row.rowKey ? null : row.rowKey);
-                                      }}
-                                      className="flex items-center justify-between gap-2 border border-[#D4CFC7] rounded-lg px-3 py-2 text-sm bg-white hover:border-[#2D5A45] min-w-[180px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                      {!hasLocation ? (
-                                        <span className="text-gray-400 text-xs">Assign location first</span>
-                                      ) : selectedRoom ? (
-                                        <span className="text-[#1A1A1A] truncate">{selectedRoom.name}</span>
-                                      ) : (
-                                        <span className="text-gray-400">Select room…</span>
-                                      )}
-                                      <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
-                                    </button>
-                                    {openRoomDropdown === row.rowKey && hasLocation && (
-                                      <div className="absolute z-50 top-full mt-1 left-0 bg-white border border-[#E8E3DB] rounded-xl shadow-xl w-72 overflow-hidden">
-                                        {locRooms.length === 0 ? (
-                                          <div className="px-4 py-4 text-sm text-gray-400 text-center">No rooms available</div>
-                                        ) : locRooms.map(room => {
-                                          const isFull = room.occupancy >= room.capacity;
-                                          const guestArrival = guests.find(g => g.id === row.guestId)?.arrivalTime?.substring(0, 10);
-                                          const guestDeparture = guests.find(g => g.id === row.guestId)?.departureTime?.substring(0, 10);
-                                          const hasMismatch = !!(
-                                            (room.available_from && guestArrival && guestArrival < room.available_from) ||
-                                            (room.available_to && guestDeparture && guestDeparture > room.available_to)
-                                          );
-                                          const fillPct = room.capacity > 0 ? Math.round((room.occupancy / room.capacity) * 100) : 0;
-                                          const isSelected = selectedRooms[row.rowKey] === room.id;
-                                          return (
-                                            <button
-                                              key={room.id}
-                                              disabled={isFull}
-                                              onClick={() => {
-                                                setSelectedRooms(prev => ({ ...prev, [row.rowKey]: room.id }));
-                                                setOpenRoomDropdown(null);
-                                              }}
-                                              className={`flex flex-col gap-1.5 w-full px-4 py-3 text-left border-b border-[#E8E3DB] last:border-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isSelected ? 'bg-emerald-50' : 'hover:bg-[#F5F0E8]'}`}
-                                            >
-                                              <div className="flex items-center justify-between gap-2">
-                                                <span className="text-sm font-medium text-[#1A1A1A] flex items-center gap-1.5">
-                                                  {isFull && <span className="text-red-500">●</span>}
-                                                  {!isFull && hasMismatch && <span className="text-amber-500">⚠</span>}
-                                                  {!isFull && !hasMismatch && <span className="text-emerald-500">●</span>}
-                                                  {room.name}
-                                                </span>
-                                                <span className="text-xs text-[#4A4A4A] shrink-0">{room.occupancy}/{room.capacity}</span>
-                                              </div>
-                                              <div className="w-full bg-gray-100 rounded-full h-1.5">
-                                                <div
-                                                  className={`h-1.5 rounded-full transition-all ${isFull ? 'bg-red-400' : fillPct > 70 ? 'bg-amber-400' : 'bg-emerald-400'}`}
-                                                  style={{ width: `${fillPct}%` }}
-                                                />
-                                              </div>
-                                              {(room.available_from || room.available_to || hasMismatch) && (
-                                                <div className="text-xs text-gray-400 flex items-center gap-1">
-                                                  {room.available_from && room.available_to
-                                                    ? `${new Date(room.available_from + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${new Date(room.available_to + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
-                                                    : room.available_from ? `From ${room.available_from}` : room.available_to ? `Until ${room.available_to}` : ''}
-                                                  {hasMismatch && <span className="text-amber-500 font-medium">· date mismatch</span>}
-                                                </div>
-                                              )}
-                                            </button>
-                                          );
-                                        })}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })()}
+
+                            {/* Place button */}
+                            <td className="px-3 py-2.5">
+                              <button
+                                onClick={() => handlePlace(row)}
+                                disabled={!selectedLoc || isPlacing}
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium bg-[#2D5A45] text-white hover:bg-[#234839] disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                              >
+                                <MapPin className="w-3 h-3 shrink-0" />
+                                {isPlacing ? 'Saving…' : selectedRoomId ? 'Place + Room' : 'Place'}
+                              </button>
                             </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center justify-end gap-2">
+
+                            {/* Actions */}
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center justify-end gap-1">
                                 {row.memberId === null && (
                                   <button
                                     onClick={() => setViewGuestId(row.guestId)}
@@ -780,19 +743,11 @@ export default function DeptIncomingPage() {
                                   </button>
                                 )}
                                 <button
-                                  onClick={() => placeRow(row)}
-                                  disabled={!selected}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-[#2D5A45] text-white hover:bg-[#234839] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                  onClick={() => setPlaceDialogRow(row)}
+                                  className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors"
+                                  title="Place via dialog"
                                 >
-                                  <Check className="w-3.5 h-3.5" />
-                                  Place
-                                </button>
-                                <button
-                                  onClick={() => selectedRooms[row.rowKey] && assignRoom(row, selectedRooms[row.rowKey])}
-                                  disabled={!selectedRooms[row.rowKey]}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                                >
-                                  Assign Room
+                                  <MapPin className="w-4 h-4" />
                                 </button>
                               </div>
                             </td>
@@ -814,86 +769,24 @@ export default function DeptIncomingPage() {
         onClose={() => setViewGuestId(null)}
       />
 
-      {/* Individual placement confirmation */}
-      <AlertDialog open={!!pendingPlacement} onOpenChange={o => { if (!o) setPendingPlacement(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Placement</AlertDialogTitle>
-            <AlertDialogDescription>
-              Assign <strong>{pendingPlacement?.name}</strong> to <strong>{pendingPlacement?.location}</strong>?
-              This will move them to the Placed list.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmPlacement}
-              className="bg-[#2D5A45] hover:bg-[#234839] text-white"
-            >
-              Confirm Placement
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Bulk placement confirmation */}
-      <AlertDialog open={!!bulkPending} onOpenChange={o => { if (!o) setBulkPending(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Assign All Family Members</AlertDialogTitle>
-            <AlertDialogDescription>
-              Assign all <strong>{bulkPending?.rows.length} members</strong> to{' '}
-              <strong>{bulkPending?.location}</strong>? Each will be moved to the Placed list.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmBulk}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white"
-            >
-              Assign All
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Date mismatch confirmation */}
-      <AlertDialog open={!!dateMismatch} onOpenChange={o => { if (!o) setDateMismatch(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-500" />
-              Date Mismatch
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {dateMismatch && (
-                <span>
-                  Guest arrives on {dateMismatch.guestArrival ?? '—'} but room <strong>{dateMismatch.roomName}</strong> is available from {dateMismatch.roomFrom ?? '—'} to {dateMismatch.roomTo ?? '—'}.
-                  The guest's stay may extend beyond the room's availability period.
-                </span>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDateMismatch(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async () => {
-                if (!dateMismatch) return;
-                const rooms = roomsByLocation[selectedLocations[dateMismatch.rowKey]] ?? [];
-                const room = rooms.find(r => r.id === dateMismatch.roomId);
-                if (!room) return;
-                const row: PersonRow = { rowKey: dateMismatch.rowKey, guestId: dateMismatch.guestId, memberId: dateMismatch.memberId, name: dateMismatch.name } as PersonRow;
-                await doAssignRoom(row, dateMismatch.roomId, dateMismatch.roomName, room.capacity);
-                setDateMismatch(null);
-              }}
-              className="bg-amber-500 hover:bg-amber-600 text-white"
-            >
-              Assign Anyway
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {placeDialogRow && (
+        <PlaceGuestDialog
+          open={!!placeDialogRow}
+          onClose={() => setPlaceDialogRow(null)}
+          mode="place"
+          guestName={placeDialogRow.name}
+          guestCountry={placeDialogRow.country}
+          arrivalTime={placeDialogRow.arrivalTime}
+          arrivalAirport={placeDialogRow.arrivalAirport}
+          arrivalFlightNumber={placeDialogRow.arrivalFlightNumber}
+          departureTime={placeDialogRow.departureTime}
+          departureAirport={placeDialogRow.departureAirport}
+          locations={locations}
+          guestCountByLocation={guestCountByLocation}
+          saving={dialogSaving}
+          onConfirm={handleDialogConfirm}
+        />
+      )}
     </div>
   );
 }
