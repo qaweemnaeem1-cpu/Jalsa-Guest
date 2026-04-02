@@ -1829,11 +1829,11 @@ export default function AdminMulaqatPage() {
                 ) : (
                   <div className="bg-white rounded-lg border border-[#E8E3DB] overflow-hidden">
                     {/* Column header */}
-                    <div className="grid grid-cols-[1fr_220px_220px_40px] items-center px-4 py-2.5 bg-[#F5F0E8] border-b border-[#E8E3DB]">
+                    <div className="grid grid-cols-[1fr_220px_220px_80px] items-center px-4 py-2.5 bg-[#F5F0E8] border-b border-[#E8E3DB]">
                       <span className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Day</span>
                       <span className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Delegation</span>
                       <span className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Daftari</span>
-                      <span />
+                      <span className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</span>
                     </div>
 
                     {overviewCombinedDays.map(({ date, delegation, daftari }) => {
@@ -1855,7 +1855,7 @@ export default function AdminMulaqatPage() {
                           {/* Collapsed row */}
                           <div
                             onClick={() => setOverviewExpandedDate(d => d === date ? null : date)}
-                            className={`grid grid-cols-[1fr_220px_220px_40px] items-center px-4 py-3 cursor-pointer hover:bg-gray-50 border-b border-gray-100 transition-colors ${
+                            className={`grid grid-cols-[1fr_220px_220px_80px] items-center px-4 py-3 cursor-pointer hover:bg-gray-50 border-b border-gray-100 transition-colors ${
                               isToday ? 'bg-[#D6E4D9]/10 border-l-4 border-[#2D5A45]' : 'bg-white'
                             }`}
                           >
@@ -1875,7 +1875,19 @@ export default function AdminMulaqatPage() {
                                 ? `${dafSlotCount} slot${dafSlotCount !== 1 ? 's' : ''} · ${dafGuestCount} guest${dafGuestCount !== 1 ? 's' : ''}`
                                 : <span className="text-gray-400 italic text-sm">No slots</span>}
                             </div>
-                            <div className="flex justify-end">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                title="Export this day's schedule"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setPdfTargetDates([date]);
+                                  setPdfTargetType('all');
+                                  setPdfDialogOpen(true);
+                                }}
+                                className="text-[#2D5A45] hover:bg-[#D6E4D9] rounded-md p-1.5 transition-colors"
+                              >
+                                <FileText className="w-4 h-4" />
+                              </button>
                               <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
                             </div>
                           </div>
@@ -1883,6 +1895,23 @@ export default function AdminMulaqatPage() {
                           {/* Expanded content */}
                           {isExpanded && (
                             <div className="bg-gray-50/50 border-l-4 border-[#2D5A45] pl-6 pr-4 py-4 border-b border-gray-100">
+
+                              {/* Expanded header */}
+                              <div className="flex items-center justify-between mb-4">
+                                <span className="text-sm font-semibold text-gray-700">
+                                  {new Date(date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    setPdfTargetDates([date]);
+                                    setPdfTargetType('all');
+                                    setPdfDialogOpen(true);
+                                  }}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#2D5A45] border border-[#2D5A45] rounded-lg bg-white hover:bg-[#F5F0E8] transition-colors"
+                                >
+                                  <FileText className="w-4 h-4" />Print This Day
+                                </button>
+                              </div>
 
                               {/* Section A: Delegation Mulaqat */}
                               <p className="text-sm font-semibold text-gray-700 mb-2">Delegation Mulaqat</p>
@@ -3919,7 +3948,10 @@ export default function AdminMulaqatPage() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-[#2D5A45]" />Export Mulaqat Schedule
+              <FileText className="w-5 h-5 text-[#2D5A45]" />
+              {pdfTargetDates.length === 1
+                ? `Export Schedule — ${new Date(pdfTargetDates[0] + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}`
+                : 'Export Mulaqat Schedule'}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -3927,14 +3959,20 @@ export default function AdminMulaqatPage() {
             <div className="bg-[#F5F0E8] rounded-lg p-3 text-sm">
               <p className="font-medium text-[#1A1A1A] mb-0.5">Exporting:</p>
               {pdfTargetType === 'all' ? (
-                <>
-                  <p className="text-[#4A4A4A]">{pdfTargetDates.length} scheduled Mulaqat day{pdfTargetDates.length !== 1 ? 's' : ''}</p>
-                  {pdfTargetDates.length > 0 && (
-                    <p className="text-[#4A4A4A]/70 text-xs mt-0.5">
-                      {pdfTargetDates.map(d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })).join(' · ')}
-                    </p>
-                  )}
-                </>
+                pdfTargetDates.length === 1 ? (
+                  <p className="text-[#4A4A4A]">
+                    {new Date(pdfTargetDates[0] + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-[#4A4A4A]">{pdfTargetDates.length} scheduled Mulaqat day{pdfTargetDates.length !== 1 ? 's' : ''}</p>
+                    {pdfTargetDates.length > 0 && (
+                      <p className="text-[#4A4A4A]/70 text-xs mt-0.5">
+                        {pdfTargetDates.map(d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })).join(' · ')}
+                      </p>
+                    )}
+                  </>
+                )
               ) : (
                 <p className="text-[#4A4A4A]">
                   {pdfTargetDates.length > 0
