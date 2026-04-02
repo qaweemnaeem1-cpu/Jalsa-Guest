@@ -1817,201 +1817,166 @@ export default function AdminMulaqatPage() {
 
                 {/* Content */}
                 {overviewLoading ? (
-                  <div className="flex items-center justify-center py-16">
+                  <Card className="shadow-sm"><CardContent className="flex items-center justify-center py-10">
                     <div className="w-6 h-6 border-2 border-[#2D5A45] border-t-transparent rounded-full animate-spin" />
-                  </div>
+                  </CardContent></Card>
                 ) : overviewScheduledDates.length === 0 ? (
-                  <div className="bg-white rounded-lg border border-[#E8E3DB] flex flex-col items-center justify-center py-16 gap-3">
+                  <Card className="shadow-sm"><CardContent className="flex flex-col items-center justify-center py-12 gap-2">
                     <CalendarDays className="w-10 h-10 text-gray-300" />
-                    <p className="font-medium text-[#1A1A1A]">No upcoming Mulaqat scheduled</p>
+                    <p className="text-sm font-medium text-[#1A1A1A]">No upcoming Mulaqat scheduled</p>
                     <p className="text-sm text-[#4A4A4A]">Create Mulaqat days in the Delegation or Daftari tabs</p>
-                  </div>
+                  </CardContent></Card>
                 ) : (
-                  <div className="bg-white rounded-lg border border-[#E8E3DB] overflow-hidden">
-                    {/* Column header */}
-                    <div className="grid grid-cols-[1fr_220px_220px_80px] items-center px-4 py-2.5 bg-[#F5F0E8] border-b border-[#E8E3DB]">
-                      <span className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Day</span>
-                      <span className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Delegation</span>
-                      <span className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Daftari</span>
-                      <span className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</span>
-                    </div>
-
+                  <div className="space-y-3">
                     {overviewCombinedDays.map(({ date, delegation, daftari }) => {
                       const todayStr = new Date().toISOString().split('T')[0];
                       const isToday = date === todayStr;
                       const isExpanded = overviewExpandedDate === date;
                       const delegSlots = delegation?.mulaqat_slots ?? [];
                       const dafSlots = daftari?.daftari_slots ?? [];
-                      const delegSlotCount = delegSlots.length;
-                      const delegCount = delegSlots.reduce((s, sl) => s + (sl.delegations ?? []).length, 0);
-                      const dafSlotCount = dafSlots.length;
-                      const dafGuestCount = dafSlots.filter(s => s.guest_id).length;
-                      const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-GB', {
-                        weekday: 'short', day: 'numeric', month: 'short',
-                      });
+                      const totalSlots = delegSlots.length + dafSlots.length;
+                      const dateLabel = delegation?.label
+                        ? `${fmtShort(date)} — ${delegation.label}`
+                        : daftari?.label
+                          ? `${fmtShort(date)} — ${daftari.label}`
+                          : fmtShort(date);
 
                       return (
-                        <Fragment key={date}>
-                          {/* Collapsed row */}
-                          <div
-                            onClick={() => setOverviewExpandedDate(d => d === date ? null : date)}
-                            className={`grid grid-cols-[1fr_220px_220px_80px] items-center px-4 py-3 cursor-pointer hover:bg-gray-50 border-b border-gray-100 transition-colors ${
-                              isToday ? 'bg-[#D6E4D9]/10 border-l-4 border-[#2D5A45]' : 'bg-white'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="text-base font-semibold text-[#1A1A1A]">{dateLabel}</span>
-                              {isToday && (
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#2D5A45] text-white">TODAY</span>
-                              )}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              {delegSlotCount > 0
-                                ? `${delegSlotCount} slot${delegSlotCount !== 1 ? 's' : ''} · ${delegCount} delegation${delegCount !== 1 ? 's' : ''}`
-                                : <span className="text-gray-400 italic text-sm">No slots</span>}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              {dafSlotCount > 0
-                                ? `${dafSlotCount} slot${dafSlotCount !== 1 ? 's' : ''} · ${dafGuestCount} guest${dafGuestCount !== 1 ? 's' : ''}`
-                                : <span className="text-gray-400 italic text-sm">No slots</span>}
-                            </div>
-                            <div className="flex items-center justify-end gap-1">
+                        <Card key={date} className="shadow-sm bg-white">
+                          <CardHeader className="py-3 px-4">
+                            <div className="flex items-center justify-between gap-3">
                               <button
-                                title="Export this day's schedule"
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  setPdfTargetDates([date]);
-                                  setPdfTargetType('all');
-                                  setPdfDialogOpen(true);
-                                }}
-                                className="text-[#2D5A45] hover:bg-[#D6E4D9] rounded-md p-1.5 transition-colors"
+                                onClick={() => setOverviewExpandedDate(d => d === date ? null : date)}
+                                className="flex items-center gap-2 flex-1 text-left min-w-0"
                               >
-                                <FileText className="w-4 h-4" />
+                                {isExpanded
+                                  ? <ChevronDown className="w-4 h-4 text-[#4A4A4A] flex-shrink-0" />
+                                  : <ChevronRight className="w-4 h-4 text-[#4A4A4A] flex-shrink-0" />}
+                                <span className="font-semibold text-[#1A1A1A]">{dateLabel}</span>
+                                {isToday && (
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-[#2D5A45] text-white flex-shrink-0">TODAY</span>
+                                )}
                               </button>
-                              <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
-                            </div>
-                          </div>
-
-                          {/* Expanded content */}
-                          {isExpanded && (
-                            <div className="bg-gray-50/50 border-l-4 border-[#2D5A45] pl-6 pr-4 py-4 border-b border-gray-100">
-
-                              {/* Expanded header */}
-                              <div className="flex items-center justify-between mb-4">
-                                <span className="text-sm font-semibold text-gray-700">
-                                  {new Date(date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                                </span>
+                              <div className="flex items-center gap-3 flex-shrink-0">
+                                <div className="text-xs text-[#4A4A4A] text-right">
+                                  <span className="font-medium text-[#1A1A1A]">{totalSlots}</span> slot{totalSlots !== 1 ? 's' : ''} total
+                                </div>
                                 <button
-                                  onClick={() => {
+                                  title="Export this day's schedule"
+                                  onClick={e => {
+                                    e.stopPropagation();
                                     setPdfTargetDates([date]);
                                     setPdfTargetType('all');
                                     setPdfDialogOpen(true);
                                   }}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#2D5A45] border border-[#2D5A45] rounded-lg bg-white hover:bg-[#F5F0E8] transition-colors"
+                                  className="p-1.5 rounded text-[#2D5A45] hover:bg-[#D6E4D9] transition-colors"
                                 >
-                                  <FileText className="w-4 h-4" />Print This Day
+                                  <FileText className="w-3.5 h-3.5" />
                                 </button>
                               </div>
+                            </div>
+                          </CardHeader>
 
-                              {/* Section A: Delegation Mulaqat */}
-                              <p className="text-sm font-semibold text-gray-700 mb-2">Delegation Mulaqat</p>
-                              {delegSlots.length === 0 ? (
-                                <p className="text-sm italic text-gray-400 mb-1">No delegation Mulaqat on this day</p>
-                              ) : (
-                                <div className="overflow-x-auto mb-1">
-                                  <table className="w-full text-sm">
-                                    <thead>
-                                      <tr className="border-b border-gray-200">
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Slot</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Delegations</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Guests</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Head of Delegation</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Managed By</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
+                          {isExpanded && (
+                            <CardContent className="pt-0 px-4 pb-4">
+                              <div className="border-t border-[#E8E3DB] pt-3 space-y-4">
+
+                                {/* Section A: Delegation Mulaqat */}
+                                <div>
+                                  <p className="border-l-2 border-green-500 pl-2 text-sm font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                                    Delegation Mulaqat ({delegSlots.length} slot{delegSlots.length !== 1 ? 's' : ''})
+                                  </p>
+                                  {delegSlots.length === 0 ? (
+                                    <p className="text-sm italic text-gray-400">No delegation Mulaqat</p>
+                                  ) : (
+                                    <div className="space-y-2">
                                       {delegSlots.map(slot => {
                                         const delegs = slot.delegations ?? [];
-                                        const isAssigned = delegs.length > 0;
-                                        const countries = delegs.map(d => d.country).join(', ') || '—';
-                                        const guestCount = delegs.reduce((s, d) => s + (d.delegation_members ?? []).length, 0);
-                                        const heads = delegs.map(d => d.head_of_delegation_name).filter(Boolean).map(h => `* ${h}`).join(', ') || '—';
-                                        const managedBy = [...new Set(delegs.map(d => d.managed_by_name).filter(Boolean))].join(', ') || '—';
                                         return (
-                                          <tr key={slot.id} className="border-b border-gray-100 last:border-b-0">
-                                            <td className="px-3 py-2 font-medium text-[#1A1A1A]">{slot.name}</td>
-                                            <td className="px-3 py-2 text-[#4A4A4A]">{countries}</td>
-                                            <td className="px-3 py-2 text-[#4A4A4A]">{guestCount > 0 ? guestCount : '—'}</td>
-                                            <td className="px-3 py-2 text-[#4A4A4A]">{heads}</td>
-                                            <td className="px-3 py-2 text-[#4A4A4A]">{managedBy}</td>
-                                            <td className="px-3 py-2">
-                                              {isAssigned ? (
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">Assigned</span>
-                                              ) : (
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-white text-green-700 border border-green-300">Available</span>
+                                          <div key={slot.id} className="border border-[#E8E3DB] rounded-lg overflow-hidden">
+                                            <div className="flex items-center justify-between px-3 py-2 bg-[#F9F8F6]">
+                                              <span className="text-sm font-medium text-[#1A1A1A]">{slot.name}</span>
+                                              {delegs.length > 0 && (
+                                                <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">
+                                                  {delegs.length} delegation{delegs.length !== 1 ? 's' : ''}
+                                                </Badge>
                                               )}
-                                            </td>
-                                          </tr>
+                                            </div>
+                                            <div className="px-3 py-2 space-y-1">
+                                              {delegs.length === 0 ? (
+                                                <p className="text-xs text-green-600 flex items-center gap-1">
+                                                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+                                                  Available — no delegations assigned
+                                                </p>
+                                              ) : (
+                                                delegs.map(del => (
+                                                  <div key={del.id} className="flex items-center gap-1.5 text-xs text-[#1A1A1A]">
+                                                    <span className="font-medium">{del.country}</span>
+                                                    <span className="text-[#4A4A4A]">({(del.delegation_members ?? []).length})</span>
+                                                    {del.head_of_delegation_name && (
+                                                      <span className="flex items-center gap-0.5 text-[#4A4A4A]">
+                                                        <Star className="w-3 h-3 text-amber-500" />{del.head_of_delegation_name}
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                ))
+                                              )}
+                                            </div>
+                                          </div>
                                         );
                                       })}
-                                    </tbody>
-                                  </table>
+                                    </div>
+                                  )}
                                 </div>
-                              )}
 
-                              <div className="border-t border-gray-200 my-4" />
+                                <div className="border-t border-gray-200" />
 
-                              {/* Section B: Daftari Mulaqat */}
-                              <p className="text-sm font-semibold text-gray-700 mb-2">Daftari Mulaqat</p>
-                              {dafSlots.length === 0 ? (
-                                <p className="text-sm italic text-gray-400">No Daftari Mulaqat on this day</p>
-                              ) : (
-                                <div className="overflow-x-auto">
-                                  <table className="w-full text-sm">
-                                    <thead>
-                                      <tr className="border-b border-gray-200">
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Slot</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Guest</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Country</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Designation</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Group</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
+                                {/* Section B: Daftari Mulaqat */}
+                                <div>
+                                  <p className="border-l-2 border-blue-500 pl-2 text-sm font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                                    Daftari Mulaqat ({dafSlots.length} slot{dafSlots.length !== 1 ? 's' : ''})
+                                  </p>
+                                  {dafSlots.length === 0 ? (
+                                    <p className="text-sm italic text-gray-400">No Daftari Mulaqat</p>
+                                  ) : (
+                                    <div className="space-y-2">
                                       {dafSlots.map(slot => {
                                         const g = slot.guest_id ? guests.find(x => x.id === slot.guest_id) : null;
+                                        const isGroup = slot.guest_name?.includes(',') ?? false;
                                         return (
-                                          <tr key={slot.id} className="border-b border-gray-100 last:border-b-0">
-                                            <td className="px-3 py-2 font-medium text-[#1A1A1A]">{slot.name}</td>
-                                            <td className="px-3 py-2 text-[#4A4A4A]">{slot.guest_name || '—'}</td>
-                                            <td className="px-3 py-2 text-[#4A4A4A]">{g?.country || '—'}</td>
-                                            <td className="px-3 py-2 text-[#4A4A4A]">{g ? String(formatDesignation(g.designation ?? '')) : '—'}</td>
-                                            <td className="px-3 py-2">
-                                              {slot.guest_id ? (
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-purple-50 text-purple-700 border border-purple-200">Individual</span>
-                                              ) : (
-                                                <span className="text-gray-400 text-xs">—</span>
+                                          <div key={slot.id} className="border border-[#E8E3DB] rounded-lg overflow-hidden">
+                                            <div className="flex items-center justify-between px-3 py-2 bg-[#F9F8F6]">
+                                              <span className="text-sm font-medium text-[#1A1A1A]">{slot.name}</span>
+                                              {isGroup && (
+                                                <Badge variant="outline" className="text-[10px] bg-purple-50 text-purple-700 border-purple-200">Group</Badge>
                                               )}
-                                            </td>
-                                            <td className="px-3 py-2">
-                                              {slot.guest_id ? (
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">Assigned</span>
+                                            </div>
+                                            <div className="px-3 py-2">
+                                              {!slot.guest_id ? (
+                                                <p className="text-xs text-green-600 flex items-center gap-1">
+                                                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+                                                  Available — no guest assigned
+                                                </p>
                                               ) : (
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-white text-green-700 border border-green-300">Available</span>
+                                                <p className="text-xs text-[#1A1A1A]">
+                                                  <span className="font-medium">{slot.guest_name}</span>
+                                                  {g && (
+                                                    <span className="text-[#4A4A4A]"> ({g.country}{g.designation ? `, ${formatDesignation(g.designation)}` : ''})</span>
+                                                  )}
+                                                </p>
                                               )}
-                                            </td>
-                                          </tr>
+                                            </div>
+                                          </div>
                                         );
                                       })}
-                                    </tbody>
-                                  </table>
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </div>
+
+                              </div>
+                            </CardContent>
                           )}
-                        </Fragment>
+                        </Card>
                       );
                     })}
                   </div>
