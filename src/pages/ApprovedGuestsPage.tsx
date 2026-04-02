@@ -16,7 +16,7 @@ import {
   Search, ChevronDown, LogOut, Eye, CheckCircle, MessageSquare, ChevronRight,
 } from 'lucide-react';
 import { ROLE_LABELS, GUEST_STATUS_LABELS } from '@/lib/constants';
-import { CountryCombobox } from '@/components/CountryCombobox';
+import { DelegationCombobox } from '@/components/DelegationCombobox';
 import { MulaqatTypeSelect } from '@/components/MulaqatTypeSelect';
 import { useDelegations } from '@/hooks/useDelegations';
 import type { Guest } from '@/types';
@@ -368,7 +368,7 @@ export default function ApprovedGuestsPage() {
                                 {/* Delegation */}
                                 <td className="px-2 py-2 w-[110px]" onClick={e => e.stopPropagation()}>
                                   {(g.mulaqatType === 'Delegation' || g.mulaqatType === 'Both') ? (
-                                    <CountryCombobox
+                                    <DelegationCombobox
                                       compact
                                       hideClear
                                       value={getDelegationCountry(g.delegationId) ?? g.country}

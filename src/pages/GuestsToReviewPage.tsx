@@ -19,7 +19,7 @@ import { GuestViewModal } from '@/components/GuestViewModal';
 import { DepartmentSelect } from '@/components/DepartmentSelect';
 import { MulaqatTypeSelect } from '@/components/MulaqatTypeSelect';
 import { useDelegations } from '@/hooks/useDelegations';
-import { CountryCombobox } from '@/components/CountryCombobox';
+import { DelegationCombobox } from '@/components/DelegationCombobox';
 import { toast } from 'sonner';
 import {
   LayoutDashboard, ClipboardList, CheckSquare, MessageSquare, XCircle,
@@ -689,7 +689,7 @@ export default function GuestsToReviewPage() {
                                     </td>
                                     <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                                       {(group.head.mulaqatType === 'Delegation' || group.head.mulaqatType === 'Both') ? (
-                                        <CountryCombobox
+                                        <DelegationCombobox
                                           compact
                                           hideClear
                                           value={getDelegationCountry(group.head.delegationId) ?? group.head.country}
@@ -937,7 +937,7 @@ export default function GuestsToReviewPage() {
                                   {/* Delegation */}
                                   <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                                     {(g.mulaqatType === 'Delegation' || g.mulaqatType === 'Both') ? (
-                                      <CountryCombobox
+                                      <DelegationCombobox
                                         compact
                                         hideClear
                                         value={getDelegationCountry(g.delegationId) ?? g.country}

@@ -57,7 +57,7 @@ import { ProfileDialog } from '@/components/ProfileDialog';
 import { useMemo, useRef, useEffect } from 'react';
 import { useRooms } from '@/hooks/useRooms';
 import { GUEST_STATUS_LABELS, ROLE_LABELS, formatDesignation } from '@/lib/constants';
-import { CountryCombobox } from '@/components/CountryCombobox';
+import { DelegationCombobox } from '@/components/DelegationCombobox';
 import { MulaqatTypeSelect } from '@/components/MulaqatTypeSelect';
 import { useDelegations } from '@/hooks/useDelegations';
 import { GuestViewModal } from '@/components/GuestViewModal';
@@ -911,7 +911,7 @@ export default function GuestsPage() {
                                 </td>
                                 <td className="px-4 py-3 min-w-[160px]" onClick={(e) => e.stopPropagation()}>
                                   {(guest.mulaqatType === 'Delegation' || guest.mulaqatType === 'Both') ? (
-                                    <CountryCombobox
+                                    <DelegationCombobox
                                       compact
                                       hideClear
                                       value={getDelegationCountry(guest.delegationId) ?? guest.country}

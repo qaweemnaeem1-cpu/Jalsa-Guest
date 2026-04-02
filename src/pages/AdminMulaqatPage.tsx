@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import {
   Calendar, CalendarDays, ChevronDown, ChevronRight, GripVertical, LogOut, User,
   Plus, Pencil, Trash2, Eye, X, Star, Users, AlertTriangle, Search, UserMinus, UserPlus,
-  FileText, RefreshCw, Archive, Archive,
+  FileText, RefreshCw, Archive,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
