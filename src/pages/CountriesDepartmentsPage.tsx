@@ -107,7 +107,7 @@ function DeleteDialog({
             <Trash2 className="w-5 h-5 text-red-500" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-[#1A1A1A]">Delete {item.type === 'country' ? 'Country' : 'Department'}</h2>
+            <h2 className="text-lg font-semibold text-[#1A1A1A]">Delete {item.type === 'country' ? 'Country' : 'Group'}</h2>
             <p className="text-sm text-[#4A4A4A]">This action cannot be undone.</p>
           </div>
         </div>
@@ -187,12 +187,14 @@ function ItemFormDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
         <h2 className="text-lg font-semibold text-[#1A1A1A] mb-5">
-          {editing ? 'Edit Item' : 'Add New Item'}
+          {editing
+            ? (editing.type === 'country' ? 'Edit Country' : 'Edit Group')
+            : defaultType === 'country' ? 'Add Country' : defaultType === 'department' ? 'Add Group' : 'Add New Item'}
         </h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Type selector — only when adding */}
-          {!editing && (
+          {/* Type selector — only on the "All" tab when adding */}
+          {!editing && defaultType === 'all' && (
             <div>
               <Label className="text-sm font-medium text-[#1A1A1A] mb-1.5 block">Type</Label>
               <div className="flex gap-2">
@@ -210,7 +212,7 @@ function ItemFormDialog({
                     }`}
                   >
                     {t === 'country' ? <Globe className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
-                    {t === 'country' ? 'Country' : 'Department'}
+                    {t === 'country' ? 'Country' : 'Group'}
                   </button>
                 ))}
               </div>
@@ -226,7 +228,7 @@ function ItemFormDialog({
               id="item-name"
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder={type === 'country' ? 'e.g. South Korea' : 'e.g. Al-Sharia'}
+              placeholder={type === 'country' ? 'e.g. South Korea' : 'e.g. MTA America'}
               className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45]"
               autoFocus
               maxLength={100}
@@ -253,7 +255,7 @@ function ItemFormDialog({
             </div>
           )}
 
-          {/* Description (department only) */}
+          {/* Description (group only) */}
           {type === 'department' && (
             <div>
               <Label htmlFor="item-desc" className="text-sm font-medium text-[#1A1A1A] mb-1.5 block">
@@ -278,7 +280,7 @@ function ItemFormDialog({
               type="submit"
               className="bg-[#2D5A45] hover:bg-[#234839] text-white"
             >
-              {editing ? 'Save Changes' : 'Add Item'}
+              {editing ? 'Save Changes' : type === 'country' ? 'Add Country' : 'Add Group'}
             </Button>
           </div>
         </form>
@@ -370,7 +372,7 @@ export default function CountriesDepartmentsPage() {
   const handleSaveItem = (name: string, type: 'country' | 'department', description?: string, continent?: string) => {
     if (addEditItem === 'new') {
       addItem(name, type, description);
-      toast.success(`${type === 'country' ? 'Country' : 'Department'} "${name}" added`);
+      toast.success(`${type === 'country' ? 'Country' : 'Group'} "${name}" added`);
     } else if (addEditItem && addEditItem !== 'new') {
       updateItem(addEditItem.id, { name, description, continent });
       toast.success(`"${name}" updated`);
@@ -438,7 +440,7 @@ export default function CountriesDepartmentsPage() {
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   Back
                 </Button>
-                <h1 className="text-xl font-semibold text-[#1A1A1A]">Countries &amp; Departments</h1>
+                <h1 className="text-xl font-semibold text-[#1A1A1A]">Countries &amp; Groups</h1>
               </div>
 
               {/* User menu */}
@@ -484,7 +486,7 @@ export default function CountriesDepartmentsPage() {
             <div className="grid grid-cols-4 gap-4 mb-6">
               {[
                 { label: 'Total Countries', value: totalCountries, sub: `${activeCountries} active`, color: 'text-[#2D5A45]', bg: 'bg-[#E8F5EE]' },
-                { label: 'Departments', value: totalDepts, sub: `${activeDepts} active`, color: 'text-purple-700', bg: 'bg-purple-50' },
+                { label: 'Groups', value: totalDepts, sub: `${activeDepts} active`, color: 'text-purple-700', bg: 'bg-purple-50' },
                 { label: 'Total Items', value: items.length, sub: `${items.filter(i => i.isActive).length} active`, color: 'text-[#1A1A1A]', bg: 'bg-white' },
                 { label: 'Assigned Items', value: totalAssigned, sub: 'across all desk in-charges', color: 'text-blue-700', bg: 'bg-blue-50' },
               ].map(stat => (
@@ -522,7 +524,7 @@ export default function CountriesDepartmentsPage() {
                           : 'bg-white border border-[#D4CFC7] text-[#4A4A4A] hover:bg-[#F5F0E8]'
                       }`}
                     >
-                      {f === 'all' ? 'All' : f === 'country' ? 'Countries' : 'Departments'}
+                      {f === 'all' ? 'All' : f === 'country' ? 'Countries' : 'Groups'}
                       <span className="ml-1.5 text-xs opacity-70">
                         {f === 'all' ? items.length : f === 'country' ? totalCountries : totalDepts}
                       </span>
@@ -536,7 +538,7 @@ export default function CountriesDepartmentsPage() {
                 className="bg-[#2D5A45] hover:bg-[#234839] text-white gap-2"
               >
                 <Plus className="w-4 h-4" />
-                Add Item
+                {filterType === 'country' ? 'Add Country' : filterType === 'department' ? 'Add Group' : 'Add Item'}
               </Button>
             </div>
 
@@ -586,7 +588,7 @@ export default function CountriesDepartmentsPage() {
                                 ? 'bg-[#E8F5EE] text-[#2D5A45]'
                                 : 'bg-purple-50 text-purple-700 border border-purple-200'
                             }`}>
-                              {item.type === 'country' ? 'Country' : 'Department'}
+                              {item.type === 'country' ? 'Country' : 'Group'}
                             </span>
                           </td>
 
@@ -594,7 +596,7 @@ export default function CountriesDepartmentsPage() {
                           <td className="px-4 py-3 text-[#4A4A4A]">
                             {item.type === 'country'
                               ? (item.continent ?? <span className="text-[#4A4A4A]/40 italic">—</span>)
-                              : <span className="text-[#4A4A4A]/60 italic text-xs">Department</span>
+                              : <span className="text-[#4A4A4A]/60 italic text-xs">Group</span>
                             }
                           </td>
 

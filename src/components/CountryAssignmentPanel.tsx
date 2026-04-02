@@ -194,7 +194,7 @@ export function CountryAssignmentPanel({
             <span className="text-xs text-[#4A4A4A]">
               <span className="font-semibold text-[#2D5A45]">{selectedCountries.length}</span> countries
               {selectedDepts.length > 0 && (
-                <>, <span className="font-semibold text-purple-600">{selectedDepts.length}</span> departments</>
+                <>, <span className="font-semibold text-purple-600">{selectedDepts.length}</span> groups</>
               )}
               &nbsp;·&nbsp;
               <span className="font-semibold">{totalAvailable}</span> total
@@ -276,7 +276,7 @@ export function CountryAssignmentPanel({
                 <Input
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder="Search countries or departments…"
+                  placeholder="Search countries or groups…"
                   className="pl-8 h-8 text-sm border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45]"
                 />
                 {search && (
@@ -307,7 +307,7 @@ export function CountryAssignmentPanel({
                         <ChevronRight className="w-3.5 h-3.5 text-purple-600" />
                       )}
                       <Building2 className="w-3.5 h-3.5 text-purple-600" />
-                      <span className="text-sm font-semibold text-[#1A1A1A]">Departments</span>
+                      <span className="text-sm font-semibold text-[#1A1A1A]">Groups</span>
                     </div>
                     <div className="flex items-center gap-2">
                       {selectedDepts.length > 0 && (

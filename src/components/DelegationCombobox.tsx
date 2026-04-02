@@ -39,8 +39,8 @@ export function DelegationCombobox({
   // Fetch countries and departments on mount
   useEffect(() => {
     Promise.all([
-      supabase.from('countries').select('name').order('name'),
-      supabase.from('departments').select('name').order('name'),
+      supabase.from('countries').select('name').eq('is_active', true).order('name'),
+      supabase.from('departments').select('name').eq('type', 'group').eq('is_active', true).order('name'),
     ]).then(([{ data: cData }, { data: dData }]) => {
       if (cData) setCountries(cData.map((r: { name: string }) => r.name));
       if (dData) setDepartments(dData.map((r: { name: string }) => r.name));
@@ -155,7 +155,7 @@ export function DelegationCombobox({
             {filteredDepartments.length > 0 && (
               <>
                 <div className={`px-3 pb-1 ${filteredCountries.length > 0 ? 'pt-3 mt-1 border-t border-gray-100' : 'pt-2'}`}>
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Departments</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Groups</span>
                 </div>
                 {filteredDepartments.map(name => renderOption({ name, type: 'department' }))}
               </>

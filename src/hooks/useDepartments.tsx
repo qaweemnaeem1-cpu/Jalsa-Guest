@@ -93,6 +93,7 @@ export function DepartmentsProvider({ children }: { children: ReactNode }) {
     supabase
       .from('departments')
       .select('*')
+      .eq('type', 'accommodation')
       .order('name')
       .then(({ data, error }) => {
         if (error) { console.error('useDepartments fetch:', error); return; }
@@ -154,7 +155,7 @@ export function DepartmentsProvider({ children }: { children: ReactNode }) {
     if (!trimmed) return;
     const { data, error } = await supabase
       .from('departments')
-      .insert({ name: trimmed })
+      .insert({ name: trimmed, type: 'accommodation' })
       .select()
       .single();
 

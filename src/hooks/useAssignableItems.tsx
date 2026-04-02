@@ -20,16 +20,6 @@ function stripHtml(raw: string): string {
   return raw.replace(/<[^>]*>/g, '').trim();
 }
 
-// ── Static departments (not yet in a DB table) ─────────────────────────────────
-
-const STATIC_DEPARTMENTS: AssignableItem[] = [
-  { id: 'dept-001', name: 'MTA Africa',      type: 'department', description: 'Muslim Television Ahmadiyya - Africa',                  isActive: true },
-  { id: 'dept-002', name: 'MTA Europe',      type: 'department', description: 'Muslim Television Ahmadiyya - Europe',                  isActive: true },
-  { id: 'dept-003', name: 'MTA Asia',        type: 'department', description: 'Muslim Television Ahmadiyya - Asia',                    isActive: true },
-  { id: 'dept-004', name: 'Humanity First',  type: 'department', description: 'International humanitarian relief organization',         isActive: true },
-  { id: 'dept-005', name: 'IAAAE',           type: 'department', description: 'International Association of Ahmadi Architects and Engineers', isActive: true },
-];
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToCountry(row: any): AssignableItem {
   return {
@@ -37,6 +27,17 @@ function rowToCountry(row: any): AssignableItem {
     name: row.name,
     type: 'country',
     continent: row.continent ?? undefined,
+    isActive: row.is_active ?? true,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToGroup(row: any): AssignableItem {
+  return {
+    id: row.id,
+    name: row.name,
+    type: 'department',
+    description: row.description ?? undefined,
     isActive: row.is_active ?? true,
   };
 }
@@ -57,9 +58,9 @@ const AssignableItemsContext = createContext<AssignableItemsContextType | undefi
 
 export function AssignableItemsProvider({ children }: { children: ReactNode }) {
   const [countryItems, setCountryItems] = useState<AssignableItem[]>([]);
-  const [deptItems, setDeptItems] = useState<AssignableItem[]>(STATIC_DEPARTMENTS);
+  const [deptItems, setDeptItems] = useState<AssignableItem[]>([]);
 
-  // Fetch countries from Supabase on mount
+  // Fetch countries and groups on mount
   useEffect(() => {
     supabase
       .from('countries')
@@ -68,6 +69,16 @@ export function AssignableItemsProvider({ children }: { children: ReactNode }) {
       .then(({ data, error }) => {
         if (error) { console.error('useAssignableItems countries fetch:', error); return; }
         if (data) setCountryItems(data.map(rowToCountry));
+      });
+
+    supabase
+      .from('departments')
+      .select('*')
+      .eq('type', 'group')
+      .order('name')
+      .then(({ data, error }) => {
+        if (error) { console.error('useAssignableItems groups fetch:', error); return; }
+        if (data) setDeptItems(data.map(rowToGroup));
       });
   }, []);
 
@@ -94,15 +105,16 @@ export function AssignableItemsProvider({ children }: { children: ReactNode }) {
       return newItem;
     }
 
-    // Departments are local-only
-    const newItem: AssignableItem = {
-      id: `dept-${Date.now()}`,
-      name: safeName,
-      type,
-      description: safeDesc,
-      isActive: true,
-    };
-    setDeptItems(prev => [...prev, newItem]);
+    // Groups — stored in departments table with type = 'group'
+    const { data, error } = await supabase
+      .from('departments')
+      .insert({ name: safeName, type: 'group', description: safeDesc ?? null, is_active: true })
+      .select()
+      .single();
+
+    if (error) { return null; }
+    const newItem = rowToGroup(data);
+    setDeptItems(prev => [...prev, newItem].sort((a, b) => a.name.localeCompare(b.name)));
     return newItem;
   }, []);
 
@@ -117,12 +129,23 @@ export function AssignableItemsProvider({ children }: { children: ReactNode }) {
         .update({
           ...(updates.name     !== undefined ? { name: updates.name }          : {}),
           ...(updates.isActive !== undefined ? { is_active: updates.isActive } : {}),
+          ...(updates.continent !== undefined ? { continent: updates.continent } : {}),
           updated_at: new Date().toISOString(),
         })
         .eq('id', id);
 
       setCountryItems(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
     } else {
+      await supabase
+        .from('departments')
+        .update({
+          ...(updates.name        !== undefined ? { name: updates.name }                   : {}),
+          ...(updates.description !== undefined ? { description: updates.description ?? null } : {}),
+          ...(updates.isActive    !== undefined ? { is_active: updates.isActive }           : {}),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+
       setDeptItems(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
     }
   }, [countryItems]);
@@ -134,6 +157,7 @@ export function AssignableItemsProvider({ children }: { children: ReactNode }) {
       await supabase.from('countries').delete().eq('id', id);
       setCountryItems(prev => prev.filter(c => c.id !== id));
     } else {
+      await supabase.from('departments').delete().eq('id', id);
       setDeptItems(prev => prev.filter(d => d.id !== id));
     }
   }, [countryItems]);
@@ -149,11 +173,17 @@ export function AssignableItemsProvider({ children }: { children: ReactNode }) {
         prev.map(c => c.id === id ? { ...c, isActive: !c.isActive } : c)
       );
     } else {
+      const dept = deptItems.find(d => d.id === id);
+      if (!dept) return;
+      await supabase
+        .from('departments')
+        .update({ is_active: !dept.isActive, updated_at: new Date().toISOString() })
+        .eq('id', id);
       setDeptItems(prev =>
         prev.map(d => d.id === id ? { ...d, isActive: !d.isActive } : d)
       );
     }
-  }, [countryItems]);
+  }, [countryItems, deptItems]);
 
   return (
     <AssignableItemsContext.Provider

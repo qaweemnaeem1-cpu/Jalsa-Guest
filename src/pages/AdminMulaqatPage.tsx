@@ -343,6 +343,7 @@ export default function AdminMulaqatPage() {
   const [days, setDays] = useState<MulaqatDay[]>([]);
   const [slots, setSlots] = useState<MulaqatSlot[]>([]);
   const [delegations, setDelegations] = useState<Delegation[]>([]);
+  const [groupNames, setGroupNames] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   // Daftari data
@@ -492,16 +493,18 @@ export default function AdminMulaqatPage() {
   // ── Fetch ────────────────────────────────────────────────────────────────────
 
   const fetchAll = useCallback(async () => {
-    const [{ data: dayData }, { data: slotData }, { data: delData, error: delError }] = await Promise.all([
+    const [{ data: dayData }, { data: slotData }, { data: delData, error: delError }, { data: groupData }] = await Promise.all([
       supabase.from('mulaqat_days').select('*').eq('is_archived', false).order('date'),
       supabase.from('mulaqat_slots').select('*').order('name'),
       supabase
         .from('delegations')
         .select('id, country, managed_by, managed_by_name, head_of_delegation_id, head_of_delegation_name, slot_id, delegation_members(*)')
         .order('country'),
+      supabase.from('departments').select('name').eq('type', 'group'),
     ]);
     if (dayData) setDays(dayData as MulaqatDay[]);
     if (slotData) setSlots(slotData as MulaqatSlot[]);
+    if (groupData) setGroupNames(new Set(groupData.map((r: { name: string }) => r.name)));
     if (delData) setDelegations(delData as Delegation[]);
     console.log('[SA Mulaqat] Delegations:', delData);
     console.log('[SA Mulaqat] Delegation query error:', delError);
@@ -699,6 +702,8 @@ export default function AdminMulaqatPage() {
 
   const getDIForCountry = (country: string) =>
     delegations.find(d => d.country === country)?.managed_by_name ?? '—';
+
+  const delegIcon = (name: string) => groupNames.has(name) ? '🏢' : '🌍';
 
   const daftariCountries = useMemo(() => {
     const set = new Set(daftariGuests.map(g => g.country));
@@ -2148,7 +2153,7 @@ export default function AdminMulaqatPage() {
                                                         {isDelExpanded
                                                           ? <ChevronDown className="w-3.5 h-3.5 text-[#2D5A45] flex-shrink-0" />
                                                           : <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />}
-                                                        <span className="font-medium text-[#1A1A1A]">{del.country}</span>
+                                                        <span className="font-medium text-[#1A1A1A]">{delegIcon(del.country)} {del.country}</span>
                                                         <span className="text-[#4A4A4A]">({del.delegation_members.length})</span>
                                                         {del.head_of_delegation_name && (
                                                           <span className="flex items-center gap-0.5 text-[#4A4A4A]">
@@ -2400,7 +2405,7 @@ export default function AdminMulaqatPage() {
                                       className="border-gray-300 data-[state=checked]:bg-[#2D5A45] data-[state=checked]:border-[#2D5A45]"
                                     />
                                   </td>
-                                  <td className="px-3 py-3 font-medium text-[#1A1A1A]">{del.country}</td>
+                                  <td className="px-3 py-3 font-medium text-[#1A1A1A]">{delegIcon(del.country)} {del.country}</td>
                                   <td className="px-3 py-3">
                                     <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">{del.delegation_members.length}</Badge>
                                   </td>

@@ -1150,7 +1150,7 @@ export default function UsersPage() {
                                           )}
                                           {(u.assignedDepartments?.length ?? 0) > 0 && (
                                             <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition-colors">
-                                              {u.assignedDepartments!.length} dept{u.assignedDepartments!.length > 1 ? 's' : ''}
+                                              {u.assignedDepartments!.length} group{u.assignedDepartments!.length > 1 ? 's' : ''}
                                             </span>
                                           )}
                                         </div>
@@ -1159,7 +1159,7 @@ export default function UsersPage() {
                                         {(u.assignedDepartments?.length ?? 0) > 0 && (
                                           <div className="mb-3">
                                             <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide mb-2">
-                                              Departments ({u.assignedDepartments!.length})
+                                              Groups ({u.assignedDepartments!.length})
                                             </p>
                                             <div className="flex flex-wrap gap-1.5">
                                               {u.assignedDepartments!.map((dept, i) => (
