@@ -92,7 +92,6 @@ export function DelegationCombobox({
 
   const renderOption = (item: OptionItem) => {
     const isSelected = value === item.name;
-    const icon = item.type === 'country' ? '🌍' : '🏢';
     return (
       <button
         key={`${item.type}-${item.name}`}
@@ -105,10 +104,7 @@ export function DelegationCombobox({
             : 'text-gray-700 hover:bg-[#D6E4D9] hover:text-[#2D5A45]',
         ].join(' ')}
       >
-        <span className="flex items-center gap-2 truncate">
-          <span className="shrink-0">{icon}</span>
-          <span className="truncate">{item.name}</span>
-        </span>
+        <span className="truncate">{item.name}</span>
         {isSelected && <Check className="w-3.5 h-3.5 flex-shrink-0 ml-1" />}
       </button>
     );

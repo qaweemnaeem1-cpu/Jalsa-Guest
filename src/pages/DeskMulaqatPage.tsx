@@ -134,7 +134,6 @@ export default function DeskMulaqatPage() {
   const [delegationDetails, setDelegationDetails] = useState<DelegationDetail[]>([]);
   const [days, setDays] = useState<MulaqatDay[]>([]);
   const [slots, setSlots] = useState<MulaqatSlot[]>([]);
-  const [groupNames, setGroupNames] = useState<Set<string>>(new Set());
 
   // ── Daftari data ──────────────────────────────────────────────────────────────
   const [daftariDays, setDaftariDays] = useState<DaftariDay[]>([]);
@@ -191,7 +190,6 @@ export default function DeskMulaqatPage() {
       { data: slotData },
       { data: dDayData },
       { data: dSlotData },
-      { data: groupData },
     ] = await Promise.all([
       supabase
         .from('delegations')
@@ -201,7 +199,6 @@ export default function DeskMulaqatPage() {
       supabase.from('mulaqat_slots').select('id, name, day_id').order('name'),
       supabase.from('daftari_days').select('id, date, label, is_active').eq('is_active', true).order('date'),
       supabase.from('daftari_slots').select('id, name, day_id, guest_id, guest_name, assigned_by, assigned_by_name').order('name'),
-      supabase.from('departments').select('name').eq('type', 'group'),
     ]);
     if (delData) setDelegationDetails(delData as DelegationDetail[]);
     if (dayData) setDays(dayData as MulaqatDay[]);
@@ -213,7 +210,6 @@ export default function DeskMulaqatPage() {
       (dSlotData as DaftariSlot[]).forEach(s => { if (s.guest_id) slotMap[s.guest_id] = s.id; });
       setGuestSlotIds(slotMap);
     }
-    if (groupData) setGroupNames(new Set(groupData.map((r: { name: string }) => r.name)));
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -1219,8 +1215,7 @@ export default function DeskMulaqatPage() {
                                           {row.delegations.map(d => {
                                             const isMine = assignedCountries.includes(d.country);
                                             return (
-                                              <span key={d.id} className={['inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border', isMine ? 'bg-green-50 text-green-700 border-green-200 font-medium' : 'bg-gray-50 text-gray-400 border-gray-200'].join(' ')}>
-                                                <span>{groupNames.has(d.country) ? '🏢' : '🌍'}</span>
+                                              <span key={d.id} className={['inline-flex items-center px-2 py-0.5 rounded-full text-xs border', isMine ? 'bg-green-50 text-green-700 border-green-200 font-medium' : 'bg-gray-50 text-gray-400 border-gray-200'].join(' ')}>
                                                 {d.country}
                                               </span>
                                             );

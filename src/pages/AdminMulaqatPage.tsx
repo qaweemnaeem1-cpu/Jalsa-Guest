@@ -133,21 +133,6 @@ interface OverviewDaftariDay {
   daftari_slots: OverviewDaftariSlot[];
 }
 
-interface CombinedRow {
-  date: string;
-  type: 'delegation' | 'daftari';
-  slotId: string;
-  slotName: string;
-  delegationCountries: string[];
-  guestName: string;
-  country: string;
-  guestCount: number;
-  headNames: string[];
-  groupLabel: string;
-  managedBy: string;
-  isAssigned: boolean;
-}
-
 interface ArchivedDelegationDay {
   id: string;
   date: string;
@@ -335,7 +320,6 @@ export default function AdminMulaqatPage() {
   const [days, setDays] = useState<MulaqatDay[]>([]);
   const [slots, setSlots] = useState<MulaqatSlot[]>([]);
   const [delegations, setDelegations] = useState<Delegation[]>([]);
-  const [groupNames, setGroupNames] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   // Daftari data
@@ -457,7 +441,7 @@ export default function AdminMulaqatPage() {
   const [overviewDaftariDays, setOverviewDaftariDays] = useState<OverviewDaftariDay[]>([]);
   const [overviewScheduledDates, setOverviewScheduledDates] = useState<string[]>([]);
   const [overviewLoading, setOverviewLoading] = useState(true);
-  const [activeDateFilter, setActiveDateFilter] = useState<Set<string>>(new Set());
+  const [overviewExpandedDate, setOverviewExpandedDate] = useState<string | null>(null);
 
   // Archives tab
   const [archivedDelegationDays, setArchivedDelegationDays] = useState<ArchivedDelegationDay[]>([]);
@@ -486,18 +470,16 @@ export default function AdminMulaqatPage() {
   // ── Fetch ────────────────────────────────────────────────────────────────────
 
   const fetchAll = useCallback(async () => {
-    const [{ data: dayData }, { data: slotData }, { data: delData, error: delError }, { data: groupData }] = await Promise.all([
+    const [{ data: dayData }, { data: slotData }, { data: delData, error: delError }] = await Promise.all([
       supabase.from('mulaqat_days').select('*').eq('is_archived', false).order('date'),
       supabase.from('mulaqat_slots').select('*').order('name'),
       supabase
         .from('delegations')
         .select('id, country, managed_by, managed_by_name, head_of_delegation_id, head_of_delegation_name, slot_id, delegation_members(*)')
         .order('country'),
-      supabase.from('departments').select('name').eq('type', 'group'),
     ]);
     if (dayData) setDays(dayData as MulaqatDay[]);
     if (slotData) setSlots(slotData as MulaqatSlot[]);
-    if (groupData) setGroupNames(new Set(groupData.map((r: { name: string }) => r.name)));
     if (delData) setDelegations(delData as Delegation[]);
     console.log('[SA Mulaqat] Delegations:', delData);
     console.log('[SA Mulaqat] Delegation query error:', delError);
@@ -530,44 +512,44 @@ export default function AdminMulaqatPage() {
     setOverviewLoading(true);
     const today = new Date().toISOString().split('T')[0];
 
-    // Step 1: collect all dates that have any Mulaqat (delegation or daftari)
-    const [{ data: delDateData }, { data: dafDateData }] = await Promise.all([
-      supabase.from('mulaqat_days').select('date').eq('is_archived', false).eq('is_active', true).gte('date', today).order('date'),
-      supabase.from('daftari_days').select('date').eq('is_archived', false).eq('is_active', true).gte('date', today).order('date'),
-    ]);
-
-    const allDates = new Set([
-      ...(delDateData ?? []).map((d: { date: string }) => d.date),
-      ...(dafDateData ?? []).map((d: { date: string }) => d.date),
-    ]);
-    const upcomingDates = [...allDates].sort().slice(0, 5);
-    setOverviewScheduledDates(upcomingDates);
-    setActiveDateFilter(new Set(upcomingDates));
-
-    if (upcomingDates.length === 0) {
-      setOverviewDelegationDays([]);
-      setOverviewDaftariDays([]);
-      setOverviewLoading(false);
-      return;
-    }
-
-    // Step 2: fetch full data for only these dates
-    const [{ data: delDays }, { data: dafDays }] = await Promise.all([
+    const [{ data: delegationDays }, { data: daftariDays }] = await Promise.all([
       supabase
         .from('mulaqat_days')
         .select('*, mulaqat_slots(*, delegations(*, delegation_members(*)))')
-        .in('date', upcomingDates)
         .eq('is_archived', false)
+        .eq('is_active', true)
+        .gte('date', today)
         .order('date'),
       supabase
         .from('daftari_days')
         .select('*, daftari_slots(*)')
-        .in('date', upcomingDates)
         .eq('is_archived', false)
+        .eq('is_active', true)
+        .gte('date', today)
         .order('date'),
     ]);
-    if (delDays) setOverviewDelegationDays(delDays as OverviewMulaqatDay[]);
-    if (dafDays) setOverviewDaftariDays(dafDays as OverviewDaftariDay[]);
+
+    // Combine by date, deduplicate, take first 5
+    const dateMap = new Map<string, { delegation?: OverviewMulaqatDay; daftari?: OverviewDaftariDay }>();
+    (delegationDays ?? []).forEach((d: OverviewMulaqatDay) => {
+      dateMap.set(d.date, { ...dateMap.get(d.date), delegation: d });
+    });
+    (daftariDays ?? []).forEach((d: OverviewDaftariDay) => {
+      dateMap.set(d.date, { ...dateMap.get(d.date), daftari: d });
+    });
+
+    const sortedDates = [...dateMap.keys()].sort().slice(0, 5);
+    setOverviewScheduledDates(sortedDates);
+
+    const filteredDelDays = sortedDates
+      .map(d => dateMap.get(d)?.delegation)
+      .filter((d): d is OverviewMulaqatDay => !!d);
+    const filteredDafDays = sortedDates
+      .map(d => dateMap.get(d)?.daftari)
+      .filter((d): d is OverviewDaftariDay => !!d);
+
+    setOverviewDelegationDays(filteredDelDays);
+    setOverviewDaftariDays(filteredDafDays);
     setOverviewLoading(false);
   }, []);
 
@@ -719,8 +701,6 @@ export default function AdminMulaqatPage() {
   const getDIForCountry = (country: string) =>
     delegations.find(d => d.country === country)?.managed_by_name ?? '—';
 
-  const delegIcon = (name: string) => groupNames.has(name) ? '🏢' : '🌍';
-
   const daftariCountries = useMemo(() => {
     const set = new Set(daftariGuests.map(g => g.country));
     return Array.from(set).sort();
@@ -750,71 +730,14 @@ export default function AdminMulaqatPage() {
 
   // ── Derived (overview / "All" tab) ────────────────────────────────────────────
 
-  const combinedRows = useMemo((): CombinedRow[] => {
-    const rows: CombinedRow[] = [];
-
-    for (const day of overviewDelegationDays) {
-      for (const slot of (day.mulaqat_slots ?? [])) {
-        const delegs = slot.delegations ?? [];
-        if (delegs.length === 0) {
-          rows.push({
-            date: day.date, type: 'delegation', slotId: slot.id, slotName: slot.name,
-            delegationCountries: [], guestName: '', country: '',
-            guestCount: 0, headNames: [], groupLabel: '', managedBy: '—', isAssigned: false,
-          });
-        } else {
-          const countries = delegs.map(d => d.country);
-          const guestCount = delegs.reduce((s, d) => s + (d.delegation_members ?? []).length, 0);
-          const heads = delegs.map(d => d.head_of_delegation_name).filter(Boolean) as string[];
-          const managedBy = [...new Set(delegs.map(d => d.managed_by_name).filter(Boolean))].join(', ') || '—';
-          rows.push({
-            date: day.date, type: 'delegation', slotId: slot.id, slotName: slot.name,
-            delegationCountries: countries, guestName: '', country: countries.join(', '),
-            guestCount, headNames: heads, groupLabel: '', managedBy, isAssigned: true,
-          });
-        }
-      }
-    }
-
-    for (const day of overviewDaftariDays) {
-      for (const slot of (day.daftari_slots ?? [])) {
-        const guestObj = slot.guest_id ? guests.find(g => g.id === slot.guest_id) : null;
-        rows.push({
-          date: day.date, type: 'daftari', slotId: slot.id, slotName: slot.name,
-          delegationCountries: [], guestName: slot.guest_name ?? '',
-          country: guestObj?.country ?? '—',
-          guestCount: slot.guest_id ? 1 : 0,
-          headNames: [], groupLabel: slot.guest_id ? 'Individual' : '',
-          managedBy: slot.assigned_by_name ?? '—', isAssigned: !!slot.guest_id,
-        });
-      }
-    }
-
-    rows.sort((a, b) => {
-      if (a.date < b.date) return -1;
-      if (a.date > b.date) return 1;
-      if (a.type === 'delegation' && b.type === 'daftari') return -1;
-      if (a.type === 'daftari' && b.type === 'delegation') return 1;
-      return a.slotName.localeCompare(b.slotName);
-    });
-
-    return rows;
-  }, [overviewDelegationDays, overviewDaftariDays, guests]);
-
-  const filteredCombinedRows = useMemo(
-    () => combinedRows.filter(r => activeDateFilter.has(r.date)),
-    [combinedRows, activeDateFilter],
-  );
-
-  const dateGroups = useMemo(() => {
-    const groups: { date: string; rows: CombinedRow[] }[] = [];
-    for (const row of filteredCombinedRows) {
-      const last = groups[groups.length - 1];
-      if (last && last.date === row.date) last.rows.push(row);
-      else groups.push({ date: row.date, rows: [row] });
-    }
-    return groups;
-  }, [filteredCombinedRows]);
+  const overviewCombinedDays = useMemo(() => {
+    const map = new Map<string, { delegation?: OverviewMulaqatDay; daftari?: OverviewDaftariDay }>();
+    overviewDelegationDays.forEach(d => { map.set(d.date, { ...map.get(d.date), delegation: d }); });
+    overviewDaftariDays.forEach(d => { map.set(d.date, { ...map.get(d.date), daftari: d }); });
+    return [...map.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, data]) => ({ date, ...data }));
+  }, [overviewDelegationDays, overviewDaftariDays]);
 
   const overviewStats = useMemo(() => {
     const delegSlots = overviewDelegationDays.reduce((s, d) => s + (d.mulaqat_slots ?? []).length, 0);
@@ -1881,7 +1804,7 @@ export default function AdminMulaqatPage() {
                     </button>
                     <button
                       onClick={() => {
-                        setPdfTargetDates(overviewScheduledDates.filter(d => activeDateFilter.has(d)));
+                        setPdfTargetDates(overviewScheduledDates);
                         setPdfTargetType('all');
                         setPdfDialogOpen(true);
                       }}
@@ -1892,36 +1815,7 @@ export default function AdminMulaqatPage() {
                   </div>
                 </div>
 
-                {/* Date filter pills */}
-                <div className="flex items-center flex-wrap gap-2 mb-4">
-                  {overviewScheduledDates.map(date => {
-                    const active = activeDateFilter.has(date);
-                    const todayStr = new Date().toISOString().split('T')[0];
-                    const isToday = date === todayStr;
-                    const label = isToday
-                      ? 'Today'
-                      : new Date(date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-                    return (
-                      <button
-                        key={date}
-                        onClick={() => setActiveDateFilter(prev => {
-                          const next = new Set(prev);
-                          next.has(date) ? next.delete(date) : next.add(date);
-                          return next;
-                        })}
-                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                          active
-                            ? 'bg-[#2D5A45] text-white border-[#2D5A45]'
-                            : 'bg-white text-[#4A4A4A] border-[#D4CFC7] hover:border-[#2D5A45]'
-                        }`}
-                      >
-                        {label}{active && ' ✓'}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Table */}
+                {/* Content */}
                 {overviewLoading ? (
                   <div className="flex items-center justify-center py-16">
                     <div className="w-6 h-6 border-2 border-[#2D5A45] border-t-transparent rounded-full animate-spin" />
@@ -1932,112 +1826,165 @@ export default function AdminMulaqatPage() {
                     <p className="font-medium text-[#1A1A1A]">No upcoming Mulaqat scheduled</p>
                     <p className="text-sm text-[#4A4A4A]">Create Mulaqat days in the Delegation or Daftari tabs</p>
                   </div>
-                ) : filteredCombinedRows.length === 0 ? (
-                  <div className="bg-white rounded-lg border border-[#E8E3DB] flex flex-col items-center justify-center py-16 gap-2">
-                    <CalendarDays className="w-10 h-10 text-gray-300" />
-                    <p className="text-sm text-[#4A4A4A]">No rows match the selected date filters.</p>
-                  </div>
                 ) : (
                   <div className="bg-white rounded-lg border border-[#E8E3DB] overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-[#F5F0E8] border-b border-[#E8E3DB]">
-                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider w-28">Day</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider w-24">Type</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider w-20">Slot</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Delegations / Guest</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider w-28">Country</th>
-                          <th className="px-3 py-2.5 text-center text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider w-16">Guests</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Head / Group</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Managed By</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider w-24">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {dateGroups.map(group => {
-                          const todayStr = new Date().toISOString().split('T')[0];
-                          const isToday = group.date === todayStr;
-                          return group.rows.map((row, rowIdx) => (
-                            <tr
-                              key={row.slotId}
-                              className={`border-b border-[#E8E3DB] last:border-b-0 ${
-                                isToday
-                                  ? row.type === 'daftari' ? 'bg-[#D6E4D9]/10' : 'bg-[#D6E4D9]/10'
-                                  : row.type === 'daftari' ? 'bg-blue-50/20' : 'bg-white'
-                              } ${!row.isAssigned ? 'opacity-60' : ''}`}
-                            >
-                              {rowIdx === 0 && (
-                                <td
-                                  rowSpan={group.rows.length}
-                                  className={`px-3 py-2.5 align-top font-semibold text-[#1A1A1A] text-xs whitespace-nowrap ${
-                                    isToday ? 'border-l-4 border-[#2D5A45]' : ''
-                                  }`}
-                                >
-                                  {new Date(group.date + 'T12:00:00').toLocaleDateString('en-GB', {
-                                    weekday: 'short', day: 'numeric', month: 'short',
-                                  })}
-                                  {isToday && <span className="ml-1 text-[10px] text-[#2D5A45] font-bold">TODAY</span>}
-                                </td>
+                    {/* Column header */}
+                    <div className="grid grid-cols-[1fr_220px_220px_40px] items-center px-4 py-2.5 bg-[#F5F0E8] border-b border-[#E8E3DB]">
+                      <span className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Day</span>
+                      <span className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Delegation</span>
+                      <span className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Daftari</span>
+                      <span />
+                    </div>
+
+                    {overviewCombinedDays.map(({ date, delegation, daftari }) => {
+                      const todayStr = new Date().toISOString().split('T')[0];
+                      const isToday = date === todayStr;
+                      const isExpanded = overviewExpandedDate === date;
+                      const delegSlots = delegation?.mulaqat_slots ?? [];
+                      const dafSlots = daftari?.daftari_slots ?? [];
+                      const delegSlotCount = delegSlots.length;
+                      const delegCount = delegSlots.reduce((s, sl) => s + (sl.delegations ?? []).length, 0);
+                      const dafSlotCount = dafSlots.length;
+                      const dafGuestCount = dafSlots.filter(s => s.guest_id).length;
+                      const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-GB', {
+                        weekday: 'short', day: 'numeric', month: 'short',
+                      });
+
+                      return (
+                        <Fragment key={date}>
+                          {/* Collapsed row */}
+                          <div
+                            onClick={() => setOverviewExpandedDate(d => d === date ? null : date)}
+                            className={`grid grid-cols-[1fr_220px_220px_40px] items-center px-4 py-3 cursor-pointer hover:bg-gray-50 border-b border-gray-100 transition-colors ${
+                              isToday ? 'bg-[#D6E4D9]/10 border-l-4 border-[#2D5A45]' : 'bg-white'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-base font-semibold text-[#1A1A1A]">{dateLabel}</span>
+                              {isToday && (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#2D5A45] text-white">TODAY</span>
                               )}
-                              <td className="px-3 py-2.5">
-                                {row.type === 'delegation' ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">Delegation</span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">Daftari</span>
-                                )}
-                              </td>
-                              <td className="px-3 py-2.5 text-[#4A4A4A] font-medium">{row.slotName}</td>
-                              <td className="px-3 py-2.5">
-                                {row.type === 'delegation' ? (
-                                  row.delegationCountries.length > 0 ? (
-                                    <div className="flex flex-wrap gap-1">
-                                      {row.delegationCountries.map(c => (
-                                        <span key={c} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-[#F5F0E8] text-[#1A1A1A] border border-[#E8E3DB]">{c}</span>
-                                      ))}
-                                    </div>
-                                  ) : <span className="text-gray-400 italic text-xs">—</span>
-                                ) : (
-                                  <span className={row.guestName ? 'text-[#1A1A1A]' : 'text-gray-400 italic text-xs'}>
-                                    {row.guestName || '—'}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-3 py-2.5 text-[#4A4A4A] text-xs">{row.country || '—'}</td>
-                              <td className="px-3 py-2.5 text-center">
-                                {row.guestCount > 0 ? (
-                                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#2D5A45]/10 text-[#2D5A45] text-xs font-semibold">{row.guestCount}</span>
-                                ) : <span className="text-gray-400">—</span>}
-                              </td>
-                              <td className="px-3 py-2.5">
-                                {row.type === 'delegation' ? (
-                                  row.headNames.length > 0 ? (
-                                    <div className="flex flex-col gap-0.5">
-                                      {row.headNames.map((h, hi) => (
-                                        <span key={hi} className="flex items-center gap-1 text-xs text-[#1A1A1A]">
-                                          <Star className="w-3 h-3 text-amber-400 shrink-0" />{h}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  ) : <span className="text-gray-400 text-xs">—</span>
-                                ) : (
-                                  row.groupLabel ? (
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-purple-50 text-purple-700 border border-purple-200">{row.groupLabel}</span>
-                                  ) : <span className="text-gray-400 text-xs">—</span>
-                                )}
-                              </td>
-                              <td className="px-3 py-2.5 text-xs text-[#4A4A4A]">{row.managedBy}</td>
-                              <td className="px-3 py-2.5">
-                                {row.isAssigned ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">Assigned</span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-white text-green-700 border border-green-300">Available</span>
-                                )}
-                              </td>
-                            </tr>
-                          ));
-                        })}
-                      </tbody>
-                    </table>
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {delegSlotCount > 0
+                                ? `${delegSlotCount} slot${delegSlotCount !== 1 ? 's' : ''} · ${delegCount} delegation${delegCount !== 1 ? 's' : ''}`
+                                : <span className="text-gray-400 italic text-sm">No slots</span>}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {dafSlotCount > 0
+                                ? `${dafSlotCount} slot${dafSlotCount !== 1 ? 's' : ''} · ${dafGuestCount} guest${dafGuestCount !== 1 ? 's' : ''}`
+                                : <span className="text-gray-400 italic text-sm">No slots</span>}
+                            </div>
+                            <div className="flex justify-end">
+                              <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+                            </div>
+                          </div>
+
+                          {/* Expanded content */}
+                          {isExpanded && (
+                            <div className="bg-gray-50/50 border-l-4 border-[#2D5A45] pl-6 pr-4 py-4 border-b border-gray-100">
+
+                              {/* Section A: Delegation Mulaqat */}
+                              <p className="text-sm font-semibold text-gray-700 mb-2">Delegation Mulaqat</p>
+                              {delegSlots.length === 0 ? (
+                                <p className="text-sm italic text-gray-400 mb-1">No delegation Mulaqat on this day</p>
+                              ) : (
+                                <div className="overflow-x-auto mb-1">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="border-b border-gray-200">
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Slot</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Delegations</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Guests</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Head of Delegation</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Managed By</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {delegSlots.map(slot => {
+                                        const delegs = slot.delegations ?? [];
+                                        const isAssigned = delegs.length > 0;
+                                        const countries = delegs.map(d => d.country).join(', ') || '—';
+                                        const guestCount = delegs.reduce((s, d) => s + (d.delegation_members ?? []).length, 0);
+                                        const heads = delegs.map(d => d.head_of_delegation_name).filter(Boolean).map(h => `* ${h}`).join(', ') || '—';
+                                        const managedBy = [...new Set(delegs.map(d => d.managed_by_name).filter(Boolean))].join(', ') || '—';
+                                        return (
+                                          <tr key={slot.id} className="border-b border-gray-100 last:border-b-0">
+                                            <td className="px-3 py-2 font-medium text-[#1A1A1A]">{slot.name}</td>
+                                            <td className="px-3 py-2 text-[#4A4A4A]">{countries}</td>
+                                            <td className="px-3 py-2 text-[#4A4A4A]">{guestCount > 0 ? guestCount : '—'}</td>
+                                            <td className="px-3 py-2 text-[#4A4A4A]">{heads}</td>
+                                            <td className="px-3 py-2 text-[#4A4A4A]">{managedBy}</td>
+                                            <td className="px-3 py-2">
+                                              {isAssigned ? (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">Assigned</span>
+                                              ) : (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-white text-green-700 border border-green-300">Available</span>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+
+                              <div className="border-t border-gray-200 my-4" />
+
+                              {/* Section B: Daftari Mulaqat */}
+                              <p className="text-sm font-semibold text-gray-700 mb-2">Daftari Mulaqat</p>
+                              {dafSlots.length === 0 ? (
+                                <p className="text-sm italic text-gray-400">No Daftari Mulaqat on this day</p>
+                              ) : (
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="border-b border-gray-200">
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Slot</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Guest</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Country</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Designation</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Group</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {dafSlots.map(slot => {
+                                        const g = slot.guest_id ? guests.find(x => x.id === slot.guest_id) : null;
+                                        return (
+                                          <tr key={slot.id} className="border-b border-gray-100 last:border-b-0">
+                                            <td className="px-3 py-2 font-medium text-[#1A1A1A]">{slot.name}</td>
+                                            <td className="px-3 py-2 text-[#4A4A4A]">{slot.guest_name || '—'}</td>
+                                            <td className="px-3 py-2 text-[#4A4A4A]">{g?.country || '—'}</td>
+                                            <td className="px-3 py-2 text-[#4A4A4A]">{g ? String(formatDesignation(g.designation ?? '')) : '—'}</td>
+                                            <td className="px-3 py-2">
+                                              {slot.guest_id ? (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-purple-50 text-purple-700 border border-purple-200">Individual</span>
+                                              ) : (
+                                                <span className="text-gray-400 text-xs">—</span>
+                                              )}
+                                            </td>
+                                            <td className="px-3 py-2">
+                                              {slot.guest_id ? (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">Assigned</span>
+                                              ) : (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-white text-green-700 border border-green-300">Available</span>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </Fragment>
+                      );
+                    })}
                   </div>
                 )}
               </section>
@@ -2180,7 +2127,7 @@ export default function AdminMulaqatPage() {
                                                         {isDelExpanded
                                                           ? <ChevronDown className="w-3.5 h-3.5 text-[#2D5A45] flex-shrink-0" />
                                                           : <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />}
-                                                        <span className="font-medium text-[#1A1A1A]">{delegIcon(del.country)} {del.country}</span>
+                                                        <span className="font-medium text-[#1A1A1A]">{del.country}</span>
                                                         <span className="text-[#4A4A4A]">({del.delegation_members.length})</span>
                                                         {del.head_of_delegation_name && (
                                                           <span className="flex items-center gap-0.5 text-[#4A4A4A]">
@@ -2432,7 +2379,7 @@ export default function AdminMulaqatPage() {
                                       className="border-gray-300 data-[state=checked]:bg-[#2D5A45] data-[state=checked]:border-[#2D5A45]"
                                     />
                                   </td>
-                                  <td className="px-3 py-3 font-medium text-[#1A1A1A]">{delegIcon(del.country)} {del.country}</td>
+                                  <td className="px-3 py-3 font-medium text-[#1A1A1A]">{del.country}</td>
                                   <td className="px-3 py-3">
                                     <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">{del.delegation_members.length}</Badge>
                                   </td>
