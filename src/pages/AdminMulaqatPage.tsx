@@ -251,14 +251,6 @@ const DAFTARI_COL_LABELS: Record<string, string> = {
   departure: 'Departure', department: 'Department', location: 'Location',
 };
 
-function getOverviewDates(): string[] {
-  const today = new Date();
-  return Array.from({ length: 4 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() + i);
-    return d.toISOString().split('T')[0];
-  });
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -463,8 +455,9 @@ export default function AdminMulaqatPage() {
   // Overview ("All" tab)
   const [overviewDelegationDays, setOverviewDelegationDays] = useState<OverviewMulaqatDay[]>([]);
   const [overviewDaftariDays, setOverviewDaftariDays] = useState<OverviewDaftariDay[]>([]);
+  const [overviewScheduledDates, setOverviewScheduledDates] = useState<string[]>([]);
   const [overviewLoading, setOverviewLoading] = useState(true);
-  const [activeDateFilter, setActiveDateFilter] = useState<Set<string>>(() => new Set(getOverviewDates()));
+  const [activeDateFilter, setActiveDateFilter] = useState<Set<string>>(new Set());
 
   // Archives tab
   const [archivedDelegationDays, setArchivedDelegationDays] = useState<ArchivedDelegationDay[]>([]);
@@ -535,18 +528,41 @@ export default function AdminMulaqatPage() {
 
   const fetchOverview = useCallback(async () => {
     setOverviewLoading(true);
-    const dates = getOverviewDates();
+    const today = new Date().toISOString().split('T')[0];
+
+    // Step 1: collect all dates that have any Mulaqat (delegation or daftari)
+    const [{ data: delDateData }, { data: dafDateData }] = await Promise.all([
+      supabase.from('mulaqat_days').select('date').eq('is_archived', false).eq('is_active', true).gte('date', today).order('date'),
+      supabase.from('daftari_days').select('date').eq('is_archived', false).eq('is_active', true).gte('date', today).order('date'),
+    ]);
+
+    const allDates = new Set([
+      ...(delDateData ?? []).map((d: { date: string }) => d.date),
+      ...(dafDateData ?? []).map((d: { date: string }) => d.date),
+    ]);
+    const upcomingDates = [...allDates].sort().slice(0, 5);
+    setOverviewScheduledDates(upcomingDates);
+    setActiveDateFilter(new Set(upcomingDates));
+
+    if (upcomingDates.length === 0) {
+      setOverviewDelegationDays([]);
+      setOverviewDaftariDays([]);
+      setOverviewLoading(false);
+      return;
+    }
+
+    // Step 2: fetch full data for only these dates
     const [{ data: delDays }, { data: dafDays }] = await Promise.all([
       supabase
         .from('mulaqat_days')
         .select('*, mulaqat_slots(*, delegations(*, delegation_members(*)))')
-        .in('date', dates)
+        .in('date', upcomingDates)
         .eq('is_archived', false)
         .order('date'),
       supabase
         .from('daftari_days')
         .select('*, daftari_slots(*)')
-        .in('date', dates)
+        .in('date', upcomingDates)
         .eq('is_archived', false)
         .order('date'),
     ]);
@@ -734,8 +750,6 @@ export default function AdminMulaqatPage() {
 
   // ── Derived (overview / "All" tab) ────────────────────────────────────────────
 
-  const overviewDates = useMemo(() => getOverviewDates(), []);
-
   const combinedRows = useMemo((): CombinedRow[] => {
     const rows: CombinedRow[] = [];
 
@@ -814,8 +828,8 @@ export default function AdminMulaqatPage() {
     const usedDelegSlots = overviewDelegationDays.reduce((s, d) =>
       s + (d.mulaqat_slots ?? []).filter(sl => (sl.delegations ?? []).length > 0).length, 0);
     const availableSlots = (delegSlots - usedDelegSlots) + (dafSlots - assignedDafSlots);
-    return { delegSlots, dafSlots, totalGuests, availableSlots };
-  }, [overviewDelegationDays, overviewDaftariDays]);
+    return { delegSlots, dafSlots, totalGuests, availableSlots, scheduledDays: overviewScheduledDates.length };
+  }, [overviewDelegationDays, overviewDaftariDays, overviewScheduledDates]);
 
   const filteredArchiveRows = useMemo(() => {
     const delRows = archivedDelegationDays.map(d => ({ ...d, type: 'delegation' as const }));
@@ -1803,13 +1817,13 @@ export default function AdminMulaqatPage() {
           {/* ── Stats bar ── */}
           {activeTab === 'all' ? (
             <div className="bg-white border-b border-[#E8E3DB] px-6 py-3 flex items-center gap-6 text-sm text-[#4A4A4A]">
+              <span><span className="font-semibold text-[#1A1A1A]">{overviewStats.scheduledDays}</span> scheduled days</span>
+              <span className="text-[#D4CFC7]">|</span>
               <span><span className="font-semibold text-[#1A1A1A]">{overviewStats.delegSlots}</span> delegation slots</span>
               <span className="text-[#D4CFC7]">|</span>
               <span><span className="font-semibold text-[#1A1A1A]">{overviewStats.dafSlots}</span> daftari slots</span>
               <span className="text-[#D4CFC7]">|</span>
               <span><span className="font-semibold text-[#1A1A1A]">{overviewStats.totalGuests}</span> total guests</span>
-              <span className="text-[#D4CFC7]">|</span>
-              <span><span className="font-semibold text-green-700">{overviewStats.availableSlots}</span> available slots</span>
             </div>
           ) : activeTab === 'delegation' ? (
             <div className="bg-white border-b border-[#E8E3DB] px-6 py-3 flex items-center gap-6 text-sm text-[#4A4A4A]">
@@ -1856,7 +1870,7 @@ export default function AdminMulaqatPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <CalendarDays className="w-5 h-5 text-[#2D5A45]" />
-                    <h2 className="text-lg font-semibold text-[#1A1A1A]">Mulaqat Overview — Today + Next 3 Days</h2>
+                    <h2 className="text-lg font-semibold text-[#1A1A1A]">Mulaqat Overview — Next 5 Scheduled Days</h2>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -1867,7 +1881,7 @@ export default function AdminMulaqatPage() {
                     </button>
                     <button
                       onClick={() => {
-                        setPdfTargetDates(Array.from(activeDateFilter).sort());
+                        setPdfTargetDates(overviewScheduledDates.filter(d => activeDateFilter.has(d)));
                         setPdfTargetType('all');
                         setPdfDialogOpen(true);
                       }}
@@ -1879,10 +1893,14 @@ export default function AdminMulaqatPage() {
                 </div>
 
                 {/* Date filter pills */}
-                <div className="flex items-center gap-2 mb-4">
-                  {overviewDates.map((date, i) => {
+                <div className="flex items-center flex-wrap gap-2 mb-4">
+                  {overviewScheduledDates.map(date => {
                     const active = activeDateFilter.has(date);
-                    const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : new Date(date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    const isToday = date === todayStr;
+                    const label = isToday
+                      ? 'Today'
+                      : new Date(date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
                     return (
                       <button
                         key={date}
@@ -1908,10 +1926,16 @@ export default function AdminMulaqatPage() {
                   <div className="flex items-center justify-center py-16">
                     <div className="w-6 h-6 border-2 border-[#2D5A45] border-t-transparent rounded-full animate-spin" />
                   </div>
+                ) : overviewScheduledDates.length === 0 ? (
+                  <div className="bg-white rounded-lg border border-[#E8E3DB] flex flex-col items-center justify-center py-16 gap-3">
+                    <CalendarDays className="w-10 h-10 text-gray-300" />
+                    <p className="font-medium text-[#1A1A1A]">No upcoming Mulaqat scheduled</p>
+                    <p className="text-sm text-[#4A4A4A]">Create Mulaqat days in the Delegation or Daftari tabs</p>
+                  </div>
                 ) : filteredCombinedRows.length === 0 ? (
                   <div className="bg-white rounded-lg border border-[#E8E3DB] flex flex-col items-center justify-center py-16 gap-2">
                     <CalendarDays className="w-10 h-10 text-gray-300" />
-                    <p className="text-sm text-[#4A4A4A]">No mulaqat scheduled for the selected dates.</p>
+                    <p className="text-sm text-[#4A4A4A]">No rows match the selected date filters.</p>
                   </div>
                 ) : (
                   <div className="bg-white rounded-lg border border-[#E8E3DB] overflow-hidden">
@@ -1931,12 +1955,15 @@ export default function AdminMulaqatPage() {
                       </thead>
                       <tbody>
                         {dateGroups.map(group => {
-                          const isToday = group.date === overviewDates[0];
+                          const todayStr = new Date().toISOString().split('T')[0];
+                          const isToday = group.date === todayStr;
                           return group.rows.map((row, rowIdx) => (
                             <tr
                               key={row.slotId}
                               className={`border-b border-[#E8E3DB] last:border-b-0 ${
-                                row.type === 'daftari' ? 'bg-blue-50/20' : 'bg-white'
+                                isToday
+                                  ? row.type === 'daftari' ? 'bg-[#D6E4D9]/10' : 'bg-[#D6E4D9]/10'
+                                  : row.type === 'daftari' ? 'bg-blue-50/20' : 'bg-white'
                               } ${!row.isAssigned ? 'opacity-60' : ''}`}
                             >
                               {rowIdx === 0 && (
@@ -3952,13 +3979,24 @@ export default function AdminMulaqatPage() {
             {/* Section A: Date range info */}
             <div className="bg-[#F5F0E8] rounded-lg p-3 text-sm">
               <p className="font-medium text-[#1A1A1A] mb-0.5">Exporting:</p>
-              <p className="text-[#4A4A4A]">
-                {pdfTargetDates.length > 0
-                  ? `${new Date(pdfTargetDates[0] + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} — ${new Date(pdfTargetDates[pdfTargetDates.length - 1] + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} (${pdfTargetDates.length} day${pdfTargetDates.length !== 1 ? 's' : ''})`
-                  : 'All available dates'
-                }
-                {pdfTargetType !== 'all' && <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-white border border-[#D4CFC7] text-[#4A4A4A]">{pdfTargetType === 'delegation' ? 'Delegation only' : 'Daftari only'}</span>}
-              </p>
+              {pdfTargetType === 'all' ? (
+                <>
+                  <p className="text-[#4A4A4A]">{pdfTargetDates.length} scheduled Mulaqat day{pdfTargetDates.length !== 1 ? 's' : ''}</p>
+                  {pdfTargetDates.length > 0 && (
+                    <p className="text-[#4A4A4A]/70 text-xs mt-0.5">
+                      {pdfTargetDates.map(d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })).join(' · ')}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-[#4A4A4A]">
+                  {pdfTargetDates.length > 0
+                    ? `${new Date(pdfTargetDates[0] + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} — ${new Date(pdfTargetDates[pdfTargetDates.length - 1] + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} (${pdfTargetDates.length} day${pdfTargetDates.length !== 1 ? 's' : ''})`
+                    : 'All available dates'
+                  }
+                  <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-white border border-[#D4CFC7] text-[#4A4A4A]">{pdfTargetType === 'delegation' ? 'Delegation only' : 'Daftari only'}</span>
+                </p>
+              )}
             </div>
 
             {/* Section B: Columns — two column layout */}

@@ -811,12 +811,11 @@ export default function GuestsPage() {
                                 />
                               )}
                             </td>
-                            <td className="px-4 py-3 font-medium">{guest.referenceNumber}</td>
+                            <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">
+                              {guest.referenceNumber.replace(/^([A-Z]+).*?(\d{4})$/, '$1.....$2')}
+                            </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium shrink-0">
-                                  {guest.fullName.charAt(0)}
-                                </div>
                                 <span>{guest.fullName}</span>
                                 {guest.familyGroupId && (() => {
                                   const groupMembers = guests.filter(g => g.familyGroupId === guest.familyGroupId);
