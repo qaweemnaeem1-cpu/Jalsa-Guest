@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { ProfileDialog, getRoleDisplayLabel } from '@/components/ProfileDialog';
+import { LanguageSelect } from '@/components/LanguageSelect';
 import { DESK_NAV } from '@/lib/navItems';
 import { formatDesignation } from '@/lib/constants';
 import type { Guest } from '@/types';
@@ -45,6 +46,7 @@ interface DelegationDetail {
   slot_id: string | null;
   managed_by: string | null;
   managed_by_name: string | null;
+  language?: string | null;
 }
 
 interface TableRow {
@@ -73,6 +75,7 @@ interface DaftariSlot {
   guest_name: string | null;
   assigned_by: string | null;
   assigned_by_name: string | null;
+  language?: string | null;
 }
 
 interface DaftariScheduleRow {
@@ -81,7 +84,7 @@ interface DaftariScheduleRow {
   dayLabel: string | null;
   slotId: string;
   slotName: string;
-  slotGuests: { id: string; name: string; country: string | null; designation: string | string[] | null }[];
+  slotGuests: { id: string; name: string; country: string | null; designation: string | string[] | null; religion?: string | null }[];
   assignedByName: string | null;
   isFirstSlotOfDay: boolean;
   daySlotCount: number;
@@ -119,6 +122,45 @@ function dayHeader(day: MulaqatDay | DaftariDay): string {
   return day.label ? `${dateStr} — ${day.label}` : dateStr;
 }
 
+// ── Language helpers ──────────────────────────────────────────────────────────
+
+const LANGUAGE_COLORS: Record<string, string> = {
+  'English': 'bg-blue-100 text-blue-700',
+  'Spanish': 'bg-orange-100 text-orange-700',
+  'French': 'bg-indigo-100 text-indigo-700',
+  'Arabic': 'bg-emerald-100 text-emerald-700',
+  'German': 'bg-red-100 text-red-700',
+};
+
+function LanguageTag({ language }: { language?: string | null }) {
+  if (!language) return <span className="text-gray-400 text-xs italic">Not set</span>;
+  const cls = LANGUAGE_COLORS[language] ?? 'bg-gray-100 text-gray-700';
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>{language}</span>;
+}
+
+// ── Ahmadi helpers ────────────────────────────────────────────────────────────
+
+const isAhmadi = (religion: string | null | undefined) => religion === 'Ahmadi Muslim';
+
+function AhmadiTags({ a, na, tiny = false }: { a: number; na: number; tiny?: boolean }) {
+  if (a === 0 && na === 0) return null;
+  const px = tiny ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-xs';
+  return (
+    <span className="inline-flex items-center gap-1">
+      {a > 0 && <span className={`bg-green-100 text-green-700 rounded-full font-medium ${px}`}>{a}A</span>}
+      {a > 0 && na > 0 && <span className="text-gray-300">·</span>}
+      {na > 0 && <span className={`bg-amber-100 text-amber-700 rounded-full font-medium ${px}`}>{na}NA</span>}
+    </span>
+  );
+}
+
+function AhmadiSingle({ religion }: { religion?: string | null }) {
+  if (!religion) return null;
+  return isAhmadi(religion)
+    ? <span className="bg-green-100 text-green-700 rounded-full px-1.5 py-0.5 text-[10px] font-medium">A</span>
+    : <span className="bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5 text-[10px] font-medium">NA</span>;
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DeskMulaqatPage() {
@@ -150,6 +192,13 @@ export default function DeskMulaqatPage() {
   const [assignDialog, setAssignDialog] = useState<'assign' | 'join' | null>(null);
   const [bulkDay, setBulkDay] = useState('');
   const [bulkSlot, setBulkSlot] = useState('');
+
+  // ── Language state ────────────────────────────────────────────────────────────
+  const [mulaqatLanguages, setMulaqatLanguages] = useState<string[]>([]);
+  const [changeSlotLanguage, setChangeSlotLanguage] = useState('');
+  const [bulkLanguage, setBulkLanguage] = useState('');
+  const [daftariChangeSlotLanguage, setDaftariChangeSlotLanguage] = useState('');
+  const [daftariBulkLanguage, setDaftariBulkLanguage] = useState('');
 
   // ── Change-slot dialog state ──────────────────────────────────────────────────
   const [changeSlotDialog, setChangeSlotDialog] = useState<{ country: string; currentSlotId: string | null } | null>(null);
@@ -190,15 +239,17 @@ export default function DeskMulaqatPage() {
       { data: slotData },
       { data: dDayData },
       { data: dSlotData },
+      { data: langData },
     ] = await Promise.all([
       supabase
         .from('delegations')
-        .select('id, country, head_of_delegation_id, head_of_delegation_name, slot_id, managed_by, managed_by_name')
+        .select('id, country, head_of_delegation_id, head_of_delegation_name, slot_id, managed_by, managed_by_name, language')
         .order('country'),
       supabase.from('mulaqat_days').select('id, date, label').order('date'),
       supabase.from('mulaqat_slots').select('id, name, day_id').order('name'),
       supabase.from('daftari_days').select('id, date, label, is_active').eq('is_active', true).order('date'),
-      supabase.from('daftari_slots').select('id, name, day_id, guest_id, guest_name, assigned_by, assigned_by_name').order('name'),
+      supabase.from('daftari_slots').select('id, name, day_id, guest_id, guest_name, assigned_by, assigned_by_name, language').order('name'),
+      supabase.from('mulaqat_languages').select('name').eq('is_active', true).order('name'),
     ]);
     if (delData) setDelegationDetails(delData as DelegationDetail[]);
     if (dayData) setDays(dayData as MulaqatDay[]);
@@ -210,6 +261,7 @@ export default function DeskMulaqatPage() {
       (dSlotData as DaftariSlot[]).forEach(s => { if (s.guest_id) slotMap[s.guest_id] = s.id; });
       setGuestSlotIds(slotMap);
     }
+    if (langData) setMulaqatLanguages((langData as { name: string }[]).map(l => l.name));
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -335,51 +387,77 @@ export default function DeskMulaqatPage() {
     const updates = selectedList
       .map(c => getDelegationForCountry(c))
       .filter((d): d is DelegationDetail => d !== null);
+    const langVal = bulkLanguage || null;
 
     await Promise.all(updates.map(d =>
-      supabase.from('delegations').update({ slot_id: bulkSlot }).eq('id', d.id)
+      supabase.from('delegations').update({ slot_id: bulkSlot, language: langVal }).eq('id', d.id)
     ));
 
     setDelegationDetails(prev =>
-      prev.map(d => updates.find(u => u.id === d.id) ? { ...d, slot_id: bulkSlot } : d)
+      prev.map(d => updates.find(u => u.id === d.id) ? { ...d, slot_id: bulkSlot, language: langVal } : d)
     );
 
     toast.success(`${updates.length} delegation${updates.length !== 1 ? 's' : ''} assigned to ${slot?.name ?? 'slot'}`);
     setAssignDialog(null);
     setBulkDay('');
     setBulkSlot('');
+    setBulkLanguage('');
     setSelectedCountries(new Set());
   };
 
   // ── Delegation slot actions ───────────────────────────────────────────────────
 
-  const handleSlotChange = async (country: string, slotId: string) => {
+  const handleSlotChange = async (country: string, slotId: string, language?: string) => {
     const del = getDelegationForCountry(country);
     if (!del) return;
     const val = slotId === '__none__' ? null : slotId;
-    const { error } = await supabase.from('delegations').update({ slot_id: val }).eq('id', del.id);
+    const update: Record<string, unknown> = { slot_id: val };
+    if (language !== undefined) update.language = language || null;
+    const { error } = await supabase.from('delegations').update(update).eq('id', del.id);
     if (error) { toast.error('Failed to update slot'); return; }
-    setDelegationDetails(prev => prev.map(d => d.id === del.id ? { ...d, slot_id: val } : d));
-    toast.success(val ? 'Slot assigned' : 'Slot removed');
+    setDelegationDetails(prev => prev.map(d =>
+      d.id === del.id ? { ...d, slot_id: val, ...(language !== undefined ? { language: language || null } : {}) } : d
+    ));
+    if (!language) toast.success(val ? 'Slot assigned' : 'Slot removed');
+  };
+
+  const handleSetDelegationLanguage = async (country: string, lang: string) => {
+    const del = getDelegationForCountry(country);
+    if (!del) return;
+    const langVal = lang || null;
+    const { error } = await supabase.from('delegations').update({ language: langVal }).eq('id', del.id);
+    if (error) { toast.error('Failed to set language'); return; }
+    setDelegationDetails(prev => prev.map(d => d.id === del.id ? { ...d, language: langVal } : d));
+    if (lang) toast.success(`${country} delegation language set to ${lang}`);
+  };
+
+  const handleSetDaftariSlotLanguage = async (slotId: string, lang: string) => {
+    const langVal = lang || null;
+    const { error } = await supabase.from('daftari_slots').update({ language: langVal }).eq('id', slotId);
+    if (error) { toast.error('Failed to set language'); return; }
+    setDaftariSlots(prev => prev.map(s => s.id === slotId ? { ...s, language: langVal } : s));
   };
 
   const handleRemoveSlot = async (country: string) => handleSlotChange(country, '__none__');
 
   const handleOpenChangeSlot = (country: string, currentSlotId: string | null) => {
     const dayId = currentSlotId ? (slots.find(s => s.id === currentSlotId)?.day_id ?? '') : '';
+    const del = getDelegationForCountry(country);
     setChangeSlotDay(dayId);
     setChangeSlotSlot(currentSlotId ?? '');
+    setChangeSlotLanguage(del?.language ?? '');
     setChangeSlotDialog({ country, currentSlotId });
   };
 
   const handleConfirmChangeSlot = async () => {
     if (!changeSlotDialog || !changeSlotSlot) return;
     const slot = slots.find(s => s.id === changeSlotSlot);
-    await handleSlotChange(changeSlotDialog.country, changeSlotSlot);
+    await handleSlotChange(changeSlotDialog.country, changeSlotSlot, changeSlotLanguage);
     toast.success(`${changeSlotDialog.country} delegation moved to ${slot?.name ?? 'slot'}`);
     setChangeSlotDialog(null);
     setChangeSlotDay('');
     setChangeSlotSlot('');
+    setChangeSlotLanguage('');
   };
 
   // ── Delegation member actions ─────────────────────────────────────────────────
@@ -464,6 +542,7 @@ export default function DeskMulaqatPage() {
     if (!daftariBulkSlot || daftariSelectedGuestList.length === 0) return;
     const slot = daftariSlots.find(s => s.id === daftariBulkSlot);
     const guestList = daftariSelectedGuestList;
+    const langVal = daftariBulkLanguage || null;
     console.log('[Daftari] BulkAssign triggered', { slotId: daftariBulkSlot, guests: guestList.map(g => g.id) });
 
     // Clear old slot assignments for guests that already have one
@@ -484,6 +563,7 @@ export default function DeskMulaqatPage() {
       guest_name: allNames,
       assigned_by: user.id,
       assigned_by_name: user.name,
+      language: langVal,
     }).eq('id', daftariBulkSlot).select().single();
     console.log('[Daftari] Slot update:', { slotRes, slotErr });
 
@@ -494,7 +574,7 @@ export default function DeskMulaqatPage() {
     });
     setDaftariSlots(prev => prev.map(s =>
       s.id === daftariBulkSlot
-        ? { ...s, guest_id: guestList[0].id, guest_name: allNames, assigned_by: user.id, assigned_by_name: user.name }
+        ? { ...s, guest_id: guestList[0].id, guest_name: allNames, assigned_by: user.id, assigned_by_name: user.name, language: langVal }
         : s
     ));
 
@@ -502,14 +582,17 @@ export default function DeskMulaqatPage() {
     setDaftariAssignDialog(null);
     setDaftariBulkDay('');
     setDaftariBulkSlot('');
+    setDaftariBulkLanguage('');
     setDaftariSelectedGuests(new Set());
   };
 
   const handleDaftariOpenChangeSlot = (guest: Guest) => {
     const currentSlotId = guestSlotIds[guest.id] ?? null;
-    const dayId = currentSlotId ? (daftariSlots.find(s => s.id === currentSlotId)?.day_id ?? '') : '';
+    const currentSlot = currentSlotId ? daftariSlots.find(s => s.id === currentSlotId) : null;
+    const dayId = currentSlot?.day_id ?? '';
     setDaftariChangeSlotDay(dayId);
     setDaftariChangeSlotSlot(currentSlotId ?? '');
+    setDaftariChangeSlotLanguage(currentSlot?.language ?? '');
     setDaftariChangeSlotDialog({ guestId: guest.id, guestName: guest.fullName, currentSlotId });
   };
 
@@ -538,12 +621,14 @@ export default function DeskMulaqatPage() {
       ));
     }
 
+    const langVal = daftariChangeSlotLanguage || null;
     const { data: guestRes, error: guestErr } = await supabase.from('guests').update({ daftari_slot_id: daftariChangeSlotSlot }).eq('id', guest.id).select().single();
     const { data: slotRes, error: slotErr } = await supabase.from('daftari_slots').update({
       guest_id: guest.id,
       guest_name: guest.fullName,
       assigned_by: user.id,
       assigned_by_name: user.name,
+      language: langVal,
     }).eq('id', daftariChangeSlotSlot).select().single();
     console.log('[Daftari] Assign new slot:', { guestRes, guestErr, slotRes, slotErr });
 
@@ -552,7 +637,7 @@ export default function DeskMulaqatPage() {
     setGuestSlotIds(prev => ({ ...prev, [guest.id]: daftariChangeSlotSlot }));
     setDaftariSlots(prev => prev.map(s =>
       s.id === daftariChangeSlotSlot
-        ? { ...s, guest_id: guest.id, guest_name: guest.fullName, assigned_by: user.id, assigned_by_name: user.name }
+        ? { ...s, guest_id: guest.id, guest_name: guest.fullName, assigned_by: user.id, assigned_by_name: user.name, language: langVal }
         : s
     ));
 
@@ -560,6 +645,7 @@ export default function DeskMulaqatPage() {
     setDaftariChangeSlotDialog(null);
     setDaftariChangeSlotDay('');
     setDaftariChangeSlotSlot('');
+    setDaftariChangeSlotLanguage('');
   };
 
   // ── Grouped slot selects ──────────────────────────────────────────────────────
@@ -724,7 +810,7 @@ export default function DeskMulaqatPage() {
           .map(([gId]) => gId);
         const slotGuests = slotGuestIds.map(gId => {
           const g = guests.find(guest => guest.id === gId);
-          return { id: gId, name: g?.fullName ?? '—', country: g?.country ?? null, designation: g?.designation ?? null };
+          return { id: gId, name: g?.fullName ?? '—', country: g?.country ?? null, designation: g?.designation ?? null, religion: g?.religion ?? null };
         });
         rows.push({
           dayId: day.id, dayDate: day.date, dayLabel: day.label,
@@ -923,7 +1009,7 @@ export default function DeskMulaqatPage() {
                                     className="border-gray-300 data-[state=checked]:bg-[#2D5A45] data-[state=checked]:border-[#2D5A45] data-[state=indeterminate]:bg-[#2D5A45] data-[state=indeterminate]:border-[#2D5A45]"
                                   />
                                 </th>
-                                {['Country', 'Members', 'Head of Delegation', 'Assigned Day', 'Assigned Slot', 'Actions'].map(h => (
+                                {['Country', 'Members', 'Head of Delegation', 'Language', 'Assigned Day', 'Assigned Slot', 'Actions'].map(h => (
                                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider whitespace-nowrap">
                                     {h}
                                   </th>
@@ -975,13 +1061,27 @@ export default function DeskMulaqatPage() {
                                       </td>
                                       <td className="px-4 py-3 whitespace-nowrap">
                                         {memberCount > 0
-                                          ? <span className="text-green-700 font-medium">{memberCount} member{memberCount !== 1 ? 's' : ''}</span>
+                                          ? <span className="flex items-center gap-1.5">
+                                              <span className="text-green-700 font-medium">{memberCount} member{memberCount !== 1 ? 's' : ''}</span>
+                                              <AhmadiTags a={members.filter(g => isAhmadi(g.religion)).length} na={members.filter(g => !isAhmadi(g.religion)).length} tiny />
+                                            </span>
                                           : <span className="text-gray-400">0 members</span>}
                                       </td>
                                       <td className={`px-4 py-3 whitespace-nowrap ${rowTextCls}`}>
                                         {del?.head_of_delegation_name
                                           ? <span className="flex items-center gap-1.5"><Star className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" /><span className="text-[#1A1A1A]">{del.head_of_delegation_name}</span></span>
                                           : <span className="text-gray-400 italic">Not assigned</span>}
+                                      </td>
+                                      <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                                        {del ? (
+                                          <LanguageSelect
+                                            value={del.language}
+                                            onValueChange={v => handleSetDelegationLanguage(country, v)}
+                                            languages={mulaqatLanguages}
+                                            className="min-w-[140px]"
+                                            stopPropagation
+                                          />
+                                        ) : <span className="text-gray-400">—</span>}
                                       </td>
                                       <td className={`px-4 py-3 whitespace-nowrap ${rowTextCls}`}>
                                         {assignedDay ? <span className="text-[#1A1A1A]">{fmt(assignedDay.date)}</span> : <span className="text-gray-400">—</span>}
@@ -1014,7 +1114,7 @@ export default function DeskMulaqatPage() {
                                     {/* ── Expandable member section ── */}
                                     {isExpanded && (
                                       <tr>
-                                        <td colSpan={7} className="p-0 border-b border-[#E8E3DB]">
+                                        <td colSpan={8} className="p-0 border-b border-[#E8E3DB]">
                                           <div className="border-l-4 border-l-[#2D5A45] bg-gray-50/50 pl-8 pr-6 py-4 space-y-3">
                                             {/* Slot info */}
                                             <div className="flex items-center gap-2 text-sm">
@@ -1055,6 +1155,7 @@ export default function DeskMulaqatPage() {
                                                             <div className="flex items-center gap-1.5">
                                                               {isHead && <Star className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />}
                                                               {g.fullName}
+                                                              <AhmadiSingle religion={g.religion} />
                                                             </div>
                                                           </td>
                                                           <td className="px-4 py-2.5 text-xs text-[#4A4A4A]">{formatDesignation(g.designation)}</td>
@@ -1342,7 +1443,7 @@ export default function DeskMulaqatPage() {
                                     className="border-gray-300 data-[state=checked]:bg-[#2D5A45] data-[state=checked]:border-[#2D5A45] data-[state=indeterminate]:bg-[#2D5A45] data-[state=indeterminate]:border-[#2D5A45]"
                                   />
                                 </th>
-                                {['Country', 'Name', 'Designation', 'Departure', 'Assigned Day', 'Assigned Slot', 'Group', 'Actions'].map(h => (
+                                {['Country', 'Name', 'Designation', 'Departure', 'Language', 'Assigned Day', 'Assigned Slot', 'Group', 'Actions'].map(h => (
                                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider whitespace-nowrap">{h}</th>
                                 ))}
                               </tr>
@@ -1365,13 +1466,28 @@ export default function DeskMulaqatPage() {
                                       />
                                     </td>
                                     <td className="px-4 py-3 text-sm text-[#4A4A4A] whitespace-nowrap">{g.country}</td>
-                                    <td className="px-4 py-3 font-medium text-[#1A1A1A] whitespace-nowrap">{g.fullName}</td>
+                                    <td className="px-4 py-3 font-medium text-[#1A1A1A] whitespace-nowrap">
+                                      <div className="flex items-center gap-1.5">
+                                        {g.fullName}
+                                        <AhmadiSingle religion={g.religion} />
+                                      </div>
+                                    </td>
                                     <td className="px-4 py-3 text-sm text-[#4A4A4A]">{formatDesignation(g.designation)}</td>
                                     <td className="px-4 py-3 whitespace-nowrap">
                                       <div className="text-sm text-[#4A4A4A]">{fmtDep(g.departureTime)}</div>
                                       {fmtFlight(g.departureFlightNumber, g.departureAirport) && (
                                         <div className="text-xs text-gray-400 mt-0.5">{fmtFlight(g.departureFlightNumber, g.departureAirport)}</div>
                                       )}
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      {assignedSlot ? (
+                                        <LanguageSelect
+                                          value={assignedSlot.language}
+                                          onValueChange={v => handleSetDaftariSlotLanguage(assignedSlot.id, v)}
+                                          languages={mulaqatLanguages}
+                                          className="min-w-[130px]"
+                                        />
+                                      ) : <LanguageTag />}
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap">
                                       {assignedDay
@@ -1474,7 +1590,10 @@ export default function DeskMulaqatPage() {
                                           {row.slotGuests.map(sg => {
                                             const isMineGuest = assignedCountries.includes(sg.country ?? '');
                                             return (
-                                              <div key={sg.id} className={`text-xs ${isMineGuest ? 'text-[#1A1A1A] font-medium' : 'text-gray-400'}`}>{sg.name}</div>
+                                              <div key={sg.id} className={`flex items-center gap-1 text-xs ${isMineGuest ? 'text-[#1A1A1A] font-medium' : 'text-gray-400'}`}>
+                                                {sg.name}
+                                                <AhmadiSingle religion={sg.religion} />
+                                              </div>
                                             );
                                           })}
                                         </div>
@@ -1559,7 +1678,7 @@ export default function DeskMulaqatPage() {
         const currentDay = getAssignedDay(changeSlotDialog.currentSlotId);
         const isChange = !!changeSlotDialog.currentSlotId;
         return (
-          <Dialog open onOpenChange={open => { if (!open) { setChangeSlotDialog(null); setChangeSlotDay(''); setChangeSlotSlot(''); } }}>
+          <Dialog open onOpenChange={open => { if (!open) { setChangeSlotDialog(null); setChangeSlotDay(''); setChangeSlotSlot(''); setChangeSlotLanguage(''); } }}>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle>{isChange ? 'Change Mulaqat Slot' : 'Assign Mulaqat Slot'}</DialogTitle>
@@ -1606,9 +1725,18 @@ export default function DeskMulaqatPage() {
                     })}
                   </select>
                 </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Language</label>
+                  <LanguageSelect
+                    value={changeSlotLanguage}
+                    onValueChange={setChangeSlotLanguage}
+                    languages={mulaqatLanguages}
+                    className="w-full"
+                  />
+                </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => { setChangeSlotDialog(null); setChangeSlotDay(''); setChangeSlotSlot(''); }}>Cancel</Button>
+                <Button variant="outline" onClick={() => { setChangeSlotDialog(null); setChangeSlotDay(''); setChangeSlotSlot(''); setChangeSlotLanguage(''); }}>Cancel</Button>
                 <Button
                   onClick={handleConfirmChangeSlot}
                   disabled={!changeSlotSlot || changeSlotSlot === changeSlotDialog.currentSlotId}
@@ -1623,7 +1751,7 @@ export default function DeskMulaqatPage() {
       })()}
 
       {/* ── Assign Mulaqat Dialog ── */}
-      <Dialog open={assignDialog === 'assign' || assignDialog === 'join'} onOpenChange={open => { if (!open) { setAssignDialog(null); setBulkDay(''); setBulkSlot(''); } }}>
+      <Dialog open={assignDialog === 'assign' || assignDialog === 'join'} onOpenChange={open => { if (!open) { setAssignDialog(null); setBulkDay(''); setBulkSlot(''); setBulkLanguage(''); } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
@@ -1689,10 +1817,21 @@ export default function DeskMulaqatPage() {
                 })}
               </select>
             </div>
+
+            {/* Language selector */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Language</label>
+              <LanguageSelect
+                value={bulkLanguage}
+                onValueChange={setBulkLanguage}
+                languages={mulaqatLanguages}
+                className="w-full"
+              />
+            </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setAssignDialog(null); setBulkDay(''); setBulkSlot(''); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setAssignDialog(null); setBulkDay(''); setBulkSlot(''); setBulkLanguage(''); }}>Cancel</Button>
             <Button
               onClick={handleBulkAssign}
               disabled={!bulkSlot}
@@ -1738,7 +1877,7 @@ export default function DeskMulaqatPage() {
         const currentSlot = daftariSlots.find(s => s.id === daftariChangeSlotDialog.currentSlotId);
         const currentDay = currentSlot?.day_id ? daftariDays.find(d => d.id === currentSlot.day_id) : null;
         return (
-          <Dialog open onOpenChange={open => { if (!open) { setDaftariChangeSlotDialog(null); setDaftariChangeSlotDay(''); setDaftariChangeSlotSlot(''); } }}>
+          <Dialog open onOpenChange={open => { if (!open) { setDaftariChangeSlotDialog(null); setDaftariChangeSlotDay(''); setDaftariChangeSlotSlot(''); setDaftariChangeSlotLanguage(''); } }}>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle>{isChange ? 'Change Daftari Slot' : 'Assign Daftari Slot'}</DialogTitle>
@@ -1783,9 +1922,18 @@ export default function DeskMulaqatPage() {
                     })}
                   </select>
                 </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Language</label>
+                  <LanguageSelect
+                    value={daftariChangeSlotLanguage}
+                    onValueChange={setDaftariChangeSlotLanguage}
+                    languages={mulaqatLanguages}
+                    className="w-full"
+                  />
+                </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => { setDaftariChangeSlotDialog(null); setDaftariChangeSlotDay(''); setDaftariChangeSlotSlot(''); }}>Cancel</Button>
+                <Button variant="outline" onClick={() => { setDaftariChangeSlotDialog(null); setDaftariChangeSlotDay(''); setDaftariChangeSlotSlot(''); setDaftariChangeSlotLanguage(''); }}>Cancel</Button>
                 <Button
                   onClick={handleDaftariConfirmChangeSlot}
                   disabled={!daftariChangeSlotSlot || daftariChangeSlotSlot === daftariChangeSlotDialog.currentSlotId}
@@ -1800,7 +1948,7 @@ export default function DeskMulaqatPage() {
       })()}
 
       {/* ── Daftari: Assign / Join & Assign Dialog ── */}
-      <Dialog open={daftariAssignDialog === 'assign' || daftariAssignDialog === 'join'} onOpenChange={open => { if (!open) { setDaftariAssignDialog(null); setDaftariBulkDay(''); setDaftariBulkSlot(''); } }}>
+      <Dialog open={daftariAssignDialog === 'assign' || daftariAssignDialog === 'join'} onOpenChange={open => { if (!open) { setDaftariAssignDialog(null); setDaftariBulkDay(''); setDaftariBulkSlot(''); setDaftariBulkLanguage(''); } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
@@ -1852,9 +2000,18 @@ export default function DeskMulaqatPage() {
                 })}
               </select>
             </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Language</label>
+              <LanguageSelect
+                value={daftariBulkLanguage}
+                onValueChange={setDaftariBulkLanguage}
+                languages={mulaqatLanguages}
+                className="w-full"
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setDaftariAssignDialog(null); setDaftariBulkDay(''); setDaftariBulkSlot(''); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setDaftariAssignDialog(null); setDaftariBulkDay(''); setDaftariBulkSlot(''); setDaftariBulkLanguage(''); }}>Cancel</Button>
             <Button
               onClick={handleDaftariBulkAssign}
               disabled={!daftariBulkSlot}

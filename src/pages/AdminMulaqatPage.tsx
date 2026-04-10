@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/dialog';
 import { ROLE_LABELS, formatDesignation } from '@/lib/constants';
 import { ProfileDialog } from '@/components/ProfileDialog';
+import { LanguageSelect } from '@/components/LanguageSelect';
 import { SUPER_ADMIN_NAV } from '@/lib/navItems';
 import type { Guest } from '@/types';
 
@@ -68,6 +69,7 @@ interface Delegation {
   head_of_delegation_id: string | null;
   head_of_delegation_name: string | null;
   slot_id: string | null;
+  language?: string | null;
   delegation_members: DelegationMember[];
 }
 
@@ -89,6 +91,7 @@ interface DaftariSlot {
   guest_name: string | null;
   assigned_by: string | null;
   assigned_by_name: string | null;
+  language?: string | null;
 }
 
 // ── Overview ("All" tab) types ────────────────────────────────────────────────
@@ -99,6 +102,7 @@ interface OverviewSlotDelegation {
   managed_by_name: string | null;
   head_of_delegation_name: string | null;
   slot_id: string | null;
+  language?: string | null;
   delegation_members: DelegationMember[];
 }
 
@@ -123,6 +127,7 @@ interface OverviewDaftariSlot {
   guest_id: string | null;
   guest_name: string | null;
   assigned_by_name: string | null;
+  language?: string | null;
 }
 
 interface OverviewDaftariDay {
@@ -178,6 +183,7 @@ const DEFAULT_DELEG_COLUMNS: PdfColumn[] = [
   { key: 'country',     label: 'Country / Delegation',   checked: true  },
   { key: 'guestCount',  label: 'Guest Count',             checked: true  },
   { key: 'head',        label: 'Head of Delegation',     checked: true  },
+  { key: 'language',    label: 'Language',                checked: false },
   { key: 'guestNames',  label: 'Guest Names',             checked: true  },
   { key: 'designation', label: 'Designation',             checked: false },
   { key: 'gender',      label: 'Gender',                  checked: false },
@@ -194,6 +200,7 @@ const DEFAULT_DAFTARI_COLUMNS: PdfColumn[] = [
   { key: 'guestNames',  label: 'Guest Name',              checked: true  },
   { key: 'country',     label: 'Country',                 checked: true  },
   { key: 'group',       label: 'Group',                   checked: true  },
+  { key: 'language',    label: 'Language',                checked: false },
   { key: 'designation', label: 'Designation',             checked: false },
   { key: 'contact',     label: 'Contact Number',          checked: false },
   { key: 'introduction',label: 'Introduction',             checked: false },
@@ -227,12 +234,12 @@ function loadPdfOptions(): PdfOptions {
 const DELEG_DETAIL_KEYS = ['designation', 'gender', 'religion', 'introduction', 'contact', 'departure', 'department', 'location'];
 const DELEG_COL_LABELS: Record<string, string> = {
   slot: 'Slot', country: 'Country / Delegation', guestCount: 'Guests', head: 'Head of Delegation',
-  guestNames: 'Guest Names', designation: 'Designation', gender: 'Gender', religion: 'Religion',
+  language: 'Language', guestNames: 'Guest Names', designation: 'Designation', gender: 'Gender', religion: 'Religion',
   introduction: 'Introduction', contact: 'Contact', departure: 'Departure', department: 'Department', location: 'Location',
 };
 const DAFTARI_COL_LABELS: Record<string, string> = {
   slot: 'Slot', guestNames: 'Guest Name', country: 'Country', group: 'Group',
-  designation: 'Designation', contact: 'Contact', introduction: 'Introduction',
+  language: 'Language', designation: 'Designation', contact: 'Contact', introduction: 'Introduction',
   departure: 'Departure', department: 'Department', location: 'Location',
 };
 
@@ -306,6 +313,45 @@ function SlotDragHandle() {
   );
 }
 
+// ── Language helpers ──────────────────────────────────────────────────────────
+
+const LANGUAGE_COLORS: Record<string, string> = {
+  'English': 'bg-blue-100 text-blue-700',
+  'Spanish': 'bg-orange-100 text-orange-700',
+  'French': 'bg-indigo-100 text-indigo-700',
+  'Arabic': 'bg-emerald-100 text-emerald-700',
+  'German': 'bg-red-100 text-red-700',
+};
+
+function LanguageTag({ language }: { language?: string | null }) {
+  if (!language) return <span className="text-gray-400 text-xs italic">Not set</span>;
+  const cls = LANGUAGE_COLORS[language] ?? 'bg-gray-100 text-gray-700';
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>{language}</span>;
+}
+
+// ── Ahmadi / Non-Ahmadi tag helpers ──────────────────────────────────────────
+
+const isAhmadi = (religion: string | null | undefined) => religion === 'Ahmadi Muslim';
+
+function AhmadiTags({ a, na, tiny = false }: { a: number; na: number; tiny?: boolean }) {
+  if (a === 0 && na === 0) return null;
+  const px = tiny ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-xs';
+  return (
+    <span className="inline-flex items-center gap-1">
+      {a > 0 && <span className={`bg-green-100 text-green-700 rounded-full font-medium ${px}`}>{a}A</span>}
+      {a > 0 && na > 0 && <span className="text-gray-300">·</span>}
+      {na > 0 && <span className={`bg-amber-100 text-amber-700 rounded-full font-medium ${px}`}>{na}NA</span>}
+    </span>
+  );
+}
+
+function AhmadiSingle({ religion }: { religion?: string | null }) {
+  if (!religion) return null;
+  return isAhmadi(religion)
+    ? <span className="bg-green-100 text-green-700 rounded-full px-1.5 py-0.5 text-[10px] font-medium">A</span>
+    : <span className="bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5 text-[10px] font-medium">NA</span>;
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AdminMulaqatPage() {
@@ -376,6 +422,12 @@ export default function AdminMulaqatPage() {
   const [moveDelegationDialog, setMoveDelegationDialog] = useState<{ delegation: Delegation; currentSlotId: string } | null>(null);
   const [moveDelegationDay, setMoveDelegationDay] = useState('');
   const [moveDelegationSlot, setMoveDelegationSlot] = useState('');
+
+  // Language
+  const [mulaqatLanguages, setMulaqatLanguages] = useState<string[]>([]);
+  const [rowAssignLanguage, setRowAssignLanguage] = useState('');
+  const [bulkLanguage, setBulkLanguage] = useState('');
+  const [daftariBulkLanguage, setDaftariBulkLanguage] = useState('');
 
   // All Delegations bulk actions
   const [selectedDelegationIds, setSelectedDelegationIds] = useState<Set<string>>(new Set());
@@ -470,17 +522,19 @@ export default function AdminMulaqatPage() {
   // ── Fetch ────────────────────────────────────────────────────────────────────
 
   const fetchAll = useCallback(async () => {
-    const [{ data: dayData }, { data: slotData }, { data: delData, error: delError }] = await Promise.all([
+    const [{ data: dayData }, { data: slotData }, { data: delData, error: delError }, { data: langData }] = await Promise.all([
       supabase.from('mulaqat_days').select('*').eq('is_archived', false).order('date'),
       supabase.from('mulaqat_slots').select('*').order('name'),
       supabase
         .from('delegations')
-        .select('id, country, managed_by, managed_by_name, head_of_delegation_id, head_of_delegation_name, slot_id, delegation_members(*)')
+        .select('id, country, managed_by, managed_by_name, head_of_delegation_id, head_of_delegation_name, slot_id, language, delegation_members(*)')
         .order('country'),
+      supabase.from('mulaqat_languages').select('name').eq('is_active', true).order('name'),
     ]);
     if (dayData) setDays(dayData as MulaqatDay[]);
     if (slotData) setSlots(slotData as MulaqatSlot[]);
     if (delData) setDelegations(delData as Delegation[]);
+    if (langData) setMulaqatLanguages((langData as { name: string }[]).map(l => l.name));
     console.log('[SA Mulaqat] Delegations:', delData);
     console.log('[SA Mulaqat] Delegation query error:', delError);
     console.log('[SA Mulaqat] Members per country:', delData?.map(d => ({ country: d.country, memberCount: d.delegation_members?.length ?? 0, members: d.delegation_members })));
@@ -742,17 +796,38 @@ export default function AdminMulaqatPage() {
   const overviewStats = useMemo(() => {
     const delegSlots = overviewDelegationDays.reduce((s, d) => s + (d.mulaqat_slots ?? []).length, 0);
     const dafSlots = overviewDaftariDays.reduce((s, d) => s + (d.daftari_slots ?? []).length, 0);
-    const totalDelegGuests = overviewDelegationDays.reduce((s, d) =>
-      s + (d.mulaqat_slots ?? []).reduce((ss, sl) =>
-        ss + (sl.delegations ?? []).reduce((sss, del) => sss + (del.delegation_members ?? []).length, 0), 0), 0);
+    const allDelegMembers = overviewDelegationDays.flatMap(d =>
+      (d.mulaqat_slots ?? []).flatMap(sl =>
+        (sl.delegations ?? []).flatMap(del =>
+          (del.delegation_members ?? []).map(m => m.guest_id)
+        )
+      )
+    );
+    const totalDelegGuests = allDelegMembers.length;
     const assignedDafSlots = overviewDaftariDays.reduce((s, d) =>
       s + (d.daftari_slots ?? []).filter(sl => sl.guest_id).length, 0);
     const totalGuests = totalDelegGuests + assignedDafSlots;
     const usedDelegSlots = overviewDelegationDays.reduce((s, d) =>
       s + (d.mulaqat_slots ?? []).filter(sl => (sl.delegations ?? []).length > 0).length, 0);
     const availableSlots = (delegSlots - usedDelegSlots) + (dafSlots - assignedDafSlots);
-    return { delegSlots, dafSlots, totalGuests, availableSlots, scheduledDays: overviewScheduledDates.length };
-  }, [overviewDelegationDays, overviewDaftariDays, overviewScheduledDates]);
+    // A/NA counts
+    const delegAhmadi = allDelegMembers.filter(gId => {
+      const g = guests.find(x => x.id === gId);
+      return g && isAhmadi(g.religion);
+    }).length;
+    const delegNonAhmadi = totalDelegGuests - delegAhmadi;
+    const dafGuestIds = overviewDaftariDays.flatMap(d =>
+      (d.daftari_slots ?? []).filter(sl => sl.guest_id).map(sl => sl.guest_id!)
+    );
+    const dafAhmadi = dafGuestIds.filter(gId => {
+      const g = guests.find(x => x.id === gId);
+      return g && isAhmadi(g.religion);
+    }).length;
+    const dafNonAhmadi = dafGuestIds.length - dafAhmadi;
+    const totalAhmadi = delegAhmadi + dafAhmadi;
+    const totalNonAhmadi = delegNonAhmadi + dafNonAhmadi;
+    return { delegSlots, dafSlots, totalGuests, availableSlots, scheduledDays: overviewScheduledDates.length, totalAhmadi, totalNonAhmadi };
+  }, [overviewDelegationDays, overviewDaftariDays, overviewScheduledDates, guests]);
 
   const filteredArchiveRows = useMemo(() => {
     const delRows = archivedDelegationDays.map(d => ({ ...d, type: 'delegation' as const }));
@@ -843,6 +918,7 @@ export default function AdminMulaqatPage() {
 
     let totalDelegGuests = 0, totalDelegDays = 0;
     let totalDafGuests = 0, totalDafDays = 0;
+    let totalPdfAhmadi = 0, totalPdfNonAhmadi = 0;
 
     // ── DELEGATION SECTION ────────────────────────────────────────────────────
     if (type !== 'daftari') {
@@ -860,7 +936,7 @@ export default function AdminMulaqatPage() {
 
           if (delegs.length === 0) {
             if (options.includeEmpty) {
-              const rowMap: Record<string, string> = { slot: slot.name, country: '(Available)', guestCount: '0', head: '—', guestNames: '—', designation: '—', gender: '—', religion: '—', introduction: '—', contact: '—', departure: '—', department: '—', location: '—' };
+              const rowMap: Record<string, string> = { slot: slot.name, country: '(Available)', guestCount: '0', head: '—', language: '—', guestNames: '—', designation: '—', gender: '—', religion: '—', introduction: '—', contact: '—', departure: '—', department: '—', location: '—' };
               delegRows.push(checkedDelegKeys.map(k => rowMap[k] ?? '—'));
             }
             continue;
@@ -873,10 +949,12 @@ export default function AdminMulaqatPage() {
                 const g = guests.find(x => x.id === member.guest_id);
                 const ga = g as unknown as Record<string, string | undefined>;
                 totalDelegGuests++;
+                if (g) { isAhmadi(g.religion) ? totalPdfAhmadi++ : totalPdfNonAhmadi++; }
                 const rowMap: Record<string, string> = {
                   slot: slot.name, country: del.country,
                   guestCount: String((del.delegation_members ?? []).length),
                   head: member.is_head ? `* ${member.guest_name}` : del.head_of_delegation_name ?? '—',
+                  language: del.language ?? '—',
                   guestNames: member.is_head ? `* ${member.guest_name}` : member.guest_name,
                   designation: g ? String(formatDesignation(g.designation ?? '')) : '—',
                   gender: ga?.gender ?? '—', religion: ga?.religion ?? '—',
@@ -892,13 +970,17 @@ export default function AdminMulaqatPage() {
             for (const del of delegs) {
               const gc = (del.delegation_members ?? []).length;
               totalDelegGuests += gc;
+              for (const member of del.delegation_members ?? []) {
+                const mg = guests.find(x => x.id === member.guest_id);
+                if (mg) { isAhmadi(mg.religion) ? totalPdfAhmadi++ : totalPdfNonAhmadi++; }
+              }
               const memberNames = [...(del.delegation_members ?? [])]
                 .sort((a, b) => (b.is_head ? 1 : 0) - (a.is_head ? 1 : 0))
                 .map(m => m.is_head ? `* ${m.guest_name}` : m.guest_name)
                 .join(', ') || '—';
               const rowMap: Record<string, string> = {
                 slot: slot.name, country: del.country, guestCount: String(gc),
-                head: del.head_of_delegation_name ?? '—', guestNames: memberNames,
+                head: del.head_of_delegation_name ?? '—', language: del.language ?? '—', guestNames: memberNames,
                 designation: '—', gender: '—', religion: '—', introduction: '—',
                 contact: '—', departure: '—', department: '—', location: '—',
               };
@@ -953,11 +1035,15 @@ export default function AdminMulaqatPage() {
           if (!slot.guest_id && !options.includeEmpty) continue;
           const g = slot.guest_id ? guests.find(x => x.id === slot.guest_id) : null;
           const ga = g as unknown as Record<string, string | undefined>;
-          if (slot.guest_id) { totalDafGuests++; }
+          if (slot.guest_id) {
+            totalDafGuests++;
+            if (g) { isAhmadi(g.religion) ? totalPdfAhmadi++ : totalPdfNonAhmadi++; }
+          }
 
           const rowMap: Record<string, string> = {
             slot: slot.name, guestNames: slot.guest_name ?? '—',
             country: g?.country ?? '—', group: slot.guest_id ? 'Individual' : '(Available)',
+            language: slot.language ?? '—',
             designation: g ? String(formatDesignation(g.designation ?? '')) : '—',
             contact: ga?.phone ?? '—', introduction: ga?.introduction ?? '—',
             departure: fmtDepTime(g?.departureTime), department: g?.assignedDepartment ?? '—',
@@ -1014,6 +1100,8 @@ export default function AdminMulaqatPage() {
         summaryBody.push(['Total daftari guests', String(totalDafGuests)]);
       }
       summaryBody.push(['Grand Total', String(totalDelegGuests + totalDafGuests)]);
+      summaryBody.push(['Total Ahmadi', String(totalPdfAhmadi)]);
+      summaryBody.push(['Total Non-Ahmadi', String(totalPdfNonAhmadi)]);
 
       autoTable(doc, {
         startY: 26,
@@ -1144,13 +1232,14 @@ export default function AdminMulaqatPage() {
     if (!rowAssignDialog || !rowAssignSlotValue) return;
     const newSlot = slots.find(s => s.id === rowAssignSlotValue);
     const oldSlot = rowAssignDialog.slot_id ? slots.find(s => s.id === rowAssignDialog.slot_id) : null;
-    const { error } = await supabase.from('delegations').update({ slot_id: rowAssignSlotValue }).eq('id', rowAssignDialog.id);
+    const langVal = rowAssignLanguage || null;
+    const { error } = await supabase.from('delegations').update({ slot_id: rowAssignSlotValue, language: langVal }).eq('id', rowAssignDialog.id);
     if (error) { toast.error('Failed to update slot'); return; }
     const msg = oldSlot
       ? `${rowAssignDialog.country} moved from ${oldSlot.name} to ${newSlot?.name ?? 'slot'}`
       : `${rowAssignDialog.country} assigned to ${newSlot?.name ?? 'slot'}`;
     toast.success(msg);
-    setRowAssignDialog(null); setRowAssignSlotValue(''); setChangeSlotDay(''); fetchAll();
+    setRowAssignDialog(null); setRowAssignSlotValue(''); setChangeSlotDay(''); setRowAssignLanguage(''); fetchAll();
   };
 
   const handleRemoveMemberFromDelegation = async (delegation: Delegation, guestId: string) => {
@@ -1182,15 +1271,31 @@ export default function AdminMulaqatPage() {
     setMoveDelegationDialog(null); setMoveDelegationDay(''); setMoveDelegationSlot(''); fetchAll();
   };
 
+  const handleSetDelegationLanguage = async (del: Delegation, lang: string) => {
+    const langVal = lang || null;
+    const { error } = await supabase.from('delegations').update({ language: langVal }).eq('id', del.id);
+    if (error) { toast.error('Failed to set language'); return; }
+    setDelegations(prev => prev.map(d => d.id === del.id ? { ...d, language: langVal } : d));
+    if (lang) toast.success(`${del.country} delegation language set to ${lang}`);
+  };
+
+  const handleSetDaftariSlotLanguage = async (slotId: string, lang: string) => {
+    const langVal = lang || null;
+    const { error } = await supabase.from('daftari_slots').update({ language: langVal }).eq('id', slotId);
+    if (error) { toast.error('Failed to set language'); return; }
+    setDaftariSlots(prev => prev.map(s => s.id === slotId ? { ...s, language: langVal } : s));
+  };
+
   const handleBulkAssignDelegations = async () => {
     if (!bulkSlot || selectedDelegationList.length === 0) return;
     const slot = slots.find(s => s.id === bulkSlot);
+    const langVal = bulkLanguage || null;
     await Promise.all(selectedDelegationList.map(d =>
-      supabase.from('delegations').update({ slot_id: bulkSlot }).eq('id', d.id)
+      supabase.from('delegations').update({ slot_id: bulkSlot, language: langVal }).eq('id', d.id)
     ));
     const n = selectedDelegationList.length;
     toast.success(`${n} delegation${n !== 1 ? 's' : ''} assigned to ${slot?.name ?? 'slot'}`);
-    setBulkAssignDialog(null); setBulkDay(''); setBulkSlot(''); setSelectedDelegationIds(new Set()); fetchAll();
+    setBulkAssignDialog(null); setBulkDay(''); setBulkSlot(''); setBulkLanguage(''); setSelectedDelegationIds(new Set()); fetchAll();
   };
 
   const handleSeparateDelegations = async () => {
@@ -1391,11 +1496,13 @@ export default function AdminMulaqatPage() {
     }
     // For join: all names shown in slot_name; slot.guest_id = first guest
     const allNames = guestList.map(g => g.fullName).join(', ');
+    const langVal = daftariBulkLanguage || null;
     const { data: slotRes, error: slotErr } = await supabase.from('daftari_slots').update({
       guest_id: guestList[0].id,
       guest_name: allNames,
       assigned_by: user.id,
       assigned_by_name: user.name,
+      language: langVal,
     }).eq('id', daftariBulkSlot).select().single();
     console.log('[Daftari] Slot update:', { slotRes, slotErr });
     const results = await Promise.all(guestList.map(g =>
@@ -1407,7 +1514,7 @@ export default function AdminMulaqatPage() {
     if (slotErr) { toast.error('Failed to assign: ' + slotErr.message); return; }
     const n = guestList.length;
     toast.success(`${n} guest${n !== 1 ? 's' : ''} assigned to ${slot?.name ?? 'slot'}`);
-    setDaftariBulkAssignDialog(null); setDaftariBulkDay(''); setDaftariBulkSlot('');
+    setDaftariBulkAssignDialog(null); setDaftariBulkDay(''); setDaftariBulkSlot(''); setDaftariBulkLanguage('');
     setSelectedDaftariGuestIds(new Set());
     fetchDaftari();
   };
@@ -1746,7 +1853,10 @@ export default function AdminMulaqatPage() {
               <span className="text-[#D4CFC7]">|</span>
               <span><span className="font-semibold text-[#1A1A1A]">{overviewStats.dafSlots}</span> daftari slots</span>
               <span className="text-[#D4CFC7]">|</span>
-              <span><span className="font-semibold text-[#1A1A1A]">{overviewStats.totalGuests}</span> total guests</span>
+              <span className="flex items-center gap-1.5">
+                <span className="font-semibold text-[#1A1A1A]">{overviewStats.totalGuests}</span> total guests
+                <AhmadiTags a={overviewStats.totalAhmadi} na={overviewStats.totalNonAhmadi} tiny />
+              </span>
             </div>
           ) : activeTab === 'delegation' ? (
             <div className="bg-white border-b border-[#E8E3DB] px-6 py-3 flex items-center gap-6 text-sm text-[#4A4A4A]">
@@ -1835,6 +1945,24 @@ export default function AdminMulaqatPage() {
                       const delegSlots = delegation?.mulaqat_slots ?? [];
                       const dafSlots = daftari?.daftari_slots ?? [];
                       const totalSlots = delegSlots.length + dafSlots.length;
+
+                      // A/NA day totals
+                      let dayA = 0, dayNA = 0;
+                      for (const sl of delegSlots) {
+                        for (const del of sl.delegations ?? []) {
+                          for (const m of del.delegation_members ?? []) {
+                            const g = guests.find(x => x.id === m.guest_id);
+                            if (g) { isAhmadi(g.religion) ? dayA++ : dayNA++; }
+                          }
+                        }
+                      }
+                      for (const sl of dafSlots) {
+                        if (sl.guest_id) {
+                          const g = guests.find(x => x.id === sl.guest_id);
+                          if (g) { isAhmadi(g.religion) ? dayA++ : dayNA++; }
+                        }
+                      }
+
                       const dateLabel = delegation?.label
                         ? `${fmtShort(date)} — ${delegation.label}`
                         : daftari?.label
@@ -1856,6 +1984,7 @@ export default function AdminMulaqatPage() {
                                 {isToday && (
                                   <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-[#2D5A45] text-white flex-shrink-0">TODAY</span>
                                 )}
+                                <AhmadiTags a={dayA} na={dayNA} />
                               </button>
                               <div className="flex items-center gap-3 flex-shrink-0">
                                 <div className="text-xs text-[#4A4A4A] text-right">
@@ -1909,17 +2038,27 @@ export default function AdminMulaqatPage() {
                                                   Available — no delegations assigned
                                                 </p>
                                               ) : (
-                                                delegs.map(del => (
-                                                  <div key={del.id} className="flex items-center gap-1.5 text-xs text-[#1A1A1A]">
-                                                    <span className="font-medium">{del.country}</span>
-                                                    <span className="text-[#4A4A4A]">({(del.delegation_members ?? []).length})</span>
-                                                    {del.head_of_delegation_name && (
-                                                      <span className="flex items-center gap-0.5 text-[#4A4A4A]">
-                                                        <Star className="w-3 h-3 text-amber-500" />{del.head_of_delegation_name}
-                                                      </span>
-                                                    )}
-                                                  </div>
-                                                ))
+                                                delegs.map(del => {
+                                                  const members = del.delegation_members ?? [];
+                                                  let dA = 0, dNA = 0;
+                                                  for (const m of members) {
+                                                    const g = guests.find(x => x.id === m.guest_id);
+                                                    if (g) { isAhmadi(g.religion) ? dA++ : dNA++; }
+                                                  }
+                                                  return (
+                                                    <div key={del.id} className="flex items-center gap-1.5 text-xs text-[#1A1A1A]">
+                                                      <span className="font-medium">{del.country}</span>
+                                                      <span className="text-[#4A4A4A]">({members.length})</span>
+                                                      <AhmadiTags a={dA} na={dNA} tiny />
+                                                      <LanguageTag language={del.language} />
+                                                      {del.head_of_delegation_name && (
+                                                        <span className="flex items-center gap-0.5 text-[#4A4A4A]">
+                                                          <Star className="w-3 h-3 text-amber-500" />{del.head_of_delegation_name}
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  );
+                                                })
                                               )}
                                             </div>
                                           </div>
@@ -1958,11 +2097,13 @@ export default function AdminMulaqatPage() {
                                                   Available — no guest assigned
                                                 </p>
                                               ) : (
-                                                <p className="text-xs text-[#1A1A1A]">
+                                                <p className="text-xs text-[#1A1A1A] flex items-center gap-1.5 flex-wrap">
                                                   <span className="font-medium">{slot.guest_name}</span>
                                                   {g && (
-                                                    <span className="text-[#4A4A4A]"> ({g.country}{g.designation ? `, ${formatDesignation(g.designation)}` : ''})</span>
+                                                    <span className="text-[#4A4A4A]">({g.country}{g.designation ? `, ${formatDesignation(g.designation)}` : ''})</span>
                                                   )}
+                                                  <AhmadiSingle religion={g?.religion} />
+                                                  <LanguageTag language={slot.language} />
                                                 </p>
                                               )}
                                             </div>
@@ -2026,6 +2167,15 @@ export default function AdminMulaqatPage() {
                         const daySlotsForDay = getSlotsForDay(day.id);
                         const totalDels = daySlotsForDay.reduce((s, sl) => s + getDelegationsForSlot(sl.id).length, 0);
                         const isExpanded = expandedDays.has(day.id);
+                        let dayA = 0, dayNA = 0;
+                        for (const sl of daySlotsForDay) {
+                          for (const del of getDelegationsForSlot(sl.id)) {
+                            for (const m of del.delegation_members) {
+                              const g = guests.find(x => x.id === m.guest_id);
+                              if (g) { isAhmadi(g.religion) ? dayA++ : dayNA++; }
+                            }
+                          }
+                        }
                         return (
                           <Card key={day.id} className="shadow-sm bg-white">
                             <CardHeader className="py-3 px-4">
@@ -2042,6 +2192,7 @@ export default function AdminMulaqatPage() {
                                     ? <ChevronDown className="w-4 h-4 text-[#4A4A4A] flex-shrink-0" />
                                     : <ChevronRight className="w-4 h-4 text-[#4A4A4A] flex-shrink-0" />}
                                   <span className="font-semibold text-[#1A1A1A]">{dayHeader(day)}</span>
+                                  <AhmadiTags a={dayA} na={dayNA} />
                                 </button>
                                 <div className="flex items-center gap-3 flex-shrink-0">
                                   <div className="text-xs text-[#4A4A4A] text-right">
@@ -2123,6 +2274,14 @@ export default function AdminMulaqatPage() {
                                                           : <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />}
                                                         <span className="font-medium text-[#1A1A1A]">{del.country}</span>
                                                         <span className="text-[#4A4A4A]">({del.delegation_members.length})</span>
+                                                        {(() => {
+                                                          let dA = 0, dNA = 0;
+                                                          for (const m of del.delegation_members) {
+                                                            const g = guests.find(x => x.id === m.guest_id);
+                                                            if (g) { isAhmadi(g.religion) ? dA++ : dNA++; }
+                                                          }
+                                                          return <AhmadiTags a={dA} na={dNA} tiny />;
+                                                        })()}
                                                         {del.head_of_delegation_name && (
                                                           <span className="flex items-center gap-0.5 text-[#4A4A4A]">
                                                             <Star className="w-3 h-3 text-amber-500" />
@@ -2130,7 +2289,15 @@ export default function AdminMulaqatPage() {
                                                           </span>
                                                         )}
                                                       </button>
-                                                      <div className="flex items-center gap-1 flex-shrink-0">
+                                                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                        <div onClick={e => e.stopPropagation()}>
+                                                          <LanguageSelect
+                                                            value={del.language}
+                                                            onValueChange={v => handleSetDelegationLanguage(del, v)}
+                                                            languages={mulaqatLanguages}
+                                                            className="min-w-[120px] text-[11px]"
+                                                          />
+                                                        </div>
                                                         <button
                                                           onClick={() => {
                                                             const dayId = del.slot_id ? (slots.find(s => s.id === del.slot_id)?.day_id ?? '') : '';
@@ -2152,6 +2319,15 @@ export default function AdminMulaqatPage() {
                                                     </div>
                                                     {isDelExpanded && (
                                                       <div className="mt-1.5 border-l-4 border-[#2D5A45] pl-3 py-2 bg-gray-50/50 rounded-r space-y-2">
+                                                        <div className="flex items-center gap-2 text-xs text-[#4A4A4A]">
+                                                          <span className="font-semibold text-[#4A4A4A] uppercase tracking-wider">Language:</span>
+                                                          <LanguageSelect
+                                                            value={del.language}
+                                                            onValueChange={v => handleSetDelegationLanguage(del, v)}
+                                                            languages={mulaqatLanguages}
+                                                            className="min-w-[130px]"
+                                                          />
+                                                        </div>
                                                         {del.delegation_members.length === 0 ? (
                                                           <p className="text-xs text-gray-400 italic">No members yet.</p>
                                                         ) : (
@@ -2349,7 +2525,7 @@ export default function AdminMulaqatPage() {
                                     className="border-gray-300 data-[state=checked]:bg-[#2D5A45] data-[state=checked]:border-[#2D5A45] data-[state=indeterminate]:bg-[#2D5A45] data-[state=indeterminate]:border-[#2D5A45]"
                                   />
                                 </th>
-                                {['Country', 'Guests', 'Head of Delegation', 'Managed By', 'Slot', 'Actions'].map(h => (
+                                {['Country', 'Guests', 'Head of Delegation', 'Language', 'Managed By', 'Slot', 'Actions'].map(h => (
                                   <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">{h}</th>
                                 ))}
                               </tr>
@@ -2375,12 +2551,30 @@ export default function AdminMulaqatPage() {
                                   </td>
                                   <td className="px-3 py-3 font-medium text-[#1A1A1A]">{del.country}</td>
                                   <td className="px-3 py-3">
-                                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">{del.delegation_members.length}</Badge>
+                                    <div className="flex items-center gap-1.5">
+                                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">{del.delegation_members.length}</Badge>
+                                      {(() => {
+                                        let dA = 0, dNA = 0;
+                                        for (const m of del.delegation_members) {
+                                          const g = guests.find(x => x.id === m.guest_id);
+                                          if (g) { isAhmadi(g.religion) ? dA++ : dNA++; }
+                                        }
+                                        return <AhmadiTags a={dA} na={dNA} tiny />;
+                                      })()}
+                                    </div>
                                   </td>
                                   <td className="px-3 py-3 text-[#4A4A4A]">
                                     {del.head_of_delegation_name
                                       ? <span className="flex items-center gap-1"><Star className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />{del.head_of_delegation_name}</span>
                                       : <span className="text-xs text-gray-400 italic">None</span>}
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <LanguageSelect
+                                      value={del.language}
+                                      onValueChange={v => handleSetDelegationLanguage(del, v)}
+                                      languages={mulaqatLanguages}
+                                      className="min-w-[140px]"
+                                    />
                                   </td>
                                   <td className="px-3 py-3 text-sm text-[#4A4A4A]">{del.managed_by_name ?? '—'}</td>
                                   <td className="px-3 py-3">
@@ -2402,6 +2596,7 @@ export default function AdminMulaqatPage() {
                                         setRowAssignDialog(del);
                                         setChangeSlotDay(currentDayId);
                                         setRowAssignSlotValue(del.slot_id ?? '');
+                                        setRowAssignLanguage(del.language ?? '');
                                       }} title="Assign / change slot" className="p-1.5 rounded text-blue-500 hover:bg-blue-50 transition-colors">
                                         <Calendar className="w-3.5 h-3.5" />
                                       </button>
@@ -2413,7 +2608,7 @@ export default function AdminMulaqatPage() {
                                 </tr>
                                 {isExpanded && (
                                   <tr className="border-b border-[#E8E3DB]">
-                                    <td colSpan={7} className="p-0">
+                                    <td colSpan={8} className="p-0">
                                       <div className="border-l-4 border-[#2D5A45] bg-gray-50/50 pl-6 pr-4 py-3 space-y-2">
                                         {del.delegation_members.length === 0 ? (
                                           <p className="text-xs text-gray-400 italic">No members in this delegation yet.</p>
@@ -2438,6 +2633,7 @@ export default function AdminMulaqatPage() {
                                                         <div className="flex items-center gap-1.5">
                                                           {isHead && <Star className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />}
                                                           {m.guest_name}
+                                                          <AhmadiSingle religion={gInfo?.religion} />
                                                         </div>
                                                       </td>
                                                       <td className="px-3 py-2.5 text-xs text-[#4A4A4A]">{formatDesignation(gInfo?.designation)}</td>
@@ -2557,6 +2753,9 @@ export default function AdminMulaqatPage() {
                         const daySlotsForDay = getDaftariSlotsForDay(day.id);
                         const assignedCount = daySlotsForDay.filter(s => s.guest_id).length;
                         const isDayExpanded = expandedDaftariDays.has(day.id);
+                        const dayDafGuests = guests.filter(g => daySlotsForDay.some(s => daftariGuestSlotIds[g.id] === s.id));
+                        const dayDafA = dayDafGuests.filter(g => isAhmadi(g.religion)).length;
+                        const dayDafNA = dayDafGuests.length - dayDafA;
                         return (
                           <Card key={day.id} className="shadow-sm bg-white">
                             <CardHeader className="py-3 px-4">
@@ -2573,6 +2772,7 @@ export default function AdminMulaqatPage() {
                                     ? <ChevronDown className="w-4 h-4 text-[#4A4A4A] flex-shrink-0" />
                                     : <ChevronRight className="w-4 h-4 text-[#4A4A4A] flex-shrink-0" />}
                                   <span className="font-semibold text-[#1A1A1A]">{dayHeader(day)}</span>
+                                  <AhmadiTags a={dayDafA} na={dayDafNA} tiny />
                                 </button>
                                 <div className="flex items-center gap-3 flex-shrink-0">
                                   <div className="text-xs text-[#4A4A4A] text-right">
@@ -2621,6 +2821,7 @@ export default function AdminMulaqatPage() {
                                               {slot.guest_id && guestsInSlot.length > 1 && (
                                                 <span className="text-xs text-[#4A4A4A] font-normal">· {guestsInSlot.length} guests</span>
                                               )}
+                                              {slot.language && <LanguageTag language={slot.language} />}
                                             </div>
                                             {!slot.guest_id && (
                                               <button onClick={() => setDeleteDaftariSlotDialog(slot)} title="Delete slot" className="p-1 rounded text-red-400 hover:bg-red-50 transition-colors">
@@ -2641,23 +2842,36 @@ export default function AdminMulaqatPage() {
                                               <table className="w-full text-xs">
                                                 <thead>
                                                   <tr className="bg-[#F5F0E8]/60 border-t border-[#E8E3DB]">
-                                                    {['Name', 'Designation', 'Departure', 'Actions'].map(h => (
+                                                    {['Name', 'Designation', 'Departure', 'Language', 'Actions'].map(h => (
                                                       <th key={h} className="px-3 py-1.5 text-left text-[10px] font-semibold text-[#4A4A4A] uppercase tracking-wider whitespace-nowrap">{h}</th>
                                                     ))}
                                                   </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-[#F0EDE8]">
-                                                  {guestsInSlot.map(g => (
+                                                  {guestsInSlot.map((g, gIdx) => (
                                                     <tr key={g.id} className="bg-white hover:bg-[#FAFAFA]">
                                                       <td className="px-3 py-2 font-medium text-[#1A1A1A] whitespace-nowrap">
-                                                        {g.fullName}
-                                                        <span className="ml-1 text-[10px] text-[#4A4A4A] font-normal">({g.country})</span>
+                                                        <div className="flex items-center gap-1.5">
+                                                          {g.fullName}
+                                                          <span className="text-[10px] text-[#4A4A4A] font-normal">({g.country})</span>
+                                                          <AhmadiSingle religion={g.religion} />
+                                                        </div>
                                                       </td>
                                                       <td className="px-3 py-2 text-[#4A4A4A]">{formatDesignation(g.designation)}</td>
                                                       <td className="px-3 py-2 whitespace-nowrap">
                                                         <div className="text-[#4A4A4A]">{fmtDep(g.departureTime)}</div>
                                                         {fmtFlight(g.departureFlightNumber, g.departureAirport) && (
                                                           <div className="text-xs text-gray-400 mt-0.5">{fmtFlight(g.departureFlightNumber, g.departureAirport)}</div>
+                                                        )}
+                                                      </td>
+                                                      <td className="px-3 py-2 whitespace-nowrap">
+                                                        {gIdx === 0 && (
+                                                          <LanguageSelect
+                                                            value={slot.language}
+                                                            onValueChange={v => handleSetDaftariSlotLanguage(slot.id, v)}
+                                                            languages={mulaqatLanguages}
+                                                            className="min-w-[110px]"
+                                                          />
                                                         )}
                                                       </td>
                                                       <td className="px-3 py-2">
@@ -2687,9 +2901,15 @@ export default function AdminMulaqatPage() {
                                             </div>
                                           ) : (
                                             /* Fallback: slot has guest_id but daftariGuestSlotIds not yet loaded */
-                                            <div className="px-3 py-2 flex items-center justify-between">
+                                            <div className="px-3 py-2 flex items-center justify-between gap-2">
                                               <span className="text-xs text-[#4A4A4A]">{slot.guest_name ?? '—'}</span>
-                                              <div className="flex items-center gap-1">
+                                              <div className="flex items-center gap-2">
+                                                <LanguageSelect
+                                                  value={slot.language}
+                                                  onValueChange={v => handleSetDaftariSlotLanguage(slot.id, v)}
+                                                  languages={mulaqatLanguages}
+                                                  className="min-w-[110px]"
+                                                />
                                                 <button
                                                   onClick={() => { setChangeDaftariSlotDay(slot.day_id ?? ''); setChangeDaftariSlotValue(slot.id); setChangeDaftariSlotDialog({ slot, guestId: slot.guest_id! }); }}
                                                   className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-[#2D5A45] hover:bg-[#D6E4D9] transition-colors"
@@ -2790,7 +3010,7 @@ export default function AdminMulaqatPage() {
                                     className="border-gray-300 data-[state=checked]:bg-[#2D5A45] data-[state=checked]:border-[#2D5A45] data-[state=indeterminate]:bg-[#2D5A45] data-[state=indeterminate]:border-[#2D5A45]"
                                   />
                                 </th>
-                                {['Country', 'Name', 'Designation', 'Departure', 'Assigned Day', 'Assigned Slot', 'Actions'].map(h => (
+                                {['Country', 'Name', 'Designation', 'Departure', 'Assigned Day', 'Assigned Slot', 'Language', 'Actions'].map(h => (
                                   <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider whitespace-nowrap">{h}</th>
                                 ))}
                               </tr>
@@ -2810,7 +3030,12 @@ export default function AdminMulaqatPage() {
                                       />
                                     </td>
                                     <td className="px-3 py-3 text-sm text-[#4A4A4A] whitespace-nowrap">{guest.country}</td>
-                                    <td className="px-3 py-3 font-medium text-[#1A1A1A] whitespace-nowrap">{guest.fullName}</td>
+                                    <td className="px-3 py-3 font-medium text-[#1A1A1A] whitespace-nowrap">
+                                      <div className="flex items-center gap-1.5">
+                                        {guest.fullName}
+                                        <AhmadiSingle religion={guest.religion} />
+                                      </div>
+                                    </td>
                                     <td className="px-3 py-3 text-sm text-[#4A4A4A]">{formatDesignation(guest.designation)}</td>
                                     <td className="px-3 py-3 whitespace-nowrap">
                                       <div className="text-sm text-[#4A4A4A]">{fmtDep(guest.departureTime)}</div>
@@ -2825,6 +3050,16 @@ export default function AdminMulaqatPage() {
                                     </td>
                                     <td className="px-3 py-3 text-[#4A4A4A] whitespace-nowrap">
                                       {slot ? slot.name : <span className="text-amber-600 text-xs font-medium">—</span>}
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      {slot ? (
+                                        <LanguageSelect
+                                          value={slot.language}
+                                          onValueChange={v => handleSetDaftariSlotLanguage(slot.id, v)}
+                                          languages={mulaqatLanguages}
+                                          className="min-w-[130px]"
+                                        />
+                                      ) : <LanguageTag language={null} />}
                                     </td>
                                     <td className="px-3 py-3">
                                       {isAssigning ? (
@@ -3217,7 +3452,7 @@ export default function AdminMulaqatPage() {
         const currentDay = currentSlot?.day_id ? days.find(d => d.id === currentSlot.day_id) : null;
         const slotsForDay = changeSlotDay ? getSlotsForDay(changeSlotDay) : [];
         return (
-          <Dialog open onOpenChange={open => { if (!open) { setRowAssignDialog(null); setRowAssignSlotValue(''); setChangeSlotDay(''); } }}>
+          <Dialog open onOpenChange={open => { if (!open) { setRowAssignDialog(null); setRowAssignSlotValue(''); setChangeSlotDay(''); setRowAssignLanguage(''); } }}>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
@@ -3270,9 +3505,18 @@ export default function AdminMulaqatPage() {
                     })}
                   </select>
                 </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Language</label>
+                  <LanguageSelect
+                    value={rowAssignLanguage}
+                    onValueChange={setRowAssignLanguage}
+                    languages={mulaqatLanguages}
+                    className="w-full"
+                  />
+                </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => { setRowAssignDialog(null); setRowAssignSlotValue(''); setChangeSlotDay(''); }}>Cancel</Button>
+                <Button variant="outline" onClick={() => { setRowAssignDialog(null); setRowAssignSlotValue(''); setChangeSlotDay(''); setRowAssignLanguage(''); }}>Cancel</Button>
                 <Button
                   onClick={handleRowAssignSlot}
                   disabled={!rowAssignSlotValue || rowAssignSlotValue === rowAssignDialog.slot_id}
@@ -3520,7 +3764,7 @@ export default function AdminMulaqatPage() {
       </Dialog>
 
       {/* ── Bulk Assign / Join Dialog ── */}
-      <Dialog open={bulkAssignDialog === 'assign' || bulkAssignDialog === 'join'} onOpenChange={open => { if (!open) { setBulkAssignDialog(null); setBulkDay(''); setBulkSlot(''); } }}>
+      <Dialog open={bulkAssignDialog === 'assign' || bulkAssignDialog === 'join'} onOpenChange={open => { if (!open) { setBulkAssignDialog(null); setBulkDay(''); setBulkSlot(''); setBulkLanguage(''); } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
@@ -3570,9 +3814,18 @@ export default function AdminMulaqatPage() {
                 })}
               </select>
             </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Language</label>
+              <LanguageSelect
+                value={bulkLanguage}
+                onValueChange={setBulkLanguage}
+                languages={mulaqatLanguages}
+                className="w-full"
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setBulkAssignDialog(null); setBulkDay(''); setBulkSlot(''); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setBulkAssignDialog(null); setBulkDay(''); setBulkSlot(''); setBulkLanguage(''); }}>Cancel</Button>
             <Button onClick={handleBulkAssignDelegations} disabled={!bulkSlot} className="bg-[#2D5A45] hover:bg-[#234839] text-white">
               {bulkAssignDialog === 'join' ? 'Join & Assign' : 'Assign to Slot'}
             </Button>
@@ -3749,7 +4002,7 @@ export default function AdminMulaqatPage() {
       {/* ── Daftari: Bulk Assign / Join Dialog ── */}
       <Dialog
         open={daftariBulkAssignDialog === 'assign' || daftariBulkAssignDialog === 'join'}
-        onOpenChange={open => { if (!open) { setDaftariBulkAssignDialog(null); setDaftariBulkDay(''); setDaftariBulkSlot(''); } }}
+        onOpenChange={open => { if (!open) { setDaftariBulkAssignDialog(null); setDaftariBulkDay(''); setDaftariBulkSlot(''); setDaftariBulkLanguage(''); } }}
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -3802,9 +4055,18 @@ export default function AdminMulaqatPage() {
                 })}
               </select>
             </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Language</label>
+              <LanguageSelect
+                value={daftariBulkLanguage}
+                onValueChange={setDaftariBulkLanguage}
+                languages={mulaqatLanguages}
+                className="w-full"
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setDaftariBulkAssignDialog(null); setDaftariBulkDay(''); setDaftariBulkSlot(''); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setDaftariBulkAssignDialog(null); setDaftariBulkDay(''); setDaftariBulkSlot(''); setDaftariBulkLanguage(''); }}>Cancel</Button>
             <Button onClick={handleBulkAssignDaftari} disabled={!daftariBulkSlot} className="bg-[#2D5A45] hover:bg-[#234839] text-white">
               {daftariBulkAssignDialog === 'join' ? 'Join & Assign' : 'Assign to Slot'}
             </Button>
