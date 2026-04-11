@@ -1,4 +1,4 @@
-export type UserRole = 'super-admin' | 'desk-in-charge' | 'coordinator' | 'transport' | 'accommodation' | 'viewer' | 'department-head' | 'location-manager';
+export type UserRole = 'super-admin' | 'desk-in-charge' | 'coordinator' | 'transport' | 'accommodation' | 'viewer' | 'department-head' | 'location-manager' | 'driver';
 
 export interface User {
   id: string;
@@ -10,6 +10,34 @@ export interface User {
   assignedCountries?: string[];
   department?: string;
   location?: string;
+  // Driver-specific fields
+  vehicleType?: string;
+  vehicleModel?: string;
+  vehicleRegistration?: string;
+  vehicleCapacity?: number;
+  isHeadDriver?: boolean;
+  isAvailable?: boolean;
+}
+
+export type DriverTaskType = 'airport_pickup' | 'airport_dropoff' | 'mulaqat_transport' | 'other';
+export type DriverTaskStatus = 'suggested' | 'pending' | 'in_progress' | 'completed';
+
+export interface DriverTask {
+  id: string;
+  driver_id: string;
+  task_type: DriverTaskType;
+  status: DriverTaskStatus;
+  scheduled_date: string;   // YYYY-MM-DD
+  scheduled_time?: string;  // HH:MM
+  guest_name?: string;
+  delegation_name?: string;
+  pickup_location?: string;
+  dropoff_location?: string;
+  flight_number?: string;
+  passenger_count?: number;
+  notes?: string;
+  started_at?: string;
+  completed_at?: string;
 }
 
 export type FamilyMemberStatus =

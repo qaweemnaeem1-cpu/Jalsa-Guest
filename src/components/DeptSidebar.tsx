@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Inbox, CheckCircle, Users, MapPin, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Inbox, CheckCircle, Users, MapPin, MessageSquare, Car } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { useAuditTrail2 } from '@/hooks/useAuditTrail2';
@@ -38,6 +38,7 @@ export function DeptSidebar() {
     { icon: CheckCircle,     label: 'Placed Guests',   href: '/dept/placed',    badge: placedCount,   badgeColor: 'bg-green-500' },
     { icon: Users,           label: 'Sub Users',          href: '/dept/sub-users', badge: 0 },
     { icon: MapPin,          label: 'Locations',          href: '/dept/locations', badge: 0 },
+    { icon: Car,             label: 'Drivers',            href: '/dept/drivers',   badge: 0 },
     { icon: MessageSquare,   label: 'Messages & Updates', href: '/dept/messages',  badge: unreadMessages, badgeColor: 'bg-red-500' },
   ];
 

@@ -42,6 +42,16 @@ import LocationMessagesPage from '@/pages/LocationMessagesPage';
 import AdminRoomsPage from '@/pages/AdminRoomsPage';
 import DeskMulaqatPage from '@/pages/DeskMulaqatPage';
 import AdminMulaqatPage from '@/pages/AdminMulaqatPage';
+import DriverDashboardPage from '@/pages/DriverDashboardPage';
+import DriverTasksPage from '@/pages/DriverTasksPage';
+import DriverCompletedPage from '@/pages/DriverCompletedPage';
+import DriverVehiclePage from '@/pages/DriverVehiclePage';
+import DriverAllDriversPage from '@/pages/DriverAllDriversPage';
+import DriverAllTasksPage from '@/pages/DriverAllTasksPage';
+import DriverVehiclesPage from '@/pages/DriverVehiclesPage';
+import LocationDriversPage from '@/pages/LocationDriversPage';
+import DeptDriversPage from '@/pages/DeptDriversPage';
+import AdminDriversPage from '@/pages/AdminDriversPage';
 
 function ProtectedRoute({ children, requiredRoles }: { children: React.ReactNode; requiredRoles?: string[] }) {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -75,6 +85,7 @@ function DashboardOrRedirect() {
   const { user } = useAuth();
   if (user?.role === 'department-head') return <Navigate to="/dept/dashboard" replace />;
   if (user?.role === 'location-manager') return <Navigate to="/location/dashboard" replace />;
+  if (user?.role === 'driver') return <Navigate to="/driver/dashboard" replace />;
   return <DashboardPage />;
 }
 
@@ -165,6 +176,16 @@ function AppRoutes() {
       <Route path="/location/rooms" element={<ProtectedRoute requiredRoles={['location-manager', 'super-admin']}><LocationRoomsPage /></ProtectedRoute>} />
       <Route path="/location/accommodated" element={<ProtectedRoute requiredRoles={['location-manager', 'super-admin']}><LocationAccommodatedPage /></ProtectedRoute>} />
       <Route path="/location/messages" element={<ProtectedRoute requiredRoles={['location-manager', 'super-admin']}><LocationMessagesPage /></ProtectedRoute>} />
+      <Route path="/location/drivers" element={<ProtectedRoute requiredRoles={['location-manager', 'super-admin']}><LocationDriversPage /></ProtectedRoute>} />
+      <Route path="/dept/drivers"     element={<ProtectedRoute requiredRoles={['department-head', 'super-admin']}><DeptDriversPage /></ProtectedRoute>} />
+      <Route path="/admin/drivers"    element={<ProtectedRoute requiredRoles={['super-admin']}><AdminDriversPage /></ProtectedRoute>} />
+      <Route path="/driver/dashboard"   element={<ProtectedRoute requiredRoles={['driver']}><DriverDashboardPage /></ProtectedRoute>} />
+      <Route path="/driver/tasks"       element={<ProtectedRoute requiredRoles={['driver']}><DriverTasksPage /></ProtectedRoute>} />
+      <Route path="/driver/completed"   element={<ProtectedRoute requiredRoles={['driver']}><DriverCompletedPage /></ProtectedRoute>} />
+      <Route path="/driver/vehicle"     element={<ProtectedRoute requiredRoles={['driver']}><DriverVehiclePage /></ProtectedRoute>} />
+      <Route path="/driver/all-drivers" element={<ProtectedRoute requiredRoles={['driver']}><DriverAllDriversPage /></ProtectedRoute>} />
+      <Route path="/driver/all-tasks"   element={<ProtectedRoute requiredRoles={['driver']}><DriverAllTasksPage /></ProtectedRoute>} />
+      <Route path="/driver/vehicles"    element={<ProtectedRoute requiredRoles={['driver']}><DriverVehiclesPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

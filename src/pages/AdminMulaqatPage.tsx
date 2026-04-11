@@ -31,6 +31,7 @@ import { ROLE_LABELS, formatDesignation } from '@/lib/constants';
 import { ProfileDialog } from '@/components/ProfileDialog';
 import { LanguageSelect } from '@/components/LanguageSelect';
 import { SUPER_ADMIN_NAV } from '@/lib/navItems';
+import { autoGenerateMulaqatTask } from '@/lib/driverTaskUtils';
 import type { Guest } from '@/types';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -1216,6 +1217,19 @@ export default function AdminMulaqatPage() {
     if (error) { toast.error('Failed to assign delegation'); return; }
     const del = delegations.find(d => d.id === delegationId);
     toast.success(`${del?.country ?? 'Delegation'} assigned`);
+    // Auto-generate mulaqat transport suggestion
+    if (del) {
+      const slot = slots.find(s => s.id === slotId);
+      const slotDay = slot?.day_id ? days.find(d => d.id === slot.day_id) : null;
+      autoGenerateMulaqatTask({
+        delegationId: del.id,
+        country: del.country,
+        memberCount: del.delegation_members?.length ?? 1,
+        slotDate: slotDay?.date ?? slot?.date ?? null,
+        locationName: user?.location ?? '',
+        departmentName: user?.department,
+      });
+    }
     setAssigningSlotId(null); setAssignDelegationValue(''); fetchAll();
   };
 

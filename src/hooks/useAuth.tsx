@@ -72,6 +72,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             : undefined,
         department: raw.department ?? undefined,
         location: raw.location ?? undefined,
+        // Driver fields
+        vehicleType: raw.vehicle_type ?? raw.vehicleType ?? undefined,
+        vehicleModel: raw.vehicle_model ?? raw.vehicleModel ?? undefined,
+        vehicleRegistration: raw.vehicle_registration ?? raw.vehicleRegistration ?? undefined,
+        vehicleCapacity: raw.vehicle_capacity ?? raw.vehicleCapacity ?? undefined,
+        isHeadDriver: raw.is_head_driver ?? raw.isHeadDriver ?? undefined,
+        isAvailable: raw.is_available ?? raw.isAvailable ?? undefined,
       };
 
       console.log('[auth] Logged in user:', JSON.stringify(normalizedUser));
