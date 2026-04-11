@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle, Eye, Search, MoveRight, ArrowRightLeft } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CheckCircle, Eye, Search, MoveRight, ArrowRightLeft, Car, ClipboardList, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -45,10 +45,11 @@ interface AccommodatedRow {
   arrivalFlightNumber?: string;
   departureTime?: string;
   departureFlightNumber?: string;
+  departureAirport?: string;
+  departureTerminal?: string;
 }
 
 function buildFamilyMemberList(g: Guest, allGuests?: Guest[]): FamilyMemberInfo[] {
-  // New model: use family_group_id to find all members
   if (g.familyGroupId && allGuests) {
     return allGuests
       .filter(x => x.familyGroupId === g.familyGroupId)
@@ -60,7 +61,6 @@ function buildFamilyMemberList(g: Guest, allGuests?: Guest[]): FamilyMemberInfo[
         placedLocation: x.placedLocation,
       }));
   }
-  // Old model
   return [
     { name: g.fullName, relationship: 'Head', status: g.status, assignedDepartment: g.assignedDepartment, placedLocation: g.placedLocation },
     ...(g.familyMembers ?? []).map(m => ({
@@ -70,11 +70,24 @@ function buildFamilyMemberList(g: Guest, allGuests?: Guest[]): FamilyMemberInfo[
   ];
 }
 
+// ── Checklist items ───────────────────────────────────────────────────────────
+
+const CHECKLIST_ITEMS = [
+  'Room keys returned',
+  'Room inspected',
+  'Driver assigned for airport dropoff',
+  'Guest checked out in system',
+];
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 interface MovePending {
   rowKey: string; roomId: string; bedNumber: number;
   guestId: string; guestName: string; familyMemberId?: string;
+}
+
+interface DriverAtLoc {
+  id: string; name: string; vehicle_type?: string; vehicle_model?: string; is_available?: boolean;
 }
 
 export default function LocationAccommodatedPage() {
@@ -103,19 +116,36 @@ export default function LocationAccommodatedPage() {
   const [checkInOut, setCheckInOut] = useState<Record<string, { checkedInAt?: string; checkedOutAt?: string }>>({});
   const [checkOutPending, setCheckOutPending] = useState<{ guestId: string; name: string; roomName: string } | null>(null);
 
+  // Driver assign state
+  const [dropoffTaskMap, setDropoffTaskMap] = useState<Record<string, { driverName: string }>>({});
+  const [pickupTaskMap, setPickupTaskMap]   = useState<Record<string, { driverName: string }>>({});
+  const [driversAtLoc, setDriversAtLoc]     = useState<DriverAtLoc[]>([]);
+  const [assignDriverGuest, setAssignDriverGuest] = useState<AccommodatedRow | null>(null);
+  const [assignDriverId, setAssignDriverId]       = useState('');
+  const [assignPickupTime, setAssignPickupTime]   = useState('');
+  const [assignSaving, setAssignSaving]           = useState(false);
+
+  // Departure checklist state
+  const [checklistGuest, setChecklistGuest]   = useState<AccommodatedRow | null>(null);
+  const [checklistState, setChecklistState]   = useState<Record<string, boolean[]>>({});
+
   const loc = user?.location ?? '';
+
+  const todayStr    = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const tomorrowStr = useMemo(() => {
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  }, []);
 
   const locRooms  = useMemo(() => rooms.filter(r => r.locationId === loc && r.isActive), [rooms, loc]);
   const locBlocks = useMemo(() => blocks.filter(b => b.locationId === loc), [blocks, loc]);
 
-  // Index guests by id for fast lookup
   const guestById = useMemo(() => {
     const map = new Map<string, Guest>();
     for (const g of guests) map.set(g.id, g);
     return map;
   }, [guests]);
 
-  // Build accommodated rows from bed assignments
   const allRows = useMemo((): AccommodatedRow[] => {
     const rows: AccommodatedRow[] = [];
     for (const room of locRooms) {
@@ -147,6 +177,8 @@ export default function LocationAccommodatedPage() {
           arrivalFlightNumber: g?.arrivalFlightNumber,
           departureTime: g?.departureTime,
           departureFlightNumber: g?.departureFlightNumber,
+          departureAirport: g?.departureAirport,
+          departureTerminal: g?.departureTerminal,
         });
       }
     }
@@ -168,7 +200,6 @@ export default function LocationAccommodatedPage() {
 
   const viewGuest = useMemo(() => guests.find(g => g.id === viewGuestId) ?? null, [guests, viewGuestId]);
 
-  // Available rooms for move (with space, excluding current)
   const moveableRooms = useMemo(() => {
     if (!movePending) return [];
     return locRooms.filter(r => {
@@ -177,17 +208,172 @@ export default function LocationAccommodatedPage() {
     });
   }, [movePending, locRooms, getOccupancy]);
 
-  const handleConfirmMove = () => {
-    if (!movePending || !moveToRoomId) return;
-    const { roomId, bedNumber, guestId, guestName, familyMemberId } = movePending;
-    const targetRoom = rooms.find(r => r.id === moveToRoomId);
-    const nextBed = (bedAssignments[moveToRoomId] ?? []).find(b => !b.guestName)?.bedNumber;
-    if (!nextBed || !targetRoom) { toast.error('No available beds in target room'); return; }
-    removeGuestFromRoom(roomId, bedNumber);
-    assignGuestToRoom(moveToRoomId, nextBed, guestId, guestName, familyMemberId);
-    toast.success(`${guestName} moved to ${targetRoom.name} · Bed ${nextBed}`);
-    setMovePending(null); setMoveToRoomId('');
-  };
+  // ── Fetch driver tasks for guests ─────────────────────────────────────────────
+
+  const guestIdsKey = useMemo(
+    () => [...new Set(allRows.map(r => r.guestId))].sort().join(','),
+    [allRows],
+  );
+
+  const fetchDriverTasks = useCallback(async () => {
+    if (!loc || !guestIdsKey) return;
+    const guestIds = guestIdsKey.split(',').filter(Boolean);
+    if (guestIds.length === 0) return;
+
+    const [dropoffRes, pickupRes, driversRes] = await Promise.all([
+      supabase
+        .from('driver_tasks')
+        .select('guest_id,driver_name,task_type')
+        .in('guest_id', guestIds)
+        .eq('task_type', 'airport_dropoff')
+        .neq('status', 'cancelled'),
+      supabase
+        .from('driver_tasks')
+        .select('guest_id,driver_name,status')
+        .in('guest_id', guestIds)
+        .eq('task_type', 'airport_pickup')
+        .eq('status', 'completed'),
+      supabase
+        .from('users')
+        .select('id,name,vehicle_type,vehicle_model,is_available')
+        .eq('role', 'driver')
+        .eq('location', loc),
+    ]);
+
+    const dropoffMap: Record<string, { driverName: string }> = {};
+    for (const t of dropoffRes.data ?? []) {
+      if (t.guest_id) dropoffMap[t.guest_id] = { driverName: t.driver_name ?? '—' };
+    }
+    setDropoffTaskMap(dropoffMap);
+
+    const pickupMap: Record<string, { driverName: string }> = {};
+    for (const t of pickupRes.data ?? []) {
+      if (t.guest_id) pickupMap[t.guest_id] = { driverName: t.driver_name ?? '—' };
+    }
+    setPickupTaskMap(pickupMap);
+
+    setDriversAtLoc((driversRes.data ?? []) as DriverAtLoc[]);
+  }, [loc, guestIdsKey]);
+
+  useEffect(() => { fetchDriverTasks(); }, [fetchDriverTasks]);
+
+  // Auto-set pickup time when assign dialog opens
+  useEffect(() => {
+    if (!assignDriverGuest) { setAssignDriverId(''); return; }
+    if (assignDriverGuest.departureTime) {
+      const dep = new Date(assignDriverGuest.departureTime);
+      dep.setHours(dep.getHours() - 1);
+      setAssignPickupTime(dep.toTimeString().substring(0, 5));
+    }
+  }, [assignDriverGuest]);
+
+  async function handleAssignDriver() {
+    if (!assignDriverGuest || !assignDriverId || !user) return;
+    setAssignSaving(true);
+    const driver = driversAtLoc.find(d => d.id === assignDriverId);
+    const depTime = assignDriverGuest.departureTime;
+    const depDate = depTime ? depTime.split('T')[0] : todayStr;
+    const dropoffLoc = [
+      assignDriverGuest.departureAirport,
+      assignDriverGuest.departureTerminal ? `Terminal ${assignDriverGuest.departureTerminal}` : null,
+    ].filter(Boolean).join(' ');
+
+    const { error } = await supabase.from('driver_tasks').insert({
+      driver_id: assignDriverId,
+      driver_name: driver?.name,
+      task_type: 'airport_dropoff',
+      guest_id: assignDriverGuest.guestId,
+      guest_name: assignDriverGuest.name,
+      pickup_location: loc,
+      dropoff_location: dropoffLoc || 'Airport',
+      scheduled_date: depDate,
+      scheduled_time: assignPickupTime || null,
+      flight_number: assignDriverGuest.departureFlightNumber ?? null,
+      location: loc,
+      status: 'pending',
+      is_suggestion: false,
+    });
+
+    setAssignSaving(false);
+    if (error) { toast.error('Failed to assign driver'); return; }
+    toast.success(`${driver?.name} assigned to drop off ${assignDriverGuest.name}`);
+    setDropoffTaskMap(prev => ({ ...prev, [assignDriverGuest.guestId]: { driverName: driver?.name ?? '—' } }));
+    setAssignDriverGuest(null);
+  }
+
+  // ── Departure status helpers ──────────────────────────────────────────────────
+
+  function getDepartureStatus(row: AccommodatedRow): 'today' | 'tomorrow' | 'none' {
+    if (!row.departureTime) return 'none';
+    const depDate = row.departureTime.split('T')[0];
+    if (depDate === todayStr)    return 'today';
+    if (depDate === tomorrowStr) return 'tomorrow';
+    return 'none';
+  }
+
+  function loadChecklist(guestId: string, hasDriver: boolean, isCheckedOut: boolean): boolean[] {
+    try {
+      const saved = JSON.parse(localStorage.getItem(`checklist_${guestId}`) ?? 'null');
+      const base: boolean[] = Array.isArray(saved) && saved.length === 4 ? [...saved] : [false, false, false, false];
+      base[2] = base[2] || hasDriver;
+      base[3] = base[3] || isCheckedOut;
+      return base;
+    } catch {
+      return [false, false, hasDriver, isCheckedOut];
+    }
+  }
+
+  function openChecklist(row: AccommodatedRow) {
+    const hasDriver  = !!dropoffTaskMap[row.guestId];
+    const isCheckedOut = !!checkInOut[row.guestId]?.checkedOutAt;
+    const items = loadChecklist(row.guestId, hasDriver, isCheckedOut);
+    setChecklistState(prev => ({ ...prev, [row.guestId]: items }));
+    setChecklistGuest(row);
+  }
+
+  async function handleChecklistToggle(idx: number) {
+    if (!checklistGuest) return;
+    const guestId = checklistGuest.guestId;
+    const current = checklistState[guestId] ?? [false, false, false, false];
+    const next = [...current];
+    next[idx] = !next[idx];
+    localStorage.setItem(`checklist_${guestId}`, JSON.stringify(next));
+    setChecklistState(prev => ({ ...prev, [guestId]: next }));
+
+    // Auto-mark room for cleaning when roomInspected(1) AND checkedOut(3) both checked
+    if (next[1] && next[3] && checklistGuest.roomId) {
+      const { error } = await supabase
+        .from('rooms')
+        .update({ status: 'cleaning' })
+        .eq('id', checklistGuest.roomId);
+      if (!error) toast.success(`Room ${checklistGuest.roomName} marked for cleaning`);
+    }
+  }
+
+  function getChecklistCompletion(guestId: string): number {
+    const items = checklistState[guestId] ?? null;
+    if (!items) return -1; // unknown — haven't opened yet
+    return items.filter(Boolean).length;
+  }
+
+  function ChecklistIcon({ row }: { row: AccommodatedRow }) {
+    const depStatus = getDepartureStatus(row);
+    if (depStatus === 'none') return null;
+    const hasDriver   = !!dropoffTaskMap[row.guestId];
+    const isCheckedOut = !!checkInOut[row.guestId]?.checkedOutAt;
+    const saved = (() => {
+      try { return JSON.parse(localStorage.getItem(`checklist_${row.guestId}`) ?? 'null'); } catch { return null; }
+    })();
+    const items: boolean[] = Array.isArray(saved) && saved.length === 4 ? [...saved] : [false, false, false, false];
+    items[2] = items[2] || hasDriver;
+    items[3] = items[3] || isCheckedOut;
+    const done = items.filter(Boolean).length;
+    const all  = CHECKLIST_ITEMS.length;
+    if (done === all) return <span title="All complete">🟢</span>;
+    return depStatus === 'today'
+      ? <span title="Departing today — checklist incomplete">🔴</span>
+      : <span title="Departing tomorrow — checklist incomplete">🟡</span>;
+  }
 
   // ── Check-in / Check-out ─────────────────────────────────────────────────────
 
@@ -234,6 +420,20 @@ export default function LocationAccommodatedPage() {
     setCheckOutPending(null);
   }
 
+  // ── Move guest ───────────────────────────────────────────────────────────────
+
+  const handleConfirmMove = () => {
+    if (!movePending || !moveToRoomId) return;
+    const { roomId, bedNumber, guestId, guestName, familyMemberId } = movePending;
+    const targetRoom = rooms.find(r => r.id === moveToRoomId);
+    const nextBed = (bedAssignments[moveToRoomId] ?? []).find(b => !b.guestName)?.bedNumber;
+    if (!nextBed || !targetRoom) { toast.error('No available beds in target room'); return; }
+    removeGuestFromRoom(roomId, bedNumber);
+    assignGuestToRoom(moveToRoomId, nextBed, guestId, guestName, familyMemberId);
+    toast.success(`${guestName} moved to ${targetRoom.name} · Bed ${nextBed}`);
+    setMovePending(null); setMoveToRoomId('');
+  };
+
   // ── Swap Rooms ───────────────────────────────────────────────────────────────
 
   const selectedGuestRows = useMemo(
@@ -249,7 +449,6 @@ export default function LocationAccommodatedPage() {
     const [a, b] = selectedGuestRows;
     setSwapSaving(true);
     try {
-      // Fetch both bed_assignment IDs
       const [resA, resB] = await Promise.all([
         supabase.from('bed_assignments').select('id').eq('guest_id', a.guestId).maybeSingle(),
         supabase.from('bed_assignments').select('id').eq('guest_id', b.guestId).maybeSingle(),
@@ -259,20 +458,15 @@ export default function LocationAccommodatedPage() {
       if (!idA || !idB) { toast.error('Could not find bed assignments'); return; }
 
       const now = new Date().toISOString();
-
-      // Delete both assignments
       await Promise.all([
         supabase.from('bed_assignments').delete().eq('id', idA),
         supabase.from('bed_assignments').delete().eq('id', idB),
       ]);
-
-      // Re-insert swapped
       await Promise.all([
         supabase.from('bed_assignments').insert({ room_id: b.roomId, bed_number: b.bedNumber, guest_id: a.guestId, guest_name: a.name, assigned_at: now }),
         supabase.from('bed_assignments').insert({ room_id: a.roomId, bed_number: a.bedNumber, guest_id: b.guestId, guest_name: b.name, assigned_at: now }),
       ]);
 
-      // Audit
       const gA = guests.find(g => g.id === a.guestId);
       const gB = guests.find(g => g.id === b.guestId);
       if (gA) addEntry2({ guestId: a.guestId, guestName: a.name, guestReference: gA.referenceNumber, locationId: loc, locationName: loc, departmentId: gA.assignedDepartment ?? '', departmentName: gA.assignedDepartment ?? '', type: 'room_change', action: `Swapped rooms: ${a.roomName} ↔ ${b.roomName}`, oldValue: a.roomName, newValue: b.roomName, createdBy: { id: user.id, name: user.name, role: 'location-manager' }, createdAt: now });
@@ -294,6 +488,14 @@ export default function LocationAccommodatedPage() {
   }
 
   if (!user) return null;
+
+  // Active checklist items (for the open dialog)
+  const activeChecklist: boolean[] = checklistGuest
+    ? (checklistState[checklistGuest.guestId] ?? [false, false, false, false])
+    : [false, false, false, false];
+  const checklistDone = activeChecklist.filter(Boolean).length;
+  const checklistPct  = Math.round((checklistDone / CHECKLIST_ITEMS.length) * 100);
+  const allComplete   = checklistDone === CHECKLIST_ITEMS.length;
 
   return (
     <div className="min-h-screen bg-[#F5F0E8]">
@@ -392,15 +594,21 @@ export default function LocationAccommodatedPage() {
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Bed</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Arrival</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Departure</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Driver</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Checklist</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Check-in</th>
                       <th className="text-right px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E8E3DB]">
                     {filteredRows.map(row => {
-                      const ciData = checkInOut[row.guestId];
+                      const ciData     = checkInOut[row.guestId];
                       const checkedIn  = ciData?.checkedInAt;
                       const checkedOut = ciData?.checkedOutAt;
+                      const dropoff    = dropoffTaskMap[row.guestId];
+                      const pickup     = pickupTaskMap[row.guestId];
+                      const depStatus  = getDepartureStatus(row);
+
                       return (
                         <tr key={row.rowKey} className={`hover:bg-[#F9F8F6] ${selectedRows.has(row.rowKey) ? 'bg-[#F0F7F4]' : ''}`}>
                           {/* Checkbox */}
@@ -431,7 +639,6 @@ export default function LocationAccommodatedPage() {
                               )}
                             </div>
                           </td>
-                          {/* Family */}
                           <td className="px-4 py-3">
                             {row.isFamily && row.familyGroupId ? (
                               <FamilyLinkDialog familyGroupId={row.familyGroupId} familyName={row.familyLastName} />
@@ -455,6 +662,9 @@ export default function LocationAccommodatedPage() {
                                 {row.arrivalFlightNumber && (
                                   <div className="text-xs text-gray-400">{row.arrivalFlightNumber}</div>
                                 )}
+                                {pickup && (
+                                  <div className="text-xs text-green-600 mt-0.5">✅ Picked up by {pickup.driverName}</div>
+                                )}
                               </div>
                             ) : <span className="text-gray-300 text-xs">—</span>}
                           </td>
@@ -471,6 +681,44 @@ export default function LocationAccommodatedPage() {
                                 )}
                               </div>
                             ) : <span className="text-gray-300 text-xs">—</span>}
+                          </td>
+                          {/* Driver column */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {dropoff ? (
+                              <span className="flex items-center gap-1 text-xs text-green-700">
+                                <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                                {dropoff.driverName}
+                              </span>
+                            ) : row.departureTime ? (
+                              <div className="flex flex-col gap-1">
+                                <span className="flex items-center gap-1 text-xs text-amber-600">
+                                  <AlertCircle className="w-3 h-3" /> No driver
+                                </span>
+                                <button
+                                  onClick={() => setAssignDriverGuest(row)}
+                                  className="text-amber-600 hover:bg-amber-50 rounded-md px-2 py-1 text-xs border border-amber-200 transition-colors"
+                                >
+                                  Assign Driver
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-gray-300 text-xs">—</span>
+                            )}
+                          </td>
+                          {/* Checklist column */}
+                          <td className="px-4 py-3">
+                            {depStatus !== 'none' ? (
+                              <button
+                                onClick={() => openChecklist(row)}
+                                className="flex items-center gap-1.5 text-xs hover:bg-gray-50 rounded-md px-2 py-1 transition-colors border border-gray-200"
+                                title="Departure checklist"
+                              >
+                                <ChecklistIcon row={row} />
+                                <ClipboardList className="w-3 h-3 text-gray-400" />
+                              </button>
+                            ) : (
+                              <span className="text-gray-300 text-xs">—</span>
+                            )}
                           </td>
                           {/* Check-in */}
                           <td className="px-4 py-3 whitespace-nowrap">
@@ -605,6 +853,164 @@ export default function LocationAccommodatedPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Quick Assign Driver dialog ─────────────────────────────────────────── */}
+      <Dialog open={!!assignDriverGuest} onOpenChange={o => { if (!o) setAssignDriverGuest(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#1A1A1A]">
+              <Car className="w-4 h-4 text-[#2D5A45]" /> Assign Driver for Dropoff
+            </DialogTitle>
+          </DialogHeader>
+          {assignDriverGuest && (
+            <div className="space-y-4 py-1">
+              <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
+                <div><span className="text-gray-500">Guest:</span> <span className="font-medium text-[#1A1A1A]">{assignDriverGuest.name}</span></div>
+                {assignDriverGuest.departureTime && (
+                  <div>
+                    <span className="text-gray-500">Departure:</span>{' '}
+                    <span className="text-[#1A1A1A]">
+                      {new Date(assignDriverGuest.departureTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })},{' '}
+                      {new Date(assignDriverGuest.departureTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                )}
+                {assignDriverGuest.departureFlightNumber && (
+                  <div>
+                    <span className="text-gray-500">Flight:</span>{' '}
+                    <span className="font-mono text-[#1A1A1A]">{assignDriverGuest.departureFlightNumber}</span>
+                    {assignDriverGuest.departureAirport && <span className="text-gray-500"> · {assignDriverGuest.departureAirport}</span>}
+                    {assignDriverGuest.departureTerminal && <span className="text-gray-500"> T{assignDriverGuest.departureTerminal}</span>}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-[#4A4A4A]">Pickup Time</label>
+                <input
+                  type="time"
+                  value={assignPickupTime}
+                  onChange={e => setAssignPickupTime(e.target.value)}
+                  className="w-full border border-[#D4CFC7] rounded-lg px-3 py-2 text-sm text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45]"
+                />
+                <p className="text-xs text-gray-400">Auto-set to 1 hour before departure</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-[#4A4A4A]">Driver</label>
+                <select
+                  value={assignDriverId}
+                  onChange={e => setAssignDriverId(e.target.value)}
+                  className="w-full border border-[#D4CFC7] rounded-lg px-3 py-2 text-sm text-[#1A1A1A] bg-white focus:outline-none focus:border-[#2D5A45]"
+                >
+                  <option value="">Select driver…</option>
+                  {driversAtLoc.map(d => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}{d.vehicle_type ? ` — ${d.vehicle_type}${d.vehicle_model ? ` ${d.vehicle_model}` : ''}` : ''}
+                      {!d.is_available ? ' (off duty)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignDriverGuest(null)} className="border-[#D4CFC7] text-[#4A4A4A] h-9 text-sm">Cancel</Button>
+            <Button
+              disabled={!assignDriverId || assignSaving}
+              onClick={handleAssignDriver}
+              className="bg-[#2D5A45] hover:bg-[#234839] text-white h-9 text-sm"
+            >
+              {assignSaving ? 'Assigning…' : 'Assign Driver'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Departure Checklist dialog ─────────────────────────────────────────── */}
+      <Dialog open={!!checklistGuest} onOpenChange={o => { if (!o) setChecklistGuest(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#1A1A1A]">
+              <ClipboardList className="w-4 h-4 text-[#2D5A45]" />
+              Departure Checklist — {checklistGuest?.name}
+            </DialogTitle>
+          </DialogHeader>
+          {checklistGuest && (
+            <div className="space-y-4 py-1">
+              {/* Guest departure info */}
+              {checklistGuest.departureTime && (
+                <div className="text-sm text-[#4A4A4A]">
+                  Departing:{' '}
+                  <span className="font-medium text-[#1A1A1A]">
+                    {new Date(checklistGuest.departureTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })},{' '}
+                    {new Date(checklistGuest.departureTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  {checklistGuest.departureFlightNumber && (
+                    <span className="font-mono ml-2">· {checklistGuest.departureFlightNumber}</span>
+                  )}
+                  {checklistGuest.departureAirport && (
+                    <span className="ml-1 text-gray-400">
+                      · {checklistGuest.departureAirport}{checklistGuest.departureTerminal ? ` T${checklistGuest.departureTerminal}` : ''}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Checklist items */}
+              <div className="space-y-2">
+                {CHECKLIST_ITEMS.map((item, idx) => {
+                  const isAutoChecked = (idx === 2 && !!dropoffTaskMap[checklistGuest.guestId]) ||
+                                        (idx === 3 && !!checkInOut[checklistGuest.guestId]?.checkedOutAt);
+                  const checked = activeChecklist[idx] ?? false;
+                  return (
+                    <label
+                      key={idx}
+                      className={`flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-colors ${
+                        checked ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-100 hover:bg-gray-100'
+                      } ${isAutoChecked ? 'opacity-80' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => !isAutoChecked && handleChecklistToggle(idx)}
+                        disabled={isAutoChecked}
+                        className="w-4 h-4 rounded border-gray-300 accent-[#2D5A45]"
+                      />
+                      <span className={`text-sm ${checked ? 'text-green-800 line-through' : 'text-[#1A1A1A]'}`}>
+                        {item}
+                      </span>
+                      {isAutoChecked && (
+                        <span className="ml-auto text-xs text-green-600 font-medium">auto</span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+
+              {/* Progress bar */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5 text-xs text-[#4A4A4A]">
+                  <span>Progress: {checklistDone} of {CHECKLIST_ITEMS.length} completed</span>
+                  <span>{checklistPct}%</span>
+                </div>
+                <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${allComplete ? 'bg-green-500' : 'bg-[#2D5A45]'}`}
+                    style={{ width: `${checklistPct}%` }}
+                  />
+                </div>
+                {allComplete && (
+                  <p className="text-xs text-green-600 font-medium mt-1.5">✅ Ready for departure</p>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setChecklistGuest(null)} className="bg-[#2D5A45] hover:bg-[#234839] text-white h-9 text-sm">Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

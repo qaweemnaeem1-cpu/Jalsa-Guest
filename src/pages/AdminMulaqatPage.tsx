@@ -244,6 +244,26 @@ const DAFTARI_COL_LABELS: Record<string, string> = {
   departure: 'Departure', department: 'Department', location: 'Location',
 };
 
+// ── Daftar Print (Tab 2) ──────────────────────────────────────────────────────
+
+const DEFAULT_DAFTAR_PRINT_COLUMNS: PdfColumn[] = [
+  { key: 'country',      label: 'Country',        checked: true  },
+  { key: 'designation',  label: 'Designation',    checked: true  },
+  { key: 'gender',       label: 'Gender',         checked: false },
+  { key: 'religion',     label: 'Religion',       checked: true  },
+  { key: 'contact',      label: 'Contact Number', checked: false },
+  { key: 'introduction', label: 'Introduction',   checked: true  },
+  { key: 'departure',    label: 'Departure',      checked: false },
+  { key: 'department',   label: 'Department',     checked: false },
+  { key: 'location',     label: 'Location',       checked: false },
+];
+
+const DAFTAR_PRINT_COL_LABELS: Record<string, string> = {
+  country: 'Country', designation: 'Designation', gender: 'Gender',
+  religion: 'Religion', contact: 'Contact', introduction: 'Introduction',
+  departure: 'Departure', department: 'Department', location: 'Location',
+};
+
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -520,6 +540,12 @@ export default function AdminMulaqatPage() {
   const [pdfTargetDates, setPdfTargetDates] = useState<string[]>([]);
   const [pdfTargetType, setPdfTargetType] = useState<'all' | 'delegation' | 'daftari'>('all');
 
+  // Daftar Print tab state
+  const [pdfPrintTab, setPdfPrintTab] = useState<'ps' | 'daftar'>('ps');
+  const [pdfDaftarPrintColumns, setPdfDaftarPrintColumns] = useState<PdfColumn[]>(() => loadPdfColumns('mulaqat_pdf_daftar_print_columns', DEFAULT_DAFTAR_PRINT_COLUMNS));
+  const [pdfDaftarIncludePhoto, setPdfDaftarIncludePhoto] = useState(true);
+  const [pdfDaftarIncludeAhmadiCount, setPdfDaftarIncludeAhmadiCount] = useState(true);
+
   // ── Fetch ────────────────────────────────────────────────────────────────────
 
   const fetchAll = useCallback(async () => {
@@ -668,6 +694,9 @@ export default function AdminMulaqatPage() {
   useEffect(() => {
     localStorage.setItem('mulaqat_pdf_options', JSON.stringify({ includeSummary: pdfIncludeSummary, includePageNumbers: pdfIncludePageNumbers, includeEmpty: pdfIncludeEmpty, landscape: pdfLandscape }));
   }, [pdfIncludeSummary, pdfIncludePageNumbers, pdfIncludeEmpty, pdfLandscape]);
+  useEffect(() => {
+    localStorage.setItem('mulaqat_pdf_daftar_print_columns', JSON.stringify(pdfDaftarPrintColumns.map(c => ({ key: c.key, checked: c.checked }))));
+  }, [pdfDaftarPrintColumns]);
 
   // ── Derived (delegation) ──────────────────────────────────────────────────────
 
@@ -1140,6 +1169,405 @@ export default function AdminMulaqatPage() {
 
     doc.save(`Mulaqat-Schedule-${dates[0] ?? 'export'}.pdf`);
     toast.success('PDF exported successfully');
+  };
+
+  // ── Daftar Print PDF generation ───────────────────────────────────────────────
+
+  const generateDaftarPDF = async (
+    dates: string[],
+    type: 'all' | 'delegation' | 'daftari',
+    daftarColumns: PdfColumn[],
+    options: PdfOptions,
+    includePhoto: boolean,
+    includeAhmadiCount: boolean,
+  ) => {
+    const pageW = 210, pageH = 297;
+    const center = pageW / 2;
+    const margin = 14;
+    const footerY = pageH - 8;
+    const DETAIL_COLS = 2;
+    const PHOTO_W = includePhoto ? 22 : 0;
+    const PHOTO_H = 25;
+    const CARD_PADDING = 3;
+    const NAME_FONT_SIZE = 9.5;
+    const DETAIL_FONT_SIZE = 7;
+    const DETAIL_LINE_H = 4.5;
+
+    const fmtPdfDate = (d: string) =>
+      new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const fmtPdfShort = (d: string) =>
+      new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    const fmtDepLocal = (d: string | null | undefined) => {
+      if (!d) return '—';
+      const dt = new Date(d);
+      if (isNaN(dt.getTime())) return '—';
+      const datePart = dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const h = dt.getHours(), m = dt.getMinutes();
+      return (h === 0 && m === 0) ? datePart : `${datePart}, ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    };
+
+    const allDelDays = [...overviewDelegationDays, ...archivedDelegationDays];
+    const allDafDays = [
+      ...overviewDaftariDays.map(d => ({ date: d.date, daftari_slots: d.daftari_slots })),
+      ...archivedDaftariDays.map(d => ({ date: d.date, daftari_slots: d.daftari_slots })),
+    ];
+
+    // Collect guest IDs for photo prefetch
+    const guestIdsNeeded = new Set<string>();
+    for (const date of dates) {
+      if (type !== 'daftari') {
+        const delDay = allDelDays.find(d => d.date === date);
+        if (delDay) {
+          for (const slot of delDay.mulaqat_slots ?? []) {
+            for (const del of slot.delegations ?? []) {
+              for (const member of del.delegation_members ?? []) {
+                guestIdsNeeded.add(member.guest_id);
+              }
+            }
+          }
+        }
+      }
+      if (type !== 'delegation') {
+        const dafDay = allDafDays.find(d => d.date === date);
+        if (dafDay) {
+          for (const slot of dafDay.daftari_slots ?? []) {
+            if (slot.guest_id) guestIdsNeeded.add(slot.guest_id);
+          }
+        }
+      }
+    }
+
+    // Fetch photos as base64
+    const photoMap: Record<string, string | null> = {};
+    if (includePhoto) {
+      const fetchBase64 = async (url: string): Promise<string | null> => {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) return null;
+          const blob = await res.blob();
+          return await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        } catch { return null; }
+      };
+      await Promise.all(
+        Array.from(guestIdsNeeded).map(async gid => {
+          const g = guests.find(x => x.id === gid);
+          const url = (g as unknown as Record<string, string | undefined>)?.photo_url;
+          photoMap[gid] = url ? await fetchBase64(url) : null;
+        })
+      );
+    }
+
+    const doc = new jsPDF('portrait');
+    const dateRange = dates.length > 1
+      ? `${fmtPdfShort(dates[0])} — ${fmtPdfShort(dates[dates.length - 1])}`
+      : dates.length === 1 ? fmtPdfShort(dates[0]) : '';
+
+    const drawPageHeader = (sectionTitle: string, sectionColor: [number, number, number]): number => {
+      doc.setFontSize(16); doc.setFont('helvetica', 'bold');
+      doc.text('JALSA SALANA UK 2026', center, 12, { align: 'center' });
+      doc.setFontSize(11); doc.text('MULAQAT DAFTAR', center, 19, { align: 'center' });
+      doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+      doc.text(dateRange, center, 25, { align: 'center' });
+      doc.setLineWidth(0.3); doc.line(margin, 28, pageW - margin, 28);
+      doc.setFontSize(13); doc.setFont('helvetica', 'bold');
+      doc.setTextColor(sectionColor[0], sectionColor[1], sectionColor[2]);
+      doc.text(sectionTitle, margin, 36);
+      doc.setTextColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+      doc.line(margin, 38, margin + doc.getTextWidth(sectionTitle) + 2, 38);
+      return 44;
+    };
+
+    const checkedDetailKeys = daftarColumns.filter(c => c.checked).map(c => c.key);
+
+    const calcCardH = (detailCount: number): number => {
+      const detailRows = Math.ceil(detailCount / DETAIL_COLS);
+      const textH = 8 + (detailRows * DETAIL_LINE_H);
+      return Math.max(PHOTO_H + CARD_PADDING * 2, textH + CARD_PADDING * 2 + 2);
+    };
+
+    const drawPlaceholder = (x: number, y: number, name: string) => {
+      doc.setFillColor(160, 160, 160);
+      doc.rect(x, y, PHOTO_W, PHOTO_H, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+      const initials = name.split(' ').map(w => w[0]).filter(Boolean).join('').substring(0, 2).toUpperCase();
+      doc.text(initials, x + PHOTO_W / 2, y + PHOTO_H / 2 + 2, { align: 'center' });
+      doc.setTextColor(0, 0, 0);
+    };
+
+    const drawGuestCard = (
+      g: Guest | null,
+      guestName: string,
+      guestId: string,
+      yPos: number,
+    ): number => {
+      const ga = g as unknown as Record<string, string | undefined>;
+      const detailData: Record<string, string> = {
+        country:      g?.country ?? '—',
+        designation:  g ? String(formatDesignation(g.designation ?? '')) : '—',
+        gender:       ga?.gender ?? '—',
+        religion:     ga?.religion ?? '—',
+        contact:      ga?.phone ?? '—',
+        introduction: ga?.introduction ?? '—',
+        departure:    fmtDepLocal(g?.departureTime),
+        department:   g?.assignedDepartment ?? '—',
+        location:     g?.placedLocation ?? '—',
+      };
+      const details = checkedDetailKeys.map(k => ({ label: DAFTAR_PRINT_COL_LABELS[k] ?? k, value: detailData[k] ?? '—' }));
+      const cardH = calcCardH(details.length);
+
+      // Card background + border
+      doc.setFillColor(250, 250, 250);
+      doc.setDrawColor(220, 220, 220);
+      doc.rect(margin, yPos, pageW - 2 * margin, cardH, 'FD');
+
+      // Photo column
+      if (includePhoto) {
+        const photoX = margin + CARD_PADDING;
+        const photoY = yPos + CARD_PADDING;
+        const photoBase64 = photoMap[guestId];
+        if (photoBase64) {
+          try { doc.addImage(photoBase64, 'JPEG', photoX, photoY, PHOTO_W, PHOTO_H); }
+          catch { drawPlaceholder(photoX, photoY, guestName); }
+        } else {
+          drawPlaceholder(photoX, photoY, guestName);
+        }
+        doc.setDrawColor(190, 190, 190);
+        doc.rect(photoX, photoY, PHOTO_W, PHOTO_H);
+        doc.setDrawColor(220, 220, 220);
+      }
+
+      const textX = margin + CARD_PADDING + PHOTO_W + (includePhoto ? 3 : 0);
+      const textW = pageW - margin - CARD_PADDING - PHOTO_W - (includePhoto ? 3 : 0) - margin - CARD_PADDING;
+
+      // Name + A/NA badge
+      doc.setFontSize(NAME_FONT_SIZE); doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 30, 30);
+      doc.text(guestName, textX, yPos + CARD_PADDING + 5.5);
+      if (g) {
+        const ahmadi = isAhmadi(g.religion);
+        const nameW = doc.getTextWidth(guestName);
+        doc.setFontSize(6); doc.setFont('helvetica', 'bold');
+        doc.setTextColor(ahmadi ? 45 : 160, ahmadi ? 90 : 50, ahmadi ? 69 : 50);
+        doc.text(ahmadi ? 'A' : 'NA', textX + nameW + 3, yPos + CARD_PADDING + 5.5);
+        doc.setTextColor(0, 0, 0);
+      }
+
+      // Details grid (2 per row)
+      doc.setFontSize(DETAIL_FONT_SIZE);
+      let curRow = 0;
+      for (let i = 0; i < details.length; i++) {
+        const { label, value } = details[i];
+        const col = i % DETAIL_COLS;
+        const detailX = textX + col * (textW / DETAIL_COLS);
+        const detailY = yPos + CARD_PADDING + 11 + curRow * DETAIL_LINE_H;
+        doc.setFont('helvetica', 'bold'); doc.setTextColor(80, 80, 80);
+        doc.text(`${label}: `, detailX, detailY);
+        const labelW = doc.getTextWidth(`${label}: `);
+        doc.setFont('helvetica', 'normal'); doc.setTextColor(20, 20, 20);
+        const maxW = (textW / DETAIL_COLS) - labelW - 2;
+        const vw = doc.getTextWidth(value);
+        const truncated = vw > maxW
+          ? value.substring(0, Math.max(1, Math.floor(value.length * maxW / vw))) + '…'
+          : value;
+        doc.text(truncated, detailX + labelW, detailY);
+        if (col === DETAIL_COLS - 1) curRow++;
+      }
+      doc.setTextColor(0, 0, 0);
+
+      return cardH + 3;
+    };
+
+    let totalA = 0, totalNA = 0, totalGuests = 0;
+    let firstSection = true;
+
+    // ── DELEGATION SECTION ────────────────────────────────────────────────────
+    if (type !== 'daftari') {
+      firstSection = false;
+      let yPos = drawPageHeader('DELEGATION MULAQAT — DAFTAR', [45, 90, 69]);
+      let wroteAny = false;
+
+      for (const date of dates) {
+        const delDay = allDelDays.find(d => d.date === date);
+        if (!delDay) continue;
+
+        let wroteDay = false;
+        for (const slot of delDay.mulaqat_slots ?? []) {
+          const delegs = slot.delegations ?? [];
+          if (delegs.length === 0 && !options.includeEmpty) continue;
+
+          let slotA = 0, slotNA = 0;
+          for (const del of delegs) {
+            for (const member of del.delegation_members ?? []) {
+              const mg = guests.find(x => x.id === member.guest_id);
+              if (mg) { isAhmadi(mg.religion) ? slotA++ : slotNA++; }
+            }
+          }
+
+          if (!wroteDay) {
+            if (yPos > pageH - 50) { doc.addPage(); yPos = drawPageHeader('DELEGATION MULAQAT — DAFTAR (cont.)', [45, 90, 69]); }
+            doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 30, 30);
+            doc.text(fmtPdfDate(date), margin, yPos);
+            yPos += 7; wroteDay = true; wroteAny = true;
+          }
+
+          if (yPos > pageH - 50) { doc.addPage(); yPos = drawPageHeader('DELEGATION MULAQAT — DAFTAR (cont.)', [45, 90, 69]); }
+          // Slot header bar
+          doc.setFillColor(45, 90, 69);
+          doc.rect(margin, yPos - 4.5, pageW - 2 * margin, 7, 'F');
+          doc.setFontSize(8.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+          let slotHeaderText = slot.name;
+          if (includeAhmadiCount && (slotA + slotNA > 0)) slotHeaderText += `    A: ${slotA}  |  NA: ${slotNA}  |  Total: ${slotA + slotNA}`;
+          doc.text(slotHeaderText, margin + 2, yPos);
+          doc.setTextColor(0, 0, 0);
+          yPos += 5;
+
+          if (delegs.length === 0) {
+            doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(120, 120, 120);
+            doc.text('(Available — no delegation assigned)', margin + 2, yPos);
+            doc.setTextColor(0, 0, 0); yPos += 6; continue;
+          }
+
+          for (const del of delegs) {
+            let delA = 0, delNA = 0;
+            for (const member of del.delegation_members ?? []) {
+              const mg = guests.find(x => x.id === member.guest_id);
+              if (mg) { isAhmadi(mg.religion) ? delA++ : delNA++; }
+            }
+            if (yPos > pageH - 30) { doc.addPage(); yPos = drawPageHeader('DELEGATION MULAQAT — DAFTAR (cont.)', [45, 90, 69]); }
+            doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
+            let countryLine = `  ${del.country}`;
+            if (includeAhmadiCount) countryLine += `   (A: ${delA}  |  NA: ${delNA})`;
+            doc.text(countryLine, margin, yPos);
+            doc.setTextColor(0, 0, 0); yPos += 5;
+
+            for (const member of del.delegation_members ?? []) {
+              const g = guests.find(x => x.id === member.guest_id) ?? null;
+              if (g) { isAhmadi(g.religion) ? totalA++ : totalNA++; }
+              totalGuests++;
+              const cardH = calcCardH(checkedDetailKeys.length) + 3;
+              if (yPos + cardH > pageH - 15) { doc.addPage(); yPos = drawPageHeader('DELEGATION MULAQAT — DAFTAR (cont.)', [45, 90, 69]); }
+              const nameDisplay = member.is_head ? `\u2605 ${member.guest_name}` : member.guest_name;
+              yPos += drawGuestCard(g, nameDisplay, member.guest_id, yPos);
+            }
+            yPos += 2;
+          }
+          yPos += 4;
+        }
+        if (wroteDay) yPos += 2;
+      }
+
+      if (!wroteAny) {
+        doc.setFont('helvetica', 'italic'); doc.setFontSize(9);
+        doc.text('No delegation data for selected dates.', margin, 50);
+      }
+    }
+
+    // ── DAFTARI SECTION ───────────────────────────────────────────────────────
+    if (type !== 'delegation') {
+      if (!firstSection) doc.addPage();
+      firstSection = false;
+      let yPos = drawPageHeader('DAFTARI MULAQAT — DAFTAR', [59, 130, 246]);
+      let wroteAny = false;
+
+      for (const date of dates) {
+        const dafDay = allDafDays.find(d => d.date === date);
+        if (!dafDay) continue;
+
+        let wroteDay = false;
+        for (const slot of dafDay.daftari_slots ?? []) {
+          if (!slot.guest_id && !options.includeEmpty) continue;
+          const g = slot.guest_id ? guests.find(x => x.id === slot.guest_id) ?? null : null;
+          if (slot.guest_id) {
+            if (g) { isAhmadi(g.religion) ? totalA++ : totalNA++; }
+            totalGuests++;
+          }
+          if (!wroteDay) {
+            if (yPos > pageH - 50) { doc.addPage(); yPos = drawPageHeader('DAFTARI MULAQAT — DAFTAR (cont.)', [59, 130, 246]); }
+            doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 30, 30);
+            doc.text(fmtPdfDate(date), margin, yPos);
+            yPos += 7; wroteDay = true; wroteAny = true;
+          }
+          if (yPos > pageH - 50) { doc.addPage(); yPos = drawPageHeader('DAFTARI MULAQAT — DAFTAR (cont.)', [59, 130, 246]); }
+          // Slot header bar
+          doc.setFillColor(59, 130, 246);
+          doc.rect(margin, yPos - 4.5, pageW - 2 * margin, 7, 'F');
+          doc.setFontSize(8.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+          let slotHeader = slot.name;
+          if (includeAhmadiCount && slot.guest_id && g) {
+            slotHeader += `    ${isAhmadi(g.religion) ? 'A' : 'NA'}`;
+          }
+          doc.text(slotHeader, margin + 2, yPos);
+          doc.setTextColor(0, 0, 0); yPos += 5;
+
+          if (!slot.guest_id) {
+            doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(120, 120, 120);
+            doc.text('(Available)', margin + 2, yPos);
+            doc.setTextColor(0, 0, 0); yPos += 5; continue;
+          }
+          const cardH = calcCardH(checkedDetailKeys.length) + 3;
+          if (yPos + cardH > pageH - 15) { doc.addPage(); yPos = drawPageHeader('DAFTARI MULAQAT — DAFTAR (cont.)', [59, 130, 246]); }
+          yPos += drawGuestCard(g, slot.guest_name ?? '—', slot.guest_id, yPos) + 2;
+        }
+        if (wroteDay) yPos += 4;
+      }
+
+      if (!wroteAny) {
+        doc.setFont('helvetica', 'italic'); doc.setFontSize(9);
+        doc.text('No daftari data for selected dates.', margin, 50);
+      }
+    }
+
+    // ── SUMMARY PAGE ──────────────────────────────────────────────────────────
+    if (options.includeSummary) {
+      doc.addPage();
+      doc.setFontSize(18); doc.setFont('helvetica', 'bold');
+      doc.text('SUMMARY', center, 20, { align: 'center' });
+      doc.setLineWidth(0.4); doc.line(margin, 23, pageW - margin, 23);
+
+      const summaryBody: string[][] = [
+        ['Total Ahmadi', String(totalA)],
+        ['Total Non-Ahmadi', String(totalNA)],
+        ['Grand Total', String(totalGuests)],
+      ];
+      const lastTable2 = () => (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+      autoTable(doc, {
+        startY: 28,
+        head: [['Category', 'Count']],
+        body: summaryBody,
+        styles: { fontSize: 11, cellPadding: 5 },
+        headStyles: { fillColor: [45, 90, 69] as [number, number, number], textColor: 255 },
+        theme: 'grid',
+        margin: { left: center - 50, right: center - 50 },
+      });
+
+      const sy = lastTable2() + 12;
+      doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+      doc.text(`Generated: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}, ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`, center, sy, { align: 'center' });
+      if (user) doc.text(`By: ${user.name} (${ROLE_LABELS[user.role]})`, center, sy + 5, { align: 'center' });
+    }
+
+    // ── PAGE FOOTERS ──────────────────────────────────────────────────────────
+    if (options.includePageNumbers) {
+      const pageCount = doc.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(120, 120, 120);
+        doc.text(`Page ${i} of ${pageCount}`, center, footerY, { align: 'center' });
+        doc.text(`Generated: ${new Date().toLocaleString()}`, margin, footerY);
+        doc.text('Jalsa Guest — Daftar Print', pageW - margin, footerY, { align: 'right' });
+        doc.setTextColor(0, 0, 0);
+      }
+    }
+
+    doc.save(`Mulaqat-Daftar-${dates[0] ?? 'export'}.pdf`);
+    toast.success('Daftar PDF exported successfully');
   };
 
   // ── Delegation handlers ───────────────────────────────────────────────────────
@@ -4196,7 +4624,19 @@ export default function AdminMulaqatPage() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            {/* Section A: Date range info */}
+            {/* Print type tabs */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPdfPrintTab('ps')}
+                className={`px-4 py-1.5 text-sm font-medium transition-colors rounded-full ${pdfPrintTab === 'ps' ? 'bg-[#2D5A45] text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-[#2D5A45] hover:text-[#2D5A45]'}`}
+              >PS Print</button>
+              <button
+                onClick={() => setPdfPrintTab('daftar')}
+                className={`px-4 py-1.5 text-sm font-medium transition-colors rounded-full ${pdfPrintTab === 'daftar' ? 'bg-[#2D5A45] text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-[#2D5A45] hover:text-[#2D5A45]'}`}
+              >Daftar Print</button>
+            </div>
+
+            {/* Section A: Date range info (shared) */}
             <div className="bg-[#F5F0E8] rounded-lg p-3 text-sm">
               <p className="font-medium text-[#1A1A1A] mb-0.5">Exporting:</p>
               {pdfTargetType === 'all' ? (
@@ -4225,114 +4665,161 @@ export default function AdminMulaqatPage() {
               )}
             </div>
 
-            {/* Section B: Columns — two column layout */}
-            <div className="grid grid-cols-2 gap-4">
-              {/* Delegation columns */}
-              {pdfTargetType !== 'daftari' && (
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-xs font-semibold text-green-800 uppercase tracking-wide">Delegation Columns</p>
-                    <div className="flex gap-2 text-xs">
-                      <button onClick={() => setPdfDelegColumns(c => c.map(col => ({ ...col, checked: true })))} className="text-[#2D5A45] hover:underline">All</button>
-                      <button onClick={() => setPdfDelegColumns(c => c.map(col => ({ ...col, checked: false })))} className="text-[#4A4A4A] hover:underline">None</button>
+            {/* ── PS Print tab ── */}
+            {pdfPrintTab === 'ps' && (
+              <>
+                {/* Section B: Columns */}
+                <div className="grid grid-cols-2 gap-4">
+                  {pdfTargetType !== 'daftari' && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <p className="text-xs font-semibold text-green-800 uppercase tracking-wide">Delegation Columns</p>
+                        <div className="flex gap-2 text-xs">
+                          <button onClick={() => setPdfDelegColumns(c => c.map(col => ({ ...col, checked: true })))} className="text-[#2D5A45] hover:underline">All</button>
+                          <button onClick={() => setPdfDelegColumns(c => c.map(col => ({ ...col, checked: false })))} className="text-[#4A4A4A] hover:underline">None</button>
+                        </div>
+                      </div>
+                      <div className="space-y-1 border border-green-100 rounded-lg p-2.5 bg-green-50/30">
+                        {pdfDelegColumns.map((col, i) => (
+                          <label key={col.key} className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={col.checked} onChange={e => setPdfDelegColumns(prev => prev.map((c, ci) => ci === i ? { ...c, checked: e.target.checked } : c))} className="w-3.5 h-3.5 rounded border-gray-300 accent-[#2D5A45]" />
+                            <span className="text-xs text-gray-700">{col.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <button onClick={() => setPdfDelegColumns(DEFAULT_DELEG_COLUMNS.map(c => ({ ...c })))} className="mt-1 text-xs text-[#4A4A4A] hover:underline">Reset to defaults</button>
+                    </div>
+                  )}
+                  {pdfTargetType !== 'delegation' && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide">Daftari Columns</p>
+                        <div className="flex gap-2 text-xs">
+                          <button onClick={() => setPdfDaftariColumns(c => c.map(col => ({ ...col, checked: true })))} className="text-blue-600 hover:underline">All</button>
+                          <button onClick={() => setPdfDaftariColumns(c => c.map(col => ({ ...col, checked: false })))} className="text-[#4A4A4A] hover:underline">None</button>
+                        </div>
+                      </div>
+                      <div className="space-y-1 border border-blue-100 rounded-lg p-2.5 bg-blue-50/30">
+                        {pdfDaftariColumns.map((col, i) => (
+                          <label key={col.key} className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={col.checked} onChange={e => setPdfDaftariColumns(prev => prev.map((c, ci) => ci === i ? { ...c, checked: e.target.checked } : c))} className="w-3.5 h-3.5 rounded border-gray-300 accent-blue-600" />
+                            <span className="text-xs text-gray-700">{col.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <button onClick={() => setPdfDaftariColumns(DEFAULT_DAFTARI_COLUMNS.map(c => ({ ...c })))} className="mt-1 text-xs text-[#4A4A4A] hover:underline">Reset to defaults</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Section C: Options */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wide mb-1.5">Include</p>
+                    <div className="space-y-1">
+                      {[
+                        { label: 'Summary page', val: pdfIncludeSummary, set: setPdfIncludeSummary as (v: boolean) => void },
+                        { label: 'Page numbers', val: pdfIncludePageNumbers, set: setPdfIncludePageNumbers as (v: boolean) => void },
+                        { label: 'Available (empty) slots', val: pdfIncludeEmpty, set: setPdfIncludeEmpty as (v: boolean) => void },
+                      ].map(opt => (
+                        <label key={opt.label} className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={opt.val} onChange={e => opt.set(e.target.checked)} className="w-3.5 h-3.5 rounded border-gray-300 accent-[#2D5A45]" />
+                          <span className="text-xs text-gray-700">{opt.label}</span>
+                        </label>
+                      ))}
                     </div>
                   </div>
-                  <div className="space-y-1 border border-green-100 rounded-lg p-2.5 bg-green-50/30">
-                    {pdfDelegColumns.map((col, i) => (
+                  <div>
+                    <p className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wide mb-1.5">Orientation</p>
+                    <div className="space-y-1">
+                      {[{ label: 'Landscape', val: true }, { label: 'Portrait', val: false }].map(opt => (
+                        <label key={opt.label} className="flex items-center gap-2 cursor-pointer">
+                          <input type="radio" checked={pdfLandscape === opt.val} onChange={() => setPdfLandscape(opt.val)} className="w-3.5 h-3.5 accent-[#2D5A45]" />
+                          <span className="text-xs text-gray-700">{opt.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── Daftar Print tab ── */}
+            {pdfPrintTab === 'daftar' && (
+              <>
+                <div className="rounded-lg border border-amber-100 bg-amber-50/40 p-3 text-xs text-amber-800">
+                  Expanded per-guest layout with full details — ideal for a printed daftar register.
+                  Always portrait. Summary page shows Ahmadi / Non-Ahmadi totals.
+                </div>
+
+                {/* Guest detail fields */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wide">Guest Detail Fields</p>
+                    <div className="flex gap-2 text-xs">
+                      <button onClick={() => setPdfDaftarPrintColumns(c => c.map(col => ({ ...col, checked: true })))} className="text-[#2D5A45] hover:underline">All</button>
+                      <button onClick={() => setPdfDaftarPrintColumns(c => c.map(col => ({ ...col, checked: false })))} className="text-[#4A4A4A] hover:underline">None</button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 border border-[#E8E3DB] rounded-lg p-2.5 bg-white">
+                    {pdfDaftarPrintColumns.map((col, i) => (
                       <label key={col.key} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={col.checked}
-                          onChange={e => setPdfDelegColumns(prev => prev.map((c, ci) => ci === i ? { ...c, checked: e.target.checked } : c))}
-                          className="w-3.5 h-3.5 rounded border-gray-300 accent-[#2D5A45]"
-                        />
+                        <input type="checkbox" checked={col.checked} onChange={e => setPdfDaftarPrintColumns(prev => prev.map((c, ci) => ci === i ? { ...c, checked: e.target.checked } : c))} className="w-3.5 h-3.5 rounded border-gray-300 accent-[#2D5A45]" />
                         <span className="text-xs text-gray-700">{col.label}</span>
                       </label>
                     ))}
                   </div>
-                  <button
-                    onClick={() => setPdfDelegColumns(DEFAULT_DELEG_COLUMNS.map(c => ({ ...c })))}
-                    className="mt-1 text-xs text-[#4A4A4A] hover:underline"
-                  >Reset to defaults</button>
+                  <button onClick={() => setPdfDaftarPrintColumns(DEFAULT_DAFTAR_PRINT_COLUMNS.map(c => ({ ...c })))} className="mt-1 text-xs text-[#4A4A4A] hover:underline">Reset to defaults</button>
                 </div>
-              )}
 
-              {/* Daftari columns */}
-              {pdfTargetType !== 'delegation' && (
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide">Daftari Columns</p>
-                    <div className="flex gap-2 text-xs">
-                      <button onClick={() => setPdfDaftariColumns(c => c.map(col => ({ ...col, checked: true })))} className="text-blue-600 hover:underline">All</button>
-                      <button onClick={() => setPdfDaftariColumns(c => c.map(col => ({ ...col, checked: false })))} className="text-[#4A4A4A] hover:underline">None</button>
+                {/* Extra options */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wide mb-1.5">Include</p>
+                    <div className="space-y-1">
+                      {[
+                        { label: 'Guest photo', val: pdfDaftarIncludePhoto, set: setPdfDaftarIncludePhoto },
+                        { label: 'Ahmadi / Non-Ahmadi count per slot', val: pdfDaftarIncludeAhmadiCount, set: setPdfDaftarIncludeAhmadiCount },
+                        { label: 'Summary page', val: pdfIncludeSummary, set: setPdfIncludeSummary as (v: boolean) => void },
+                        { label: 'Page numbers', val: pdfIncludePageNumbers, set: setPdfIncludePageNumbers as (v: boolean) => void },
+                        { label: 'Available (empty) slots', val: pdfIncludeEmpty, set: setPdfIncludeEmpty as (v: boolean) => void },
+                      ].map(opt => (
+                        <label key={opt.label} className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={opt.val} onChange={e => opt.set(e.target.checked)} className="w-3.5 h-3.5 rounded border-gray-300 accent-[#2D5A45]" />
+                          <span className="text-xs text-gray-700">{opt.label}</span>
+                        </label>
+                      ))}
                     </div>
                   </div>
-                  <div className="space-y-1 border border-blue-100 rounded-lg p-2.5 bg-blue-50/30">
-                    {pdfDaftariColumns.map((col, i) => (
-                      <label key={col.key} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={col.checked}
-                          onChange={e => setPdfDaftariColumns(prev => prev.map((c, ci) => ci === i ? { ...c, checked: e.target.checked } : c))}
-                          className="w-3.5 h-3.5 rounded border-gray-300 accent-blue-600"
-                        />
-                        <span className="text-xs text-gray-700">{col.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => setPdfDaftariColumns(DEFAULT_DAFTARI_COLUMNS.map(c => ({ ...c })))}
-                    className="mt-1 text-xs text-[#4A4A4A] hover:underline"
-                  >Reset to defaults</button>
                 </div>
-              )}
-            </div>
-
-            {/* Section C: Options */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wide mb-1.5">Include</p>
-                <div className="space-y-1">
-                  {[
-                    { label: 'Summary page', val: pdfIncludeSummary, set: setPdfIncludeSummary as (v: boolean) => void },
-                    { label: 'Page numbers', val: pdfIncludePageNumbers, set: setPdfIncludePageNumbers as (v: boolean) => void },
-                    { label: 'Available (empty) slots', val: pdfIncludeEmpty, set: setPdfIncludeEmpty as (v: boolean) => void },
-                  ].map(opt => (
-                    <label key={opt.label} className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={opt.val} onChange={e => opt.set(e.target.checked)} className="w-3.5 h-3.5 rounded border-gray-300 accent-[#2D5A45]" />
-                      <span className="text-xs text-gray-700">{opt.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wide mb-1.5">Orientation</p>
-                <div className="space-y-1">
-                  {[{ label: 'Landscape', val: true }, { label: 'Portrait', val: false }].map(opt => (
-                    <label key={opt.label} className="flex items-center gap-2 cursor-pointer">
-                      <input type="radio" checked={pdfLandscape === opt.val} onChange={() => setPdfLandscape(opt.val)} className="w-3.5 h-3.5 accent-[#2D5A45]" />
-                      <span className="text-xs text-gray-700">{opt.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
+              </>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPdfDialogOpen(false)} className="border-[#D4CFC7] text-[#4A4A4A]">Cancel</Button>
             <Button
               onClick={() => {
                 setPdfDialogOpen(false);
-                generatePDF(pdfTargetDates, pdfTargetType, pdfDelegColumns, pdfDaftariColumns, {
-                  includeSummary: pdfIncludeSummary,
-                  includePageNumbers: pdfIncludePageNumbers,
-                  includeEmpty: pdfIncludeEmpty,
-                  landscape: pdfLandscape,
-                });
+                if (pdfPrintTab === 'ps') {
+                  generatePDF(pdfTargetDates, pdfTargetType, pdfDelegColumns, pdfDaftariColumns, {
+                    includeSummary: pdfIncludeSummary,
+                    includePageNumbers: pdfIncludePageNumbers,
+                    includeEmpty: pdfIncludeEmpty,
+                    landscape: pdfLandscape,
+                  });
+                } else {
+                  generateDaftarPDF(pdfTargetDates, pdfTargetType, pdfDaftarPrintColumns, {
+                    includeSummary: pdfIncludeSummary,
+                    includePageNumbers: pdfIncludePageNumbers,
+                    includeEmpty: pdfIncludeEmpty,
+                    landscape: false,
+                  }, pdfDaftarIncludePhoto, pdfDaftarIncludeAhmadiCount);
+                }
               }}
               className="bg-[#2D5A45] hover:bg-[#234839] text-white flex items-center gap-2"
             >
-              <FileText className="w-4 h-4" />Generate PDF
+              <FileText className="w-4 h-4" />
+              {pdfPrintTab === 'ps' ? 'Generate PS Print PDF' : 'Generate Daftar PDF'}
             </Button>
           </DialogFooter>
         </DialogContent>

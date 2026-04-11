@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Inbox, CheckCircle, Users, MapPin, Clock, ArrowRight,
-  AlertTriangle, BedDouble, BarChart2, CalendarDays, Search,
+  AlertTriangle, BedDouble, BarChart2, CalendarDays, Search, Car,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -20,6 +20,16 @@ interface LocationOccupancy {
   occupiedBeds: number;
 }
 
+interface DriverLocSummary {
+  location: string;
+  total: number;
+  available: number;
+  busy: number;
+  offDuty: number;
+  tasksToday: number;
+  unassigned: number;
+}
+
 function occupancyBarColor(pct: number): string {
   if (pct >= 100) return 'bg-red-500';
   if (pct >= 81)  return 'bg-orange-500';
@@ -35,6 +45,8 @@ export default function DeptDashboardPage() {
 
   const [occupancyData, setOccupancyData]           = useState<LocationOccupancy[]>([]);
   const [roomsAvailableSoon, setRoomsAvailableSoon] = useState(0);
+  const [driverSummary, setDriverSummary]           = useState<DriverLocSummary[]>([]);
+  const [totalUnassignedTasks, setTotalUnassignedTasks] = useState(0);
 
   // ── Guest Search ──────────────────────────────────────────────────────────────
   const [searchText, setSearchText]           = useState('');
@@ -148,7 +160,58 @@ export default function DeptDashboardPage() {
     setRoomsAvailableSoon(soonRooms?.length ?? 0);
   }, [dept, locations, locationsList, deptList, todayStr, tomorrowStr]);
 
-  useEffect(() => { fetchOccupancy(); }, [fetchOccupancy]);
+  const fetchDriverSummary = useCallback(async () => {
+    if (!dept) return;
+    const today = new Date().toISOString().substring(0, 10);
+    const [driversRes, tasksRes] = await Promise.all([
+      supabase.from('users')
+        .select('id,location,is_available')
+        .eq('role', 'driver')
+        .eq('department', dept),
+      supabase.from('driver_tasks')
+        .select('driver_id,status,is_suggestion,location')
+        .eq('department', dept)
+        .eq('scheduled_date', today)
+        .neq('status', 'cancelled'),
+    ]);
+
+    const driverRows = driversRes.data ?? [];
+    const taskRows   = tasksRes.data ?? [];
+
+    const busyDriverIds = new Set(taskRows.filter(t => t.status === 'in_progress').map(t => t.driver_id));
+    const taskCountMap: Record<string, number> = {};
+    let unassignedTotal = 0;
+    const unassignedByLoc: Record<string, number> = {};
+
+    for (const t of taskRows) {
+      if (t.is_suggestion && t.status === 'suggested') {
+        unassignedTotal++;
+        const loc = t.location ?? '(No Location)';
+        unassignedByLoc[loc] = (unassignedByLoc[loc] ?? 0) + 1;
+      } else {
+        taskCountMap[t.driver_id] = (taskCountMap[t.driver_id] ?? 0) + 1;
+      }
+    }
+
+    const locMap: Record<string, DriverLocSummary> = {};
+    for (const d of driverRows) {
+      const loc = d.location ?? '(No Location)';
+      if (!locMap[loc]) locMap[loc] = { location: loc, total: 0, available: 0, busy: 0, offDuty: 0, tasksToday: 0, unassigned: 0 };
+      locMap[loc].total++;
+      if (busyDriverIds.has(d.id)) locMap[loc].busy++;
+      else if (d.is_available) locMap[loc].available++;
+      else locMap[loc].offDuty++;
+      locMap[loc].tasksToday += taskCountMap[d.id] ?? 0;
+    }
+    for (const [loc, cnt] of Object.entries(unassignedByLoc)) {
+      if (locMap[loc]) locMap[loc].unassigned = cnt;
+    }
+
+    setDriverSummary(Object.values(locMap));
+    setTotalUnassignedTasks(unassignedTotal);
+  }, [dept]);
+
+  useEffect(() => { fetchOccupancy(); fetchDriverSummary(); }, [fetchOccupancy, fetchDriverSummary]);
 
   const quickActions = [
     { label: 'View Incoming Guests', href: '/dept/incoming',  icon: Inbox },
@@ -443,6 +506,65 @@ export default function DeptDashboardPage() {
                     );
                   })}
                 </div>
+              </div>
+            )}
+
+            {/* ── 🚗 Driver Summary ────────────────────────────────────────────────── */}
+            {driverSummary.length > 0 && (
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Car className="w-4 h-4 text-[#2D5A45]" />
+                    <h2 className="text-sm font-semibold text-[#1A1A1A]">Drivers — {dept}</h2>
+                  </div>
+                  <button onClick={() => navigate('/dept/drivers')}
+                    className="text-xs text-[#2D5A45] hover:underline flex items-center gap-1">
+                    View All Drivers <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {driverSummary.map(loc => (
+                    <div key={loc.location} className="bg-white border border-gray-200 rounded-xl p-4 hover:border-[#2D5A45]/50 transition-colors">
+                      <p className="font-semibold text-[#1A1A1A] text-sm mb-1">{loc.location}</p>
+                      <p className="text-xs text-[#4A4A4A] mb-2">{loc.total} driver{loc.total !== 1 ? 's' : ''}</p>
+                      <div className="space-y-0.5 text-xs">
+                        {loc.available > 0 && (
+                          <div className="flex items-center gap-1.5 text-green-700">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block shrink-0" />
+                            {loc.available} available
+                          </div>
+                        )}
+                        {loc.busy > 0 && (
+                          <div className="flex items-center gap-1.5 text-blue-700">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block shrink-0" />
+                            {loc.busy} on task
+                          </div>
+                        )}
+                        {loc.offDuty > 0 && (
+                          <div className="flex items-center gap-1.5 text-amber-700">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block shrink-0" />
+                            {loc.offDuty} off duty
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-2 pt-2 border-t border-gray-100 text-xs text-[#4A4A4A]">
+                        <span>Today: <span className="font-medium text-[#1A1A1A]">{loc.tasksToday}</span> task{loc.tasksToday !== 1 ? 's' : ''}</span>
+                        {loc.unassigned > 0 && (
+                          <span className="ml-2 text-amber-600 font-medium">⚠️ {loc.unassigned} unassigned</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {totalUnassignedTasks > 0 && (
+                  <div className="mt-3 flex items-center justify-between text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    <span>⚠️ {totalUnassignedTasks} unassigned task{totalUnassignedTasks !== 1 ? 's' : ''} today</span>
+                    <button onClick={() => navigate('/dept/drivers')}
+                      className="text-xs text-[#2D5A45] hover:underline flex items-center gap-1 font-medium">
+                      View All Drivers <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

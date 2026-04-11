@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Inbox, CheckCircle, BedDouble, ArrowRight,
-  Search, MapPin, ArrowDown, ArrowUp,
+  Search, MapPin, ArrowDown, ArrowUp, Car, Bell, X,
 } from 'lucide-react';
+import { calculateETA, formatETA, isETAOverdue } from '@/lib/driverMatchUtils';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -71,6 +72,28 @@ function fmtDate(iso?: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+// ── Driver widget types ────────────────────────────────────────────────────────
+
+interface DriverStatusRow {
+  id: string;
+  name: string;
+  vehicle_type?: string;
+  vehicle_model?: string;
+  vehicle_registration?: string;
+  is_available?: boolean;
+  activeTask: { task_type: string; guest_name?: string; pickup_location?: string; dropoff_location?: string; started_at?: string } | null;
+  completedToday: number;
+  pendingToday: number;
+  totalToday: number;
+}
+
+interface RecentArrival {
+  id: string;
+  driver_name: string;
+  guest_name?: string;
+  completed_at: string;
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function LocationDashboardPage() {
@@ -134,6 +157,83 @@ export default function LocationDashboardPage() {
     return m;
   }, [locationRooms, bedAssignments]);
 
+  // ── Driver status widget data ─────────────────────────────────────────────────
+
+  const [driverStatusRows, setDriverStatusRows] = useState<DriverStatusRow[]>([]);
+  const [unassignedPickups, setUnassignedPickups] = useState(0);
+  const [recentArrivals, setRecentArrivals]     = useState<RecentArrival[]>([]);
+  const [bellOpen, setBellOpen]                  = useState(false);
+
+  const fetchDriverData = useCallback(async () => {
+    if (!loc) return;
+    const [driversRes, tasksRes] = await Promise.all([
+      supabase
+        .from('users')
+        .select('id,name,vehicle_type,vehicle_model,vehicle_registration,is_available')
+        .eq('role', 'driver')
+        .eq('location', loc)
+        .order('name'),
+      supabase
+        .from('driver_tasks')
+        .select('id,driver_id,task_type,guest_name,status,scheduled_time,pickup_location,dropoff_location,started_at')
+        .eq('location', loc)
+        .eq('scheduled_date', todayStr)
+        .neq('status', 'cancelled'),
+    ]);
+
+    const drivers = driversRes.data ?? [];
+    type TaskRow = { id: string; driver_id: string; task_type: string; guest_name?: string; status: string; scheduled_time?: string; pickup_location?: string; dropoff_location?: string; started_at?: string };
+    const tasks = (tasksRes.data ?? []) as TaskRow[];
+
+    // Count tasks with no assigned driver
+    const unassigned = tasks.filter(t => !t.driver_id && t.status === 'suggested').length;
+    setUnassignedPickups(unassigned);
+
+    // Group tasks by driver
+    const tasksByDriver: Record<string, TaskRow[]> = {};
+    for (const t of tasks) {
+      if (!t.driver_id) continue;
+      if (!tasksByDriver[t.driver_id]) tasksByDriver[t.driver_id] = [];
+      tasksByDriver[t.driver_id].push(t);
+    }
+
+    setDriverStatusRows(drivers.map(d => {
+      const dTasks = tasksByDriver[d.id] ?? [];
+      const activeTask = dTasks.find(t => t.status === 'in_progress') ?? null;
+      return {
+        ...d,
+        activeTask: activeTask
+          ? { task_type: activeTask.task_type, guest_name: activeTask.guest_name, pickup_location: activeTask.pickup_location, dropoff_location: activeTask.dropoff_location, started_at: activeTask.started_at }
+          : null,
+        completedToday: dTasks.filter(t => t.status === 'completed').length,
+        pendingToday:   dTasks.filter(t => t.status === 'pending' || t.status === 'in_progress').length,
+        totalToday:     dTasks.length,
+      };
+    }));
+
+    // Recent arrivals in last 2 hours
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const { data: arrivals } = await supabase
+      .from('driver_tasks')
+      .select('id,driver_name,guest_name,completed_at')
+      .eq('location', loc)
+      .eq('task_type', 'airport_pickup')
+      .eq('status', 'completed')
+      .gte('completed_at', twoHoursAgo)
+      .order('completed_at', { ascending: false });
+
+    setRecentArrivals(
+      (arrivals ?? []).map(a => ({
+        id: a.id,
+        driver_name: a.driver_name ?? 'Driver',
+        guest_name: a.guest_name,
+        completed_at: a.completed_at ?? new Date().toISOString(),
+      })),
+    );
+  }, [loc, todayStr]);
+
+  useEffect(() => { fetchDriverData(); }, [fetchDriverData]);
+
   // ── Real-time: toast when new guest placed at this location ───────────────────
 
   useEffect(() => {
@@ -159,6 +259,41 @@ export default function LocationDashboardPage() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [loc]);
+
+  // ── Real-time: driver arrival notifications ───────────────────────────────────
+
+  useEffect(() => {
+    if (!loc) return;
+    const channel = supabase
+      .channel('driver-task-completions')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'driver_tasks' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (payload: any) => {
+          if (
+            payload.new?.status === 'completed' &&
+            payload.old?.status === 'in_progress' &&
+            payload.new?.task_type === 'airport_pickup' &&
+            payload.new?.location === loc
+          ) {
+            const driverName = payload.new.driver_name ?? 'Driver';
+            const guestName  = payload.new.guest_name  ?? 'a guest';
+            toast.info(`${driverName} arriving with ${guestName} — prepare room`, { duration: 10000 });
+            const arrival: RecentArrival = {
+              id: payload.new.id,
+              driver_name: driverName,
+              guest_name: guestName,
+              completed_at: new Date().toISOString(),
+            };
+            setRecentArrivals(prev => [arrival, ...prev].slice(0, 20));
+            fetchDriverData();
+          }
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [loc, fetchDriverData]);
 
   // ── Guest search ──────────────────────────────────────────────────────────────
 
@@ -233,7 +368,47 @@ export default function LocationDashboardPage() {
                   <p className="text-xs text-[#4A4A4A] mt-0.5">{dept} — {user.name}</p>
                 </div>
               </div>
-              <LocationUserMenu />
+              <div className="flex items-center gap-2">
+                {/* Notification Bell */}
+                <div className="relative">
+                  <button
+                    onClick={() => setBellOpen(!bellOpen)}
+                    className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    <Bell className="w-5 h-5 text-[#4A4A4A]" />
+                    {recentArrivals.length > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-white text-[10px] flex items-center justify-center font-bold">
+                        {recentArrivals.length > 9 ? '9+' : recentArrivals.length}
+                      </span>
+                    )}
+                  </button>
+                  {bellOpen && (
+                    <div className="absolute right-0 top-11 w-72 bg-white rounded-xl border border-gray-200 shadow-xl z-50">
+                      <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
+                        <span className="text-sm font-semibold text-[#1A1A1A]">Recent Arrivals</span>
+                        <button onClick={() => setBellOpen(false)}>
+                          <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                        </button>
+                      </div>
+                      {recentArrivals.length === 0 ? (
+                        <p className="text-xs text-gray-400 px-4 py-4 text-center">No arrivals in the last 2 hours</p>
+                      ) : (
+                        <div className="divide-y divide-gray-100 max-h-56 overflow-y-auto">
+                          {recentArrivals.map(a => (
+                            <div key={a.id} className="px-4 py-2.5">
+                              <p className="text-xs font-medium text-[#1A1A1A]">
+                                {new Date(a.completed_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                {' '}— {a.driver_name} arrived with {a.guest_name ?? 'guest'}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <LocationUserMenu />
+              </div>
             </div>
           </header>
 
@@ -362,6 +537,74 @@ export default function LocationDashboardPage() {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* ── 🚗 Driver Status Widget ───────────────────────────────────── */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Car className="w-4 h-4 text-[#2D5A45]" />
+                  <h2 className="text-sm font-semibold text-[#1A1A1A]">Drivers — {loc}</h2>
+                </div>
+                <button
+                  onClick={() => navigate('/location/drivers')}
+                  className="text-xs text-[#2D5A45] hover:underline flex items-center gap-1 font-medium"
+                >
+                  Manage <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+
+              {driverStatusRows.length === 0 ? (
+                <p className="text-sm text-gray-400 py-2 text-center">No drivers at this location</p>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {driverStatusRows.map(d => {
+                    const isOnTask = !!d.activeTask;
+                    const isOff    = !d.is_available;
+                    const dotCls   = isOnTask ? 'bg-blue-500' : isOff ? 'bg-amber-400' : 'bg-green-500';
+                    const labelCls = isOnTask ? 'text-blue-600' : isOff ? 'text-amber-600' : 'text-green-600';
+                    const statusLabel = isOnTask ? 'On Trip' : isOff ? 'Off Duty' : 'Available';
+                    const eta = isOnTask && d.activeTask?.started_at
+                      ? calculateETA({ task_type: d.activeTask.task_type, pickup_location: d.activeTask.pickup_location, dropoff_location: d.activeTask.dropoff_location, started_at: d.activeTask.started_at })
+                      : null;
+                    const etaStr  = eta ? formatETA(eta) : null;
+                    const etaOver = eta ? isETAOverdue(eta) : false;
+                    const routeStr = isOnTask && d.activeTask
+                      ? `→ ${[d.activeTask.pickup_location, d.activeTask.dropoff_location].filter(Boolean).join(' → ')}${d.activeTask.guest_name ? ` (${d.activeTask.guest_name})` : ''}`
+                      : '';
+                    const subText = isOnTask
+                      ? [routeStr, etaStr].filter(Boolean).join(' · ')
+                      : isOff
+                      ? 'Back on duty soon'
+                      : `Today: ${d.totalToday} tasks (${d.completedToday} completed, ${d.pendingToday} pending)`;
+
+                    return (
+                      <div key={d.id} className={`py-2.5 rounded ${isOnTask ? 'bg-blue-50/30 px-2' : 'px-1'}`}>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${dotCls}`} />
+                          <span className="text-sm font-medium text-[#1A1A1A]">{d.name}</span>
+                          {d.vehicle_type && (
+                            <span className="text-xs text-gray-400">
+                              {d.vehicle_type}{d.vehicle_model ? ` ${d.vehicle_model}` : ''}
+                            </span>
+                          )}
+                          {d.vehicle_registration && (
+                            <span className="text-xs font-mono text-gray-400">{d.vehicle_registration}</span>
+                          )}
+                          <span className={`ml-auto text-xs font-medium ${labelCls}`}>{statusLabel}</span>
+                        </div>
+                        <p className={`text-xs ml-5 mt-0.5 truncate ${etaStr && etaOver ? 'text-red-500' : etaStr ? 'text-blue-600' : 'text-gray-400'}`}>{subText}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {unassignedPickups > 0 && (
+                <div className="mt-3 flex items-center gap-2 text-amber-700 bg-amber-50 rounded-lg px-3 py-2 text-xs border border-amber-200">
+                  ⚠️ {unassignedPickups} pickup{unassignedPickups !== 1 ? 's' : ''} today {unassignedPickups !== 1 ? 'have' : 'has'} no driver assigned
+                </div>
+              )}
             </div>
 
             {/* ── Stats cards ───────────────────────────────────────────────── */}

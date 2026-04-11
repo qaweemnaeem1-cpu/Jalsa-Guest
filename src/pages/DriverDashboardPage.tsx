@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Car, ChevronDown, ChevronUp, Plane, Building2, Package,
-  CheckCircle2, Clock, AlertCircle, Loader2, Phone, CalendarDays,
+  CheckCircle2, Clock, AlertCircle, Loader2, Phone, CalendarDays, MapPin, ExternalLink,
 } from 'lucide-react';
+import { calculateETA, formatETA, isETAOverdue, getMapLink, looksLikeAirport } from '@/lib/driverMatchUtils';
 import { useAuth } from '@/hooks/useAuth';
 import { DriverSidebar } from '@/components/DriverSidebar';
 import { supabase } from '@/lib/supabase';
@@ -74,33 +75,77 @@ function TaskCard({ task, onUpdateStatus }: { task: DriverTask; onUpdateStatus: 
 
   const canStart    = task.status === 'pending' || task.status === 'suggested';
   const canComplete = task.status === 'in_progress';
+  const isActive    = task.status === 'in_progress';
 
   const [expanded, setExpanded]         = useState(false);
   const [guestContact, setGuestContact] = useState<GuestContact | null>(null);
+  const [, setTick]                     = useState(0); // for ETA re-render
 
+  // ETA ticker — refresh every minute when task is in progress
   useEffect(() => {
-    if (!expanded || !task.guest_id) return;
+    if (!isActive) return;
+    const iv = setInterval(() => setTick(t => t + 1), 60_000);
+    return () => clearInterval(iv);
+  }, [isActive]);
+
+  // Always pre-fetch guest contact so photo shows on active tasks
+  useEffect(() => {
+    if (!task.guest_id) return;
     supabase
       .from('guests')
       .select('full_name,country,designation,contact_number,email,photo_url')
       .eq('id', task.guest_id)
       .maybeSingle()
       .then(({ data }) => setGuestContact(data as GuestContact | null));
-  }, [expanded, task.guest_id]);
+  }, [task.guest_id]);
+
+  // ETA
+  const eta = isActive ? calculateETA(task as Parameters<typeof calculateETA>[0]) : null;
+  const etaText  = eta ? formatETA(eta) : null;
+  const etaOver  = eta ? isETAOverdue(eta) : false;
+
+  // Map link for airport locations
+  const airportLocStr = task.task_type === 'airport_pickup'
+    ? task.pickup_location
+    : task.task_type === 'airport_dropoff'
+    ? task.dropoff_location
+    : null;
+  const showMapLink = looksLikeAirport(airportLocStr);
+  const mapLink = showMapLink ? getMapLink(airportLocStr) : null;
 
   return (
-    <div className="bg-white rounded-xl border border-[#E8E3DB] hover:border-[#2D5A45]/30 transition-colors overflow-hidden">
+    <div className={`bg-white rounded-xl border transition-colors overflow-hidden ${isActive ? 'border-blue-300 shadow-sm' : 'border-[#E8E3DB] hover:border-[#2D5A45]/30'}`}>
       <div className="flex gap-3 p-4">
-        {/* Time column */}
-        <div className="w-14 shrink-0 text-right">
-          <span className="text-sm font-semibold text-[#1A1A1A]">{task.scheduled_time ?? '—'}</span>
-        </div>
+        {/* Guest photo (visible for all tasks with guest_id) */}
+        {task.guest_id && (
+          <div className="shrink-0">
+            {guestContact?.photo_url ? (
+              <img src={guestContact.photo_url} alt={label} className="w-16 h-16 rounded-xl object-cover" />
+            ) : (
+              <div className={`w-16 h-16 ${avatarColor(label)} rounded-xl flex items-center justify-center text-white text-lg font-bold`}>
+                {initials(label)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Time column (only when no photo) */}
+        {!task.guest_id && (
+          <div className="w-14 shrink-0 text-right">
+            <span className="text-sm font-semibold text-[#1A1A1A]">{task.scheduled_time ?? '—'}</span>
+          </div>
+        )}
 
         {/* Divider */}
         <div className="w-px bg-[#E8E3DB] shrink-0" />
 
         {/* Content */}
         <div className="flex-1 min-w-0">
+          {/* Time shown here when photo is shown */}
+          {task.guest_id && task.scheduled_time && (
+            <p className="text-xs text-[#4A4A4A] mb-1 font-medium">{task.scheduled_time}</p>
+          )}
+
           <div className="flex items-center gap-2 flex-wrap mb-1">
             {task.priority && task.priority !== 'normal' && (
               <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full ${priorityMeta.cls}`}>
@@ -115,28 +160,48 @@ function TaskCard({ task, onUpdateStatus }: { task: DriverTask; onUpdateStatus: 
             </span>
           </div>
 
-          {/* Guest name + avatar */}
-          <div className="flex items-center gap-2 mb-0.5">
-            {label !== '—' && (
-              <div className={`w-6 h-6 ${avatarColor(label)} rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0`}>
-                {initials(label)}
-              </div>
-            )}
-            <p className="font-semibold text-[#1A1A1A] text-sm truncate">{label}</p>
-          </div>
+          {/* Guest name */}
+          <p className="font-semibold text-[#1A1A1A] text-sm truncate mb-0.5">{label}</p>
 
+          {/* Route with map link */}
           {(task.pickup_location || task.dropoff_location) && (
-            <p className="text-xs text-[#4A4A4A] mt-0.5">
-              {task.pickup_location ?? '?'} → {task.dropoff_location ?? '?'}
-            </p>
+            <div className="text-xs text-[#4A4A4A] mt-0.5 flex items-center gap-1 flex-wrap">
+              <span>{task.pickup_location ?? '?'} → {task.dropoff_location ?? '?'}</span>
+              {mapLink && (
+                <a href={mapLink} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-0.5 text-[#2D5A45] hover:underline ml-1">
+                  <MapPin className="w-3 h-3" /><ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              )}
+            </div>
           )}
 
           <div className="flex items-center gap-3 mt-1 text-xs text-[#4A4A4A]">
-            {task.flight_number    && <span>Flight: {task.flight_number}</span>}
+            {task.flight_number && <span>✈ {task.flight_number}</span>}
             {task.passenger_count != null && (
-              <span>{task.passenger_count} passenger{task.passenger_count !== 1 ? 's' : ''}</span>
+              <span>{task.passenger_count} pax</span>
             )}
           </div>
+
+          {/* ETA badge */}
+          {etaText && (
+            <p className={`text-xs font-medium mt-1.5 ${etaOver ? 'text-red-600' : 'text-blue-600'}`}>
+              {etaText}
+            </p>
+          )}
+
+          {/* Contact info always visible when active */}
+          {isActive && guestContact && (
+            <div className="mt-1.5 space-y-0.5">
+              {guestContact.contact_number && (
+                <a href={`tel:${guestContact.contact_number}`}
+                  className="flex items-center gap-1 text-[#2D5A45] hover:underline text-xs">
+                  <Phone className="w-3 h-3" />{guestContact.contact_number}
+                  <span className="ml-1 px-1.5 py-0.5 border border-[#2D5A45] text-[#2D5A45] rounded text-[10px] font-medium">Call</span>
+                </a>
+              )}
+            </div>
+          )}
 
           {task.notes && <p className="text-xs text-[#4A4A4A] italic mt-1">{task.notes}</p>}
         </div>
@@ -155,25 +220,26 @@ function TaskCard({ task, onUpdateStatus }: { task: DriverTask; onUpdateStatus: 
               className="px-3 py-1 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >Complete</button>
           )}
-          <button
-            onClick={() => setExpanded(e => !e)}
-            className="px-3 py-1 text-xs font-medium border border-[#E8E3DB] text-[#4A4A4A] rounded-lg hover:bg-[#F5F0E8] transition-colors flex items-center gap-1"
-          >
-            {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            Details
-          </button>
+          {!isActive && (
+            <button
+              onClick={() => setExpanded(e => !e)}
+              className="px-3 py-1 text-xs font-medium border border-[#E8E3DB] text-[#4A4A4A] rounded-lg hover:bg-[#F5F0E8] transition-colors flex items-center gap-1"
+            >
+              {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              Details
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Expanded guest contact */}
-      {expanded && (
+      {/* Expanded guest contact (non-active tasks) */}
+      {expanded && !isActive && (
         <div className="border-t border-[#E8E3DB] bg-[#F5F0E8]/50 px-4 py-3">
           {task.guest_id ? (
             guestContact ? (
               <div className="flex items-start gap-3">
-                {/* Photo */}
                 {guestContact.photo_url ? (
-                  <img src={guestContact.photo_url} alt={guestContact.full_name} className="w-12 h-12 rounded-full object-cover shrink-0" />
+                  <img src={guestContact.photo_url} alt={guestContact.full_name} className="w-12 h-12 rounded-xl object-cover shrink-0" />
                 ) : (
                   <div className={`w-12 h-12 ${avatarColor(guestContact.full_name)} rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0`}>
                     {initials(guestContact.full_name)}
