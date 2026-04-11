@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useUsers, USER_TYPE_LABELS, type UserType, type SystemUser } from '@/hooks/useUsers';
@@ -12,7 +12,6 @@ import { toast } from 'sonner';
 import {
   LayoutDashboard,
   Users,
-  ArrowLeft,
   ChevronDown,
   LogOut,
   Plus,
@@ -40,6 +39,8 @@ import {
   Building2,
   Pencil,
   BedDouble,
+  Car,
+  Loader2,
 } from 'lucide-react';
 import { ROLE_LABELS } from '@/lib/constants';
 import { useDepartments } from '@/hooks/useDepartments';
@@ -49,6 +50,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ProfileDialog } from '@/components/ProfileDialog';
 import type { UserRole } from '@/types';
 import { SUPER_ADMIN_NAV, DESK_NAV, COORD_NAV } from '@/lib/navItems';
+import { supabase } from '@/lib/supabase';
 
 const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> = {
   'super-admin': SUPER_ADMIN_NAV,
@@ -90,6 +92,21 @@ interface UserFormData {
   assignedDeskInchargeId: string;
   department: string;
   location: string;
+}
+
+interface DriverRow {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string | null;
+  department?: string | null;
+  location?: string | null;
+  vehicle_type?: string | null;
+  vehicle_model?: string | null;
+  vehicle_registration?: string | null;
+  vehicle_capacity?: number | null;
+  is_head_driver: boolean;
+  is_available?: boolean | null;
 }
 
 const COORD_PAGE_SIZE = 20;
@@ -147,6 +164,52 @@ export default function UsersPage() {
     department: '',
     location: '',
   });
+
+  // ── Driver tab state ───────────────────────────────────────────────────────────
+  const [headDrivers, setHeadDrivers] = useState<DriverRow[]>([]);
+  const [regularDrivers, setRegularDrivers] = useState<DriverRow[]>([]);
+  const [driversLoading, setDriversLoading] = useState(false);
+  const [driverDeptFilter, setDriverDeptFilter] = useState('');
+  const [driverSearch, setDriverSearch] = useState('');
+  // Driver form
+  const [driverFormOpen, setDriverFormOpen] = useState(false);
+  const [driverFormIsHead, setDriverFormIsHead] = useState(false);
+  const [editingDriver, setEditingDriver] = useState<DriverRow | null>(null);
+  const [dName, setDName] = useState('');
+  const [dEmail, setDEmail] = useState('');
+  const [dPhone, setDPhone] = useState('');
+  const [dPassword, setDPassword] = useState('');
+  const [dDept, setDDept] = useState('');
+  const [dLoc, setDLoc] = useState('');
+  const [dVType, setDVType] = useState('');
+  const [dVModel, setDVModel] = useState('');
+  const [dVReg, setDVReg] = useState('');
+  const [dVCap, setDVCap] = useState('');
+  const [dSaving, setDSaving] = useState(false);
+  const [dShowPwd, setDShowPwd] = useState(false);
+  // Delete confirmation
+  const [deleteDriverTarget, setDeleteDriverTarget] = useState<DriverRow | null>(null);
+  const [deleteDriverChecking, setDeleteDriverChecking] = useState(false);
+  const [deleteDriverTaskCount, setDeleteDriverTaskCount] = useState(0);
+  const [deleteDriverDeleting, setDeleteDriverDeleting] = useState(false);
+
+  // Fetch drivers when switching to driver tab
+  useEffect(() => {
+    if (activeTab !== 'driver') return;
+    let mounted = true;
+    setDriversLoading(true);
+    const SELECT = 'id,name,email,phone,department,location,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_head_driver,is_available';
+    Promise.all([
+      supabase.from('users').select(SELECT).eq('role', 'driver').eq('is_head_driver', true).order('name'),
+      supabase.from('users').select(SELECT).eq('role', 'driver').eq('is_head_driver', false).order('name'),
+    ]).then(([headRes, regRes]) => {
+      if (!mounted) return;
+      setHeadDrivers((headRes.data ?? []) as DriverRow[]);
+      setRegularDrivers((regRes.data ?? []) as DriverRow[]);
+      setDriversLoading(false);
+    });
+    return () => { mounted = false; };
+  }, [activeTab]);
 
   if (!user) return null;
 
@@ -338,6 +401,113 @@ export default function UsersPage() {
     toast.success(`"${userToToggle.name}" is now ${!userToToggle.isActive ? 'active' : 'inactive'}`);
   };
 
+  // ── Driver tab handlers ────────────────────────────────────────────────────────
+
+  const refreshDrivers = async () => {
+    const SELECT = 'id,name,email,phone,department,location,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_head_driver,is_available';
+    const [headRes, regRes] = await Promise.all([
+      supabase.from('users').select(SELECT).eq('role', 'driver').eq('is_head_driver', true).order('name'),
+      supabase.from('users').select(SELECT).eq('role', 'driver').eq('is_head_driver', false).order('name'),
+    ]);
+    setHeadDrivers((headRes.data ?? []) as DriverRow[]);
+    setRegularDrivers((regRes.data ?? []) as DriverRow[]);
+  };
+
+  const openDriverForm = (isHead: boolean, driver: DriverRow | null = null) => {
+    setDriverFormIsHead(isHead);
+    setEditingDriver(driver);
+    if (driver) {
+      setDName(driver.name); setDEmail(driver.email); setDPhone(driver.phone ?? '');
+      setDPassword(''); setDDept(driver.department ?? ''); setDLoc(driver.location ?? '');
+      setDVType(driver.vehicle_type ?? ''); setDVModel(driver.vehicle_model ?? '');
+      setDVReg(driver.vehicle_registration ?? '');
+      setDVCap(driver.vehicle_capacity != null ? String(driver.vehicle_capacity) : '');
+      setDriverFormIsHead(driver.is_head_driver);
+    } else {
+      setDName(''); setDEmail(''); setDPhone(''); setDPassword('');
+      setDDept(''); setDLoc(''); setDVType(''); setDVModel(''); setDVReg(''); setDVCap('');
+    }
+    setDShowPwd(false);
+    setDriverFormOpen(true);
+  };
+
+  const handleSaveDriver = async () => {
+    if (!dName.trim()) { toast.error('Name is required'); return; }
+    if (!dEmail.trim()) { toast.error('Email is required'); return; }
+    if (!editingDriver && !dPassword.trim()) { toast.error('Password is required'); return; }
+    setDSaving(true);
+    try {
+      if (editingDriver) {
+        const updates: Record<string, unknown> = {
+          name: dName.trim(), email: dEmail.trim(), phone: dPhone.trim() || null,
+          department: dDept || null, location: dLoc || null,
+          vehicle_type: dVType || null, vehicle_model: dVModel.trim() || null,
+          vehicle_registration: dVReg.trim() || null,
+          vehicle_capacity: dVCap ? Number(dVCap) : null,
+          is_head_driver: driverFormIsHead,
+        };
+        if (dPassword.trim()) updates.password = dPassword.trim();
+        const { error } = await supabase.from('users').update(updates).eq('id', editingDriver.id);
+        if (error) throw error;
+        toast.success('Driver updated');
+      } else {
+        const { error } = await supabase.from('users').insert({
+          name: dName.trim(), email: dEmail.trim(), phone: dPhone.trim() || null,
+          password: dPassword.trim(), role: 'driver',
+          department: dDept || null, location: dLoc || null,
+          vehicle_type: dVType || null, vehicle_model: dVModel.trim() || null,
+          vehicle_registration: dVReg.trim() || null,
+          vehicle_capacity: dVCap ? Number(dVCap) : null,
+          is_head_driver: driverFormIsHead, is_available: true,
+        });
+        if (error) throw error;
+        toast.success(driverFormIsHead ? 'Nazim Transport created' : 'Driver created');
+      }
+      setDriverFormOpen(false);
+      await refreshDrivers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setDSaving(false);
+    }
+  };
+
+  const confirmDeleteDriver = async (driver: DriverRow) => {
+    setDeleteDriverTarget(driver);
+    setDeleteDriverTaskCount(0);
+    setDeleteDriverChecking(true);
+    const { count } = await supabase
+      .from('driver_tasks').select('id', { count: 'exact', head: true })
+      .eq('driver_id', driver.id).in('status', ['pending', 'in_progress']);
+    setDeleteDriverTaskCount(count ?? 0);
+    setDeleteDriverChecking(false);
+  };
+
+  const handleDeleteDriver = async () => {
+    if (!deleteDriverTarget) return;
+    setDeleteDriverDeleting(true);
+    const { error } = await supabase.from('users').delete().eq('id', deleteDriverTarget.id);
+    if (error) { toast.error('Failed to delete driver'); setDeleteDriverDeleting(false); return; }
+    toast.success('Driver removed');
+    setDeleteDriverTarget(null);
+    setDeleteDriverDeleting(false);
+    await refreshDrivers();
+  };
+
+  // Driver tab computed
+  const filteredRegularDrivers = regularDrivers.filter(d => {
+    const q = driverSearch.toLowerCase();
+    const matchesDept = !driverDeptFilter || d.department === driverDeptFilter;
+    const matchesSearch = !q ||
+      d.name.toLowerCase().includes(q) ||
+      d.email.toLowerCase().includes(q) ||
+      (d.location ?? '').toLowerCase().includes(q);
+    return matchesDept && matchesSearch;
+  });
+
+  const getNazimTransport = (driver: DriverRow) =>
+    headDrivers.find(h => h.location === driver.location)?.name ?? '—';
+
   const getStats = () => {
     if (activeTab === 'coordinator') {
       return {
@@ -397,17 +567,7 @@ export default function UsersPage() {
           {/* Header */}
           <header className="bg-white border-b border-[#E8E3DB] px-6 py-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Button
-                  variant="outline"
-                  onClick={() => navigate('/dashboard')}
-                  className="border-[#D4CFC7]"
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Back
-                </Button>
-                <h1 className="text-xl font-semibold text-[#1A1A1A]">User Management</h1>
-              </div>
+              <h1 className="text-xl font-semibold text-[#1A1A1A]">User Management</h1>
               
               {/* User Menu */}
               <div className="relative">
@@ -509,6 +669,30 @@ export default function UsersPage() {
                   <span className="text-[#4A4A4A]">Locations</span>
                 </div>
               </div>
+            ) : activeTab === 'driver' ? (
+              <div className="flex flex-wrap gap-3 mb-6 text-sm">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">{headDrivers.length}</Badge>
+                  <span className="text-[#4A4A4A]">Nazim Transport</span>
+                </div>
+                <span className="text-[#D4CFC7] self-center">|</span>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">{regularDrivers.length}</Badge>
+                  <span className="text-[#4A4A4A]">Drivers</span>
+                </div>
+                <span className="text-[#D4CFC7] self-center">|</span>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200">{departmentList.length}</Badge>
+                  <span className="text-[#4A4A4A]">Departments</span>
+                </div>
+                <span className="text-[#D4CFC7] self-center">|</span>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                    {departmentList.reduce((sum, d) => sum + (departments[d]?.length ?? 0), 0)}
+                  </Badge>
+                  <span className="text-[#4A4A4A]">Locations</span>
+                </div>
+              </div>
             ) : (
               <div className="flex gap-4 mb-6">
                 <div className="flex items-center gap-2">
@@ -532,8 +716,8 @@ export default function UsersPage() {
               </div>
             )}
 
-            {/* Search and Add — non-department-head tabs only */}
-            {activeTab !== 'department-head' && (
+            {/* Search and Add — non-department-head, non-driver tabs only */}
+            {activeTab !== 'department-head' && activeTab !== 'driver' && (
               <Card className="shadow-sm mb-6">
                 <CardContent className="p-4">
                   <div className="flex flex-col md:flex-row gap-4">
@@ -992,6 +1176,195 @@ export default function UsersPage() {
                     </div>
                   </CardContent>
                 </Card>
+              </div>
+            ) : activeTab === 'driver' ? (
+              /* ── DRIVERS TAB ─────────────────────────────────────────────────── */
+              <div className="space-y-0">
+                {driversLoading ? (
+                  <div className="p-12 text-center text-[#4A4A4A] flex items-center justify-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin" /> Loading drivers…
+                  </div>
+                ) : (
+                  <>
+                    {/* ── SECTION A: Nazim Transport ── */}
+                    <Card className="shadow-sm mb-0">
+                      <CardHeader className="bg-[#F9F8F6] py-3 px-5">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle className="flex items-center gap-2 text-base">
+                              <Users className="w-4 h-4 text-[#2D5A45]" />
+                              Nazim Transport
+                              <Badge variant="outline" className="ml-1 text-xs bg-amber-50 text-amber-700 border-amber-200">
+                                {headDrivers.length}
+                              </Badge>
+                            </CardTitle>
+                            <p className="text-xs text-[#4A4A4A] mt-1">Transport managers — one per location</p>
+                          </div>
+                          <Button onClick={() => openDriverForm(true)} className="bg-[#2D5A45] hover:bg-[#234839] text-white h-8 px-3 text-xs">
+                            <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Nazim Transport
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="p-0">
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead className="bg-[#F9F8F6]">
+                              <tr>
+                                {['Name','Email','Department','Location','Vehicle','Registration','Capacity','Phone','Status','Actions'].map(h => (
+                                  <th key={h} className={`px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A] ${h === 'Actions' ? 'text-right' : ''}`}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#E8E3DB]">
+                              {headDrivers.length === 0 ? (
+                                <tr><td colSpan={10} className="px-4 py-8 text-center text-[#4A4A4A]">No Nazim Transport found. Click "Add" to create one.</td></tr>
+                              ) : headDrivers.map(d => (
+                                <tr key={d.id} className="hover:bg-[#FAFAFA]">
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center text-white text-sm font-medium">{d.name.charAt(0)}</div>
+                                      <span className="font-medium text-[#1A1A1A]">{d.name}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">{d.email}</td>
+                                  <td className="px-4 py-3">
+                                    {d.department ? <Badge variant="outline" className={getDeptBadgeCls(d.department)}>{d.department}</Badge> : '—'}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    {d.location
+                                      ? <span className="bg-[#D6E4D9] text-[#2D5A45] rounded-full px-2 py-0.5 text-xs font-medium">{d.location}</span>
+                                      : <span className="text-[#4A4A4A] text-sm">—</span>}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">
+                                    {d.vehicle_type && d.vehicle_model ? `${d.vehicle_type} · ${d.vehicle_model}` : d.vehicle_model ?? d.vehicle_type ?? '—'}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm font-mono text-[#4A4A4A]">{d.vehicle_registration ?? '—'}</td>
+                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">{d.vehicle_capacity ? `${d.vehicle_capacity} pax` : '—'}</td>
+                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">{d.phone ?? '—'}</td>
+                                  <td className="px-4 py-3">
+                                    <Badge variant="outline" className={d.is_available !== false ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-600 border-gray-200'}>
+                                      {d.is_available !== false ? 'Active' : 'Inactive'}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center justify-end gap-2">
+                                      <button onClick={() => openDriverForm(true, d)} className="p-2 hover:bg-blue-50 text-[#4A4A4A] hover:text-blue-600 rounded-lg transition-colors" title="Edit"><Edit2 className="w-4 h-4" /></button>
+                                      <button onClick={() => confirmDeleteDriver(d)} className="p-2 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded-lg transition-colors" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Divider */}
+                    <div className="py-8"><div className="border-t border-gray-200" /></div>
+
+                    {/* ── SECTION B: Drivers ── */}
+                    <Card className="shadow-sm">
+                      <CardHeader className="bg-[#F9F8F6] py-3 px-5">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <CardTitle className="flex items-center gap-2 text-base">
+                              <Car className="w-4 h-4 text-[#2D5A45]" />
+                              Drivers
+                              <Badge variant="outline" className="ml-1 text-xs bg-blue-50 text-blue-700 border-blue-200">
+                                {regularDrivers.length}
+                              </Badge>
+                            </CardTitle>
+                            <p className="text-xs text-[#4A4A4A] mt-1">Drivers assigned to locations</p>
+                          </div>
+                          <Button onClick={() => openDriverForm(false)} className="bg-[#2D5A45] hover:bg-[#234839] text-white h-8 px-3 text-xs">
+                            <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Driver
+                          </Button>
+                        </div>
+                        {/* Filter chips */}
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {['', ...departmentList].map(dept => (
+                            <button key={dept || 'all'} onClick={() => setDriverDeptFilter(dept)}
+                              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${driverDeptFilter === dept ? 'bg-[#2D5A45] text-white' : 'bg-white text-[#4A4A4A] border border-[#D4CFC7] hover:bg-[#F5F0E8]'}`}>
+                              {dept || 'All'}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
+                          <Input placeholder="Search by name, email, location…" value={driverSearch} onChange={e => setDriverSearch(e.target.value)}
+                            className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm" />
+                        </div>
+                      </CardHeader>
+                      <CardContent className="p-0">
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead className="bg-[#F9F8F6]">
+                              <tr>
+                                {['Name','Email','Department','Location','Nazim Transport','Vehicle','Registration','Capacity','Phone','Status','Actions'].map(h => (
+                                  <th key={h} className={`px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A] whitespace-nowrap ${h === 'Actions' ? 'text-right' : ''}`}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#E8E3DB]">
+                              {filteredRegularDrivers.length === 0 ? (
+                                <tr><td colSpan={11} className="px-4 py-8 text-center text-[#4A4A4A]">
+                                  {regularDrivers.length === 0 ? 'No drivers found. Click "Add Driver" to create one.' : 'No drivers match your search.'}
+                                </td></tr>
+                              ) : filteredRegularDrivers.map(d => {
+                                const nazim = getNazimTransport(d);
+                                return (
+                                  <tr key={d.id} className="hover:bg-[#FAFAFA]">
+                                    <td className="px-4 py-3">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium">{d.name.charAt(0)}</div>
+                                        <span className="font-medium text-[#1A1A1A]">{d.name}</span>
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-[#4A4A4A]">{d.email}</td>
+                                    <td className="px-4 py-3">
+                                      {d.department ? <Badge variant="outline" className={getDeptBadgeCls(d.department)}>{d.department}</Badge> : '—'}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      {d.location
+                                        ? <span className="bg-[#D6E4D9] text-[#2D5A45] rounded-full px-2 py-0.5 text-xs font-medium">{d.location}</span>
+                                        : <span className="text-[#4A4A4A] text-sm">—</span>}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-[#4A4A4A]">
+                                      {nazim !== '—' ? (
+                                        <span className="flex items-center gap-1.5">
+                                          <span className="w-2 h-2 rounded-full bg-amber-400 inline-block shrink-0" />
+                                          {nazim}
+                                        </span>
+                                      ) : '—'}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-[#4A4A4A]">
+                                      {d.vehicle_type && d.vehicle_model ? `${d.vehicle_type} · ${d.vehicle_model}` : d.vehicle_model ?? d.vehicle_type ?? '—'}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm font-mono text-[#4A4A4A]">{d.vehicle_registration ?? '—'}</td>
+                                    <td className="px-4 py-3 text-sm text-[#4A4A4A]">{d.vehicle_capacity ? `${d.vehicle_capacity} pax` : '—'}</td>
+                                    <td className="px-4 py-3 text-sm text-[#4A4A4A]">{d.phone ?? '—'}</td>
+                                    <td className="px-4 py-3">
+                                      <Badge variant="outline" className={d.is_available !== false ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-600 border-gray-200'}>
+                                        {d.is_available !== false ? 'Active' : 'Inactive'}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <div className="flex items-center justify-end gap-2">
+                                        <button onClick={() => openDriverForm(false, d)} className="p-2 hover:bg-blue-50 text-[#4A4A4A] hover:text-blue-600 rounded-lg transition-colors" title="Edit"><Edit2 className="w-4 h-4" /></button>
+                                        <button onClick={() => confirmDeleteDriver(d)} className="p-2 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded-lg transition-colors" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
               </div>
             ) : (
               <Card className="shadow-sm">
@@ -1477,6 +1850,168 @@ export default function UsersPage() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Driver Add/Edit Dialog ── */}
+      {driverFormOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-[#E8E3DB] flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-[#1A1A1A]">
+                {editingDriver ? 'Edit' : 'Add'} {driverFormIsHead ? 'Nazim Transport' : 'Driver'}
+              </h2>
+              <button onClick={() => setDriverFormOpen(false)} className="p-2 hover:bg-[#F5F0E8] rounded-lg transition-colors">
+                <X className="w-5 h-5 text-[#4A4A4A]" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* Name */}
+              <div className="space-y-2">
+                <Label className="text-[#1A1A1A]">Full Name *</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
+                  <Input value={dName} onChange={e => setDName(e.target.value)} placeholder="Enter full name"
+                    className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-11" />
+                </div>
+              </div>
+              {/* Email */}
+              <div className="space-y-2">
+                <Label className="text-[#1A1A1A]">Email *</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
+                  <Input type="email" value={dEmail} onChange={e => setDEmail(e.target.value)} placeholder="Enter email address"
+                    className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-11" />
+                </div>
+              </div>
+              {/* Phone */}
+              <div className="space-y-2">
+                <Label className="text-[#1A1A1A]">Phone</Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
+                  <Input value={dPhone} onChange={e => setDPhone(e.target.value)} placeholder="Enter phone number"
+                    className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-11" />
+                </div>
+              </div>
+              {/* Password */}
+              <div className="space-y-2">
+                <Label className="text-[#1A1A1A]">{editingDriver ? 'Password (leave blank to keep current)' : 'Password *'}</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
+                  <Input type={dShowPwd ? 'text' : 'password'} value={dPassword} onChange={e => setDPassword(e.target.value)}
+                    placeholder={editingDriver ? 'Leave blank to keep current' : 'Enter password'}
+                    className="pl-10 pr-10 border-[#D4CFC7] focus:border-[#2D5A45] h-11" />
+                  <button type="button" onClick={() => setDShowPwd(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded text-[#4A4A4A]">
+                    {dShowPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              {/* Department */}
+              <div className="space-y-2">
+                <Label className="text-[#1A1A1A]">Department</Label>
+                <select value={dDept} onChange={e => { setDDept(e.target.value); setDLoc(''); }}
+                  className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] h-11">
+                  <option value="">— Select department —</option>
+                  {departmentList.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              {/* Location */}
+              <div className="space-y-2">
+                <Label className="text-[#1A1A1A]">Location</Label>
+                <select value={dLoc} onChange={e => setDLoc(e.target.value)} disabled={!dDept}
+                  className={`w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] h-11 ${!dDept ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                  <option value="">— Select location —</option>
+                  {(departments[dDept] ?? []).map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                </select>
+              </div>
+              {/* Vehicle section */}
+              <div className="border-t border-[#E8E3DB] pt-4">
+                <p className="text-sm font-medium text-[#1A1A1A] mb-3 flex items-center gap-2">
+                  <Car className="w-4 h-4 text-[#2D5A45]" /> Vehicle Details
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#4A4A4A]">Type</Label>
+                    <Input value={dVType} onChange={e => setDVType(e.target.value)} placeholder="e.g. Van"
+                      className="border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#4A4A4A]">Model</Label>
+                    <Input value={dVModel} onChange={e => setDVModel(e.target.value)} placeholder="e.g. Transit"
+                      className="border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#4A4A4A]">Registration</Label>
+                    <Input value={dVReg} onChange={e => setDVReg(e.target.value)} placeholder="e.g. AB12 CDE"
+                      className="border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm font-mono" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#4A4A4A]">Capacity (pax)</Label>
+                    <Input type="number" min="1" max="99" value={dVCap} onChange={e => setDVCap(e.target.value)} placeholder="e.g. 7"
+                      className="border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm" />
+                  </div>
+                </div>
+              </div>
+              {/* is_head_driver toggle — edit only */}
+              {editingDriver && (
+                <div className="flex items-center gap-3 border border-amber-200 bg-amber-50 rounded-lg px-4 py-3">
+                  <input type="checkbox" id="isHeadDriver" checked={driverFormIsHead}
+                    onChange={e => setDriverFormIsHead(e.target.checked)}
+                    className="rounded border-amber-300 text-amber-600 focus:ring-amber-500" />
+                  <Label htmlFor="isHeadDriver" className="cursor-pointer text-sm text-[#1A1A1A]">
+                    Nazim Transport (promote / demote this driver)
+                  </Label>
+                </div>
+              )}
+              {/* Actions */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#E8E3DB]">
+                <Button type="button" variant="outline" onClick={() => setDriverFormOpen(false)} className="border-[#D4CFC7] h-11 px-6">
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveDriver} disabled={dSaving} className="bg-[#2D5A45] hover:bg-[#234839] text-white h-11 px-6">
+                  {dSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</> : editingDriver ? 'Save Changes' : 'Add Driver'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Driver Delete Confirmation ── */}
+      {deleteDriverTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 space-y-4">
+            <h2 className="text-lg font-semibold text-[#1A1A1A]">Remove Driver</h2>
+            <p className="text-sm text-[#4A4A4A]">
+              Remove <span className="font-medium text-[#1A1A1A]">{deleteDriverTarget.name}</span> from the system?
+              This action cannot be undone.
+            </p>
+            {deleteDriverChecking ? (
+              <div className="flex items-center gap-2 text-sm text-[#4A4A4A]">
+                <Loader2 className="w-4 h-4 animate-spin" /> Checking active tasks…
+              </div>
+            ) : deleteDriverTaskCount > 0 ? (
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+                <span className="shrink-0 mt-0.5">⚠️</span>
+                <span>
+                  This driver has <strong>{deleteDriverTaskCount} pending task{deleteDriverTaskCount !== 1 ? 's' : ''}</strong>.
+                  Please reassign them before deleting.
+                </span>
+              </div>
+            ) : null}
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="outline" onClick={() => setDeleteDriverTarget(null)} disabled={deleteDriverDeleting}
+                className="border-[#D4CFC7] h-10 px-5">
+                Cancel
+              </Button>
+              <Button onClick={handleDeleteDriver}
+                disabled={deleteDriverDeleting || deleteDriverChecking || deleteDriverTaskCount > 0}
+                className="bg-red-600 hover:bg-red-700 text-white h-10 px-5">
+                {deleteDriverDeleting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Removing…</> : 'Remove'}
+              </Button>
+            </div>
           </div>
         </div>
       )}

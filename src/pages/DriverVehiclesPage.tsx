@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Car, Loader2, Wrench, Plus, Eye, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { DriverSidebar } from '@/components/DriverSidebar';
+import { TopBar } from '@/components/TopBar';
 import { supabase } from '@/lib/supabase';
 import {
   AddMaintenanceDialog, ViewMaintenanceLogDialog,
@@ -167,7 +168,9 @@ export default function DriverVehiclesPage() {
     <div className="flex min-h-screen bg-[#F5F0E8]">
       <DriverSidebar />
 
-      <main className="ml-64 flex-1 p-8">
+      <main className="ml-64 flex-1">
+        <TopBar />
+        <div className="p-8">
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-[#1A1A1A] flex items-center gap-2">
@@ -285,6 +288,7 @@ export default function DriverVehiclesPage() {
             </div>
           )}
         </div>
+        </div>{/* /p-8 */}
       </main>
 
       {/* View log dialog */}

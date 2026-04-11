@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { TopBar } from '@/components/TopBar';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -413,7 +414,9 @@ export default function DriverSchedulePage() {
   return (
     <div className="flex min-h-screen bg-[#F5F0E8]">
       <DriverSidebar />
-      <main className="ml-64 flex-1 p-8">
+      <main className="ml-64 flex-1">
+        <TopBar />
+        <div className="p-8">
 
         {/* Header */}
         <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
@@ -582,6 +585,7 @@ export default function DriverSchedulePage() {
             — = not set (click to set)
           </span>
         </div>
+        </div>{/* /p-8 */}
       </main>
 
       {/* Edit dialog */}

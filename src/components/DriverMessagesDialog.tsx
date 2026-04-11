@@ -52,7 +52,7 @@ function fmtDate(iso: string) {
 
 const ROLE_LABELS: Record<string, string> = {
   driver:           'Driver',
-  'head-driver':    'Head Driver',
+  'head-driver':    'Nazim Transport',
   'location-manager': 'Location Manager',
   'department-head':  'Department Head',
   'super-admin':    'Super Admin',

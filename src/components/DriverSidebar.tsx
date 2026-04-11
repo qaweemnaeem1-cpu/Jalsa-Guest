@@ -41,7 +41,7 @@ export function DriverSidebar() {
           </div>
           <div>
             <span className="font-semibold text-[#1A1A1A]">Jalsa Guest</span>
-            <p className="text-xs text-[#4A4A4A]">{isHead ? 'Head Driver View' : 'Driver View'}</p>
+            <p className="text-xs text-[#4A4A4A]">{isHead ? 'Nazim Transport View' : 'Driver View'}</p>
           </div>
         </div>
       </div>

@@ -10,6 +10,7 @@ import { DriverSidebar } from '@/components/DriverSidebar';
 import { supabase } from '@/lib/supabase';
 import type { DriverTask, DriverTaskStatus, DriverTaskType, DriverTaskPriority, DriverTaskPassenger } from '@/types';
 import { HandoverDialog } from '@/components/HandoverDialog';
+import { TopBar } from '@/components/TopBar';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -741,7 +742,9 @@ export default function DriverTasksPage() {
     <div className="flex min-h-screen bg-[#F5F0E8]">
       <DriverSidebar />
 
-      <main className="ml-64 flex-1 p-8">
+      <main className="ml-64 flex-1">
+        <TopBar />
+        <div className="p-8">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -850,6 +853,7 @@ export default function DriverTasksPage() {
             </section>
           </div>
         )}
+        </div>{/* /p-8 */}
       </main>
 
       {/* Decline confirm */}

@@ -11,7 +11,6 @@ import { toast } from 'sonner';
 import {
   LayoutDashboard,
   Users,
-  ArrowLeft,
   ChevronDown,
   LogOut,
   Plus,
@@ -431,17 +430,7 @@ export default function CountriesDepartmentsPage() {
           {/* Header */}
           <header className="bg-white border-b border-[#E8E3DB] px-6 py-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Button
-                  variant="outline"
-                  onClick={() => navigate('/dashboard')}
-                  className="border-[#D4CFC7]"
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Back
-                </Button>
-                <h1 className="text-xl font-semibold text-[#1A1A1A]">Countries &amp; Groups</h1>
-              </div>
+              <h1 className="text-xl font-semibold text-[#1A1A1A]">Countries &amp; Groups</h1>
 
               {/* User menu */}
               <div className="relative">

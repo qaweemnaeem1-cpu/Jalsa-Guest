@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { DriverSidebar } from '@/components/DriverSidebar';
+import { TopBar } from '@/components/TopBar';
 import { supabase } from '@/lib/supabase';
 import type { DriverTask, DriverTaskType } from '@/types';
 import {
@@ -258,7 +259,9 @@ export default function DriverCompletedPage() {
     <div className="flex min-h-screen bg-[#F5F0E8]">
       <DriverSidebar />
 
-      <main className="ml-64 flex-1 p-8">
+      <main className="ml-64 flex-1">
+        <TopBar />
+        <div className="p-8">
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-[#1A1A1A] flex items-center gap-2">
@@ -377,6 +380,7 @@ export default function DriverCompletedPage() {
             </div>
           )}
         </div>
+        </div>{/* /p-8 */}
       </main>
 
       <DetailDialog task={detailTask} onClose={() => setDetailTask(null)} />

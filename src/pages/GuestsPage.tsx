@@ -32,7 +32,6 @@ import {
   ChevronDown,
   ChevronRight,
   LogOut,
-  ArrowLeft,
   Eye,
   Pencil,
   Trash2,
@@ -529,17 +528,7 @@ export default function GuestsPage() {
           {/* Header */}
           <header className="bg-white border-b border-[#E8E3DB] px-6 py-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Button
-                  variant="ghost"
-                  onClick={() => navigate('/dashboard')}
-                  className="text-[#4A4A4A]"
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Back
-                </Button>
-                <h1 className="text-xl font-semibold text-[#1A1A1A]">Guest Details</h1>
-              </div>
+              <h1 className="text-xl font-semibold text-[#1A1A1A]">Guest Details</h1>
               
               {/* User Menu */}
               <div className="relative">

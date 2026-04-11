@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase';
 import type { DriverTask, DriverTaskStatus, DriverTaskType, DriverTaskPriority } from '@/types';
 import { InlineMessagesPanel } from '@/components/DriverMessagesDialog';
 import { AddMaintenanceDialog, type MaintenanceEntry, computeStatus } from '@/components/VehicleMaintenanceDialog';
+import { TopBar } from '@/components/TopBar';
 
 // ── avatar / contact helpers ──────────────────────────────────────────────────
 
@@ -458,7 +459,9 @@ export default function DriverDashboardPage() {
     <div className="flex min-h-screen bg-[#F5F0E8]">
       <DriverSidebar />
 
-      <main className="ml-64 flex-1 p-8">
+      <main className="ml-64 flex-1">
+        <TopBar />
+        <div className="p-8">
         {/* ── Header ── */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-[#1A1A1A]">Driver Dashboard</h1>
@@ -673,6 +676,7 @@ export default function DriverDashboardPage() {
             currentUser={{ id: user.id, name: user.name, role: user.role }}
           />
         )}
+        </div>{/* /p-8 */}
       </main>
 
       {user && (

@@ -19,6 +19,7 @@ import { CreateTaskDialog, type DriverInfo } from '@/components/CreateTaskDialog
 import { DailyReportDialog } from '@/components/DailyReportDialog';
 import { DriverMessagesDialog } from '@/components/DriverMessagesDialog';
 import { AddMaintenanceDialog, ViewMaintenanceLogDialog } from '@/components/VehicleMaintenanceDialog';
+import { TopBar } from '@/components/TopBar';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -279,7 +280,9 @@ export default function DeptDriversPage() {
   return (
     <div className="flex min-h-screen bg-[#F5F0E8]">
       <DeptSidebar />
-      <main className="ml-64 flex-1 p-8">
+      <main className="ml-64 flex-1">
+        <TopBar />
+        <div className="p-8">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -562,7 +565,7 @@ export default function DeptDriversPage() {
                       <td className="px-4 py-3">
                         <div className="font-medium text-[#1A1A1A]">{d.name}</div>
                         <div className="text-xs text-[#4A4A4A]">
-                          {d.is_head_driver && <span className="mr-1 text-amber-600 font-medium">★ Head</span>}
+                          {d.is_head_driver && <span className="mr-1 text-amber-600 font-medium">★ Nazim</span>}
                           {d.email}
                         </div>
                       </td>
@@ -611,6 +614,7 @@ export default function DeptDriversPage() {
             </div>
           )}
         </div>
+        </div>{/* /p-8 */}
       </main>
 
       {/* ── Existing dialogs ── */}

@@ -10,6 +10,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { TopBar } from '@/components/TopBar';
 import {
   AddMaintenanceDialog, ViewMaintenanceLogDialog,
   type MaintenanceEntry, MAINT_TYPE_META, MAINT_STATUS_META, computeStatus,
@@ -276,7 +277,9 @@ export default function DriverVehiclePage() {
     <div className="flex min-h-screen bg-[#F5F0E8]">
       <DriverSidebar />
 
-      <main className="ml-64 flex-1 p-8 max-w-4xl">
+      <main className="ml-64 flex-1">
+        <TopBar />
+        <div className="p-8 max-w-4xl">
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-[#1A1A1A]">My Vehicle</h1>
@@ -522,6 +525,7 @@ export default function DriverVehiclePage() {
             <p className="text-sm text-[#4A4A4A] text-center py-4">Could not load stats.</p>
           )}
         </div>
+        </div>{/* /p-8 */}
       </main>
 
       {/* Dialogs */}

@@ -23,6 +23,7 @@ import { CreateTaskDialog, type DriverInfo } from '@/components/CreateTaskDialog
 import { DailyReportDialog } from '@/components/DailyReportDialog';
 import { DriverMessagesDialog } from '@/components/DriverMessagesDialog';
 import { AddMaintenanceDialog, ViewMaintenanceLogDialog } from '@/components/VehicleMaintenanceDialog';
+import { TopBar } from '@/components/TopBar';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -431,7 +432,9 @@ export default function LocationDriversPage() {
   return (
     <div className="flex min-h-screen bg-[#F5F0E8]">
       <LocationSidebar />
-      <main className="ml-64 flex-1 p-8">
+      <main className="ml-64 flex-1">
+        <TopBar />
+        <div className="p-8">
 
         {/* ── Compact Driver Status Widget ─────────────────────────────── */}
         <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
@@ -550,7 +553,7 @@ export default function LocationDriversPage() {
                       <td className="px-4 py-3">
                         <div className="font-medium text-[#1A1A1A]">{d.name}</div>
                         <div className="text-xs text-[#4A4A4A]">
-                          {d.is_head_driver && <span className="mr-1 text-amber-600 font-medium">★ Head</span>}
+                          {d.is_head_driver && <span className="mr-1 text-amber-600 font-medium">★ Nazim</span>}
                           {d.email}
                         </div>
                       </td>
@@ -728,6 +731,7 @@ export default function LocationDriversPage() {
             </div>
           )}
         </div>
+        </div>{/* /p-8 */}
       </main>
 
       {/* ── Dialogs ───────────────────────────────────────────────────────────── */}

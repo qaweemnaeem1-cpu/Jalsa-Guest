@@ -224,11 +224,11 @@ export function DriverFormDialog({
             </div>
           </div>
 
-          {/* Head Driver */}
+          {/* Nazim Transport */}
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={isHead} onChange={e => setIsHead(e.target.checked)}
               className="w-4 h-4 accent-[#2D5A45]" />
-            <span className="text-sm text-[#1A1A1A]">Head Driver</span>
+            <span className="text-sm text-[#1A1A1A]">Nazim Transport</span>
             <span className="text-xs text-[#4A4A4A]">(can manage all drivers & tasks)</span>
           </label>
         </div>

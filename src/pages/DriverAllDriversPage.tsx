@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import type { DriverTask } from '@/types';
 import { DriverMessagesDialog } from '@/components/DriverMessagesDialog';
 import { AddMaintenanceDialog, ViewMaintenanceLogDialog } from '@/components/VehicleMaintenanceDialog';
+import { TopBar } from '@/components/TopBar';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -309,7 +310,9 @@ export default function DriverAllDriversPage() {
     <div className="flex min-h-screen bg-[#F5F0E8]">
       <DriverSidebar />
 
-      <main className="ml-64 flex-1 p-8">
+      <main className="ml-64 flex-1">
+        <TopBar />
+        <div className="p-8">
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-[#1A1A1A] flex items-center gap-2">
@@ -366,7 +369,7 @@ export default function DriverAllDriversPage() {
                             </div>
                             <span className="font-medium text-[#1A1A1A]">{driver.name}</span>
                             {(driver.is_head_driver || isMe) && (
-                              <Star className="w-3.5 h-3.5 text-amber-500 shrink-0" fill="currentColor" />
+                              <Star className="w-3.5 h-3.5 text-amber-500 shrink-0" fill="currentColor" title={driver.is_head_driver ? 'Nazim Transport' : undefined} />
                             )}
                           </div>
                         </td>
@@ -427,6 +430,7 @@ export default function DriverAllDriversPage() {
             </div>
           )}
         </div>
+        </div>{/* /p-8 */}
       </main>
 
       <DriverTasksDialog driver={viewDriver} onClose={() => setViewDriver(null)} />

@@ -29,6 +29,7 @@ import { CreateTaskDialog } from '@/components/CreateTaskDialog';
 import type { DriverInfo } from '@/components/CreateTaskDialog';
 import { HandoverDialog } from '@/components/HandoverDialog';
 import { DailyReportDialog } from '@/components/DailyReportDialog';
+import { TopBar } from '@/components/TopBar';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -279,7 +280,9 @@ export default function DriverAllTasksPage() {
     <div className="flex min-h-screen bg-[#F5F0E8]">
       <DriverSidebar />
 
-      <main className="ml-64 flex-1 p-8">
+      <main className="ml-64 flex-1">
+        <TopBar />
+        <div className="p-8">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -566,6 +569,7 @@ export default function DriverAllTasksPage() {
             </section>
           </div>
         )}
+        </div>{/* /p-8 */}
       </main>
 
       {/* Create Task Dialog */}
