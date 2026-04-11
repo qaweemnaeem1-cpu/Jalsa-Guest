@@ -2,7 +2,7 @@
  * /dept/drivers — drivers across all locations in this department (Department Head view).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Plus, Eye, Pencil, Car, Users, CheckCircle2 } from 'lucide-react';
+import { Plus, Eye, Pencil, Car, Users, CheckCircle2, FileText, MessageCircle, Wrench } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { DeptSidebar } from '@/components/DeptSidebar';
@@ -10,6 +10,9 @@ import { Button } from '@/components/ui/button';
 import { DriverFormDialog, type DriverRecord } from '@/components/DriverFormDialog';
 import { DriverTaskViewDialog } from '@/components/DriverTaskViewDialog';
 import { CreateTaskDialog, type DriverInfo } from '@/components/CreateTaskDialog';
+import { DailyReportDialog } from '@/components/DailyReportDialog';
+import { DriverMessagesDialog } from '@/components/DriverMessagesDialog';
+import { AddMaintenanceDialog, ViewMaintenanceLogDialog } from '@/components/VehicleMaintenanceDialog';
 
 interface DriverRow extends DriverRecord {
   tasksToday: number;
@@ -24,9 +27,13 @@ export default function DeptDriversPage() {
   const [locationFilter, setLocFil] = useState('');
 
   const [formOpen, setFormOpen]         = useState(false);
+  const [reportOpen, setReportOpen]     = useState(false);
   const [editDriver, setEditDriver]     = useState<DriverRecord | null>(null);
   const [viewDriver, setViewDriver]     = useState<DriverRecord | null>(null);
   const [assignDriver, setAssignDriver] = useState<DriverRecord | null>(null);
+  const [msgDriver, setMsgDriver]       = useState<DriverRecord | null>(null);
+  const [maintViewDriver, setMaintViewDriver] = useState<DriverRecord | null>(null);
+  const [maintAddDriver, setMaintAddDriver]   = useState<DriverRecord | null>(null);
 
   const loadedRef = useRef(false);
 
@@ -94,6 +101,10 @@ export default function DeptDriversPage() {
               <option value="">All Locations</option>
               {locations.map(l => <option key={l} value={l}>{l}</option>)}
             </select>
+            <Button variant="outline" onClick={() => setReportOpen(true)}
+              className="text-[#2D5A45] border-[#2D5A45] hover:bg-[#F5F0E8] gap-2">
+              <FileText className="w-4 h-4" /> Daily Report
+            </Button>
             <Button onClick={() => { setEditDriver(null); setFormOpen(true); }}
               className="bg-[#2D5A45] hover:bg-[#234839] text-white gap-2">
               <Plus className="w-4 h-4" /> Add Driver
@@ -176,6 +187,14 @@ export default function DeptDriversPage() {
                             className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors">
                             <Pencil className="w-4 h-4" />
                           </button>
+                          <button onClick={() => setMsgDriver(d)} title="Messages"
+                            className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors">
+                            <MessageCircle className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setMaintViewDriver(d)} title="Maintenance Log"
+                            className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors">
+                            <Wrench className="w-4 h-4" />
+                          </button>
                           <button onClick={() => setAssignDriver(d)} title="Assign Task"
                             className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors">
                             <Plus className="w-4 h-4" />
@@ -205,6 +224,7 @@ export default function DeptDriversPage() {
           onClose={() => setViewDriver(null)}
           driverId={viewDriver.id}
           driverName={viewDriver.name}
+          locationName={viewDriver.location}
         />
       )}
 
@@ -217,6 +237,42 @@ export default function DeptDriversPage() {
           locationName={assignDriver.location ?? ''}
           departmentName={dept}
           onCreated={() => fetchAll()}
+        />
+      )}
+
+      <DailyReportDialog
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        generatedBy={user?.name ?? 'Department Head'}
+      />
+      {user && (
+        <DriverMessagesDialog
+          open={!!msgDriver}
+          onClose={() => setMsgDriver(null)}
+          driverId={msgDriver?.id ?? ''}
+          driverName={msgDriver?.name ?? ''}
+          currentUser={{ id: user.id, name: user.name, role: user.role }}
+        />
+      )}
+
+      {maintViewDriver && (
+        <ViewMaintenanceLogDialog
+          open={!!maintViewDriver}
+          onClose={() => setMaintViewDriver(null)}
+          driverId={maintViewDriver.id}
+          driverName={maintViewDriver.name}
+          vehicleRegistration={maintViewDriver.vehicle_registration ?? undefined}
+          onAddEntry={() => { setMaintAddDriver(maintViewDriver); setMaintViewDriver(null); }}
+        />
+      )}
+
+      {maintAddDriver && (
+        <AddMaintenanceDialog
+          open={!!maintAddDriver}
+          onClose={() => setMaintAddDriver(null)}
+          driverId={maintAddDriver.id}
+          vehicleRegistration={maintAddDriver.vehicle_registration ?? undefined}
+          onSaved={() => setMaintAddDriver(null)}
         />
       )}
     </div>

@@ -1,7 +1,8 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ClipboardList, CheckCircle, Car, Users } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, CheckCircle, Car, Users, CalendarDays } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
+import { useDriverUnreadCount } from '@/components/DriverMessagesDialog';
 
 export function DriverSidebar() {
   const navigate = useNavigate();
@@ -9,6 +10,7 @@ export function DriverSidebar() {
   const { user } = useAuth();
 
   const isHead = user?.isHeadDriver ?? false;
+  const unreadCount = useDriverUnreadCount(user?.id);
 
   const REGULAR_NAV = [
     { icon: LayoutDashboard, label: 'Dashboard',       href: '/driver/dashboard' },
@@ -22,6 +24,7 @@ export function DriverSidebar() {
     { icon: ClipboardList,   label: 'My Tasks',        href: '/driver/tasks' },
     { icon: Users,           label: 'All Drivers',     href: '/driver/all-drivers' },
     { icon: ClipboardList,   label: 'All Tasks',       href: '/driver/all-tasks' },
+    { icon: CalendarDays,    label: 'Schedule',        href: '/driver/schedule' },
     { icon: CheckCircle,     label: 'Completed Tasks', href: '/driver/completed' },
     { icon: Car,             label: 'Vehicles',        href: '/driver/vehicles' },
   ];
@@ -58,6 +61,7 @@ export function DriverSidebar() {
         <div className="text-xs font-medium text-[#4A4A4A] uppercase tracking-wider mb-2">Main</div>
         {NAV.map((item, i) => {
           const active = pathname === item.href;
+          const isDashboard = item.href === '/driver/dashboard';
           return (
             <button
               key={i}
@@ -68,6 +72,11 @@ export function DriverSidebar() {
             >
               <item.icon className="w-5 h-5 shrink-0" />
               <span className="flex-1">{item.label}</span>
+              {isDashboard && unreadCount > 0 && (
+                <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
             </button>
           );
         })}

@@ -49,6 +49,7 @@ import DriverVehiclePage from '@/pages/DriverVehiclePage';
 import DriverAllDriversPage from '@/pages/DriverAllDriversPage';
 import DriverAllTasksPage from '@/pages/DriverAllTasksPage';
 import DriverVehiclesPage from '@/pages/DriverVehiclesPage';
+import DriverSchedulePage from '@/pages/DriverSchedulePage';
 import LocationDriversPage from '@/pages/LocationDriversPage';
 import DeptDriversPage from '@/pages/DeptDriversPage';
 import AdminDriversPage from '@/pages/AdminDriversPage';
@@ -185,6 +186,7 @@ function AppRoutes() {
       <Route path="/driver/vehicle"     element={<ProtectedRoute requiredRoles={['driver']}><DriverVehiclePage /></ProtectedRoute>} />
       <Route path="/driver/all-drivers" element={<ProtectedRoute requiredRoles={['driver']}><DriverAllDriversPage /></ProtectedRoute>} />
       <Route path="/driver/all-tasks"   element={<ProtectedRoute requiredRoles={['driver']}><DriverAllTasksPage /></ProtectedRoute>} />
+      <Route path="/driver/schedule"    element={<ProtectedRoute requiredRoles={['driver']}><DriverSchedulePage /></ProtectedRoute>} />
       <Route path="/driver/vehicles"    element={<ProtectedRoute requiredRoles={['driver']}><DriverVehiclesPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

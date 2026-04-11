@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search, Plane, Building2, Package, CheckCircle2, Clock,
   AlertCircle, Loader2, ChevronDown, ChevronUp, X,
-  MapPin, User, FileText, CalendarDays,
+  MapPin, User, FileText, CalendarDays, ArrowRightLeft, Phone,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { DriverSidebar } from '@/components/DriverSidebar';
 import { supabase } from '@/lib/supabase';
-import type { DriverTask, DriverTaskStatus, DriverTaskType } from '@/types';
+import type { DriverTask, DriverTaskStatus, DriverTaskType, DriverTaskPriority, DriverTaskPassenger } from '@/types';
+import { HandoverDialog } from '@/components/HandoverDialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +20,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -61,9 +67,28 @@ const STATUS_META: Record<string, { label: string; cls: string; icon: React.Reac
   completed:   { label: 'Completed',   cls: 'bg-green-100 text-green-700', icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
 };
 
+const PRIORITY_META: Record<DriverTaskPriority, { label: string; cls: string }> = {
+  normal: { label: 'Normal', cls: 'bg-gray-100 text-gray-600' },
+  urgent: { label: '! Urgent', cls: 'bg-red-100 text-red-700' },
+  vip:    { label: '⭐ VIP',   cls: 'bg-purple-100 text-purple-700' },
+};
+
+const PRIORITY_ORDER: Record<DriverTaskPriority, number> = { urgent: 0, vip: 1, normal: 2 };
+
+function sortByPriority(tasks: TaskRow[]): TaskRow[] {
+  return [...tasks].sort((a, b) => {
+    const pa = PRIORITY_ORDER[a.priority ?? 'normal'];
+    const pb = PRIORITY_ORDER[b.priority ?? 'normal'];
+    if (pa !== pb) return pa - pb;
+    const d = a.scheduled_date.localeCompare(b.scheduled_date);
+    return d !== 0 ? d : (a.scheduled_time ?? '').localeCompare(b.scheduled_time ?? '');
+  });
+}
+
 // Extended task type to carry extra DB columns
 interface TaskRow extends DriverTask {
   is_suggestion?: boolean;
+  priority?: DriverTaskPriority;
   guest_country?: string;
   guest_designation?: string;
   flight_airport?: string;
@@ -73,22 +98,128 @@ interface TaskRow extends DriverTask {
   assigned_by_name?: string;
   assigned_by_role?: string;
   approved_at?: string;
+  location?: string;
+  driver_name?: string;
+}
+
+// ── avatar helper ─────────────────────────────────────────────────────────────
+
+const AVATAR_COLORS = [
+  'bg-blue-500', 'bg-purple-500', 'bg-green-600',
+  'bg-amber-500', 'bg-rose-500', 'bg-cyan-600',
+];
+
+function avatarColor(name: string) {
+  return AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
+}
+
+function initials(name: string) {
+  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+}
+
+interface AvatarProps { name: string; photoUrl?: string | null; sizeClass?: string; textClass?: string }
+function Avatar({ name, photoUrl, sizeClass = 'w-8 h-8', textClass = 'text-xs' }: AvatarProps) {
+  if (photoUrl) {
+    return <img src={photoUrl} alt={name} className={`${sizeClass} rounded-full object-cover shrink-0`} />;
+  }
+  return (
+    <div className={`${sizeClass} ${avatarColor(name)} rounded-full flex items-center justify-center text-white font-semibold ${textClass} shrink-0`}>
+      {initials(name)}
+    </div>
+  );
+}
+
+// ── guest contact info ────────────────────────────────────────────────────────
+
+interface GuestContact {
+  full_name: string;
+  country?: string;
+  designation?: string;
+  contact_number?: string;
+  email?: string;
+  photo_url?: string;
 }
 
 // ── expanded detail row ───────────────────────────────────────────────────────
 
 function ExpandedDetail({ task }: { task: TaskRow }) {
+  const [passengers, setPassengers] = useState<DriverTaskPassenger[]>([]);
+  const [guestContact, setGuestContact] = useState<GuestContact | null>(null);
+
+  useEffect(() => {
+    supabase
+      .from('driver_task_passengers')
+      .select('id,task_id,guest_id,guest_name,guest_phone,guest_photo')
+      .eq('task_id', task.id)
+      .then(({ data }) => setPassengers((data ?? []) as DriverTaskPassenger[]));
+
+    if (task.guest_id) {
+      supabase
+        .from('guests')
+        .select('full_name,country,designation,contact_number,email,photo_url')
+        .eq('id', task.guest_id)
+        .maybeSingle()
+        .then(({ data }) => setGuestContact(data as GuestContact | null));
+    }
+  }, [task.id, task.guest_id]);
+
+  const fmtHandoverTime = (iso?: string) => {
+    if (!iso) return '';
+    return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const guestName    = guestContact?.full_name ?? task.guest_name;
+  const guestCountry = guestContact?.country   ?? task.guest_country;
+  const guestDesig   = guestContact?.designation ?? task.guest_designation;
+
   return (
     <tr className="bg-[#F5F0E8]/60">
-      <td colSpan={9} className="px-6 py-4">
+      <td colSpan={10} className="px-6 py-4">
         <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-          {/* Guest info */}
-          <div className="space-y-1.5">
-            <p className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider mb-2 flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> Guest</p>
-            {task.guest_name       && <p><span className="text-[#4A4A4A]">Name:</span> <span className="font-medium text-[#1A1A1A]">{task.guest_name}</span></p>}
-            {task.guest_country    && <p><span className="text-[#4A4A4A]">Country:</span> <span className="text-[#1A1A1A]">{task.guest_country}</span></p>}
-            {task.guest_designation && <p><span className="text-[#4A4A4A]">Designation:</span> <span className="text-[#1A1A1A]">{task.guest_designation}</span></p>}
-            {task.delegation_name  && <p><span className="text-[#4A4A4A]">Delegation:</span> <span className="text-[#1A1A1A]">{task.delegation_name}</span></p>}
+          {/* Guest info + contact */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> Guest</p>
+            {/* Contact card */}
+            {(guestName || task.delegation_name) && (
+              <div className="flex items-start gap-3 bg-white border border-[#E8E3DB] rounded-xl p-3">
+                {guestName && (
+                  <Avatar
+                    name={guestName}
+                    photoUrl={guestContact?.photo_url}
+                    sizeClass="w-12 h-12"
+                    textClass="text-sm"
+                  />
+                )}
+                <div className="flex-1 min-w-0 space-y-0.5">
+                  {guestName     && <p className="font-semibold text-[#1A1A1A] text-sm">{guestName}</p>}
+                  {(guestCountry || guestDesig) && (
+                    <p className="text-xs text-[#4A4A4A]">
+                      {[guestCountry, guestDesig].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
+                  {task.delegation_name && !guestName && (
+                    <p className="text-xs text-[#4A4A4A]">Delegation: {task.delegation_name}</p>
+                  )}
+                  {guestContact?.contact_number && (
+                    <a
+                      href={`tel:${guestContact.contact_number}`}
+                      className="flex items-center gap-1 text-[#2D5A45] hover:underline text-xs mt-1"
+                    >
+                      <Phone className="w-3 h-3" />{guestContact.contact_number}
+                      <span className="ml-1 px-1.5 py-0.5 border border-[#2D5A45] text-[#2D5A45] rounded text-[10px] font-medium">Call</span>
+                    </a>
+                  )}
+                  {guestContact?.email && (
+                    <a
+                      href={`mailto:${guestContact.email}`}
+                      className="flex items-center gap-1 text-[#2D5A45] hover:underline text-xs"
+                    >
+                      ✉ {guestContact.email}
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Flight info */}
@@ -121,8 +252,116 @@ function ExpandedDetail({ task }: { task: TaskRow }) {
             )}
           </div>
         </div>
+
+        {/* Passengers (batch pickup) */}
+        {passengers.length > 0 && (
+          <div className="mt-4 border border-[#E8E3DB] rounded-xl overflow-hidden">
+            <p className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider px-4 py-2 bg-[#F5F0E8] border-b border-[#E8E3DB]">
+              Passengers ({passengers.length})
+            </p>
+            <div className="divide-y divide-[#E8E3DB]">
+              {passengers.map((p) => (
+                <div key={p.id} className="flex items-center gap-3 px-4 py-2.5 bg-white">
+                  <Avatar name={p.guest_name} photoUrl={p.guest_photo} sizeClass="w-8 h-8" />
+                  <span className="font-medium text-[#1A1A1A] text-sm flex-1">{p.guest_name}</span>
+                  {p.guest_phone && (
+                    <a href={`tel:${p.guest_phone}`} className="flex items-center gap-1 text-[#2D5A45] hover:underline text-xs">
+                      <Phone className="w-3 h-3" />{p.guest_phone}
+                      <span className="ml-1 px-1.5 py-0.5 border border-[#2D5A45] text-[#2D5A45] rounded text-[10px] font-medium">Call</span>
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Handover history */}
+        {task.handed_over_from_name && (
+          <div className="mt-3 flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <ArrowRightLeft className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>
+              Handed over from <span className="font-medium">{task.handed_over_from_name}</span>
+              {task.handed_over_at && ` at ${fmtHandoverTime(task.handed_over_at)}`}
+              {task.handover_reason && ` — ${task.handover_reason}`}
+            </span>
+          </div>
+        )}
       </td>
     </tr>
+  );
+}
+
+// ── mileage dialog ────────────────────────────────────────────────────────────
+
+interface MileageDlgProps {
+  open: boolean;
+  action: 'start' | 'complete';
+  task: TaskRow | null;
+  onConfirm: (mileage: number | null) => void;
+  onCancel: () => void;
+}
+
+function MileageDlg({ open, action, task, onConfirm, onCancel }: MileageDlgProps) {
+  const [mileageVal, setMileageVal] = useState('');
+  useEffect(() => { if (open) setMileageVal(''); }, [open]);
+
+  const startMileage = task?.start_mileage;
+  const endNum       = mileageVal ? Number(mileageVal) : null;
+  const distance     = action === 'complete' && startMileage != null && endNum != null && endNum > startMileage
+    ? endNum - startMileage
+    : null;
+
+  const label  = action === 'start' ? 'Start Journey' : 'Complete Journey';
+  const emoji  = action === 'start' ? '🚗' : '✅';
+  const prompt = action === 'start' ? 'Start Mileage (km)' : 'End Mileage (km)';
+  const hint   = action === 'start'
+    ? 'Current odometer reading when you leave'
+    : 'Current odometer reading on arrival';
+
+  return (
+    <Dialog open={open} onOpenChange={o => !o && onCancel()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{emoji} {label}</DialogTitle>
+        </DialogHeader>
+        {task && (
+          <p className="text-xs text-[#4A4A4A] -mt-1 mb-1">
+            {task.guest_name ?? task.delegation_name ?? ''}{task.pickup_location && task.dropoff_location
+              ? ` · ${task.pickup_location} → ${task.dropoff_location}` : ''}
+          </p>
+        )}
+        <div className="space-y-3 py-1">
+          <div className="space-y-1.5">
+            <Label>{prompt}</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number" min={0} value={mileageVal}
+                onChange={e => setMileageVal(e.target.value)}
+                placeholder="e.g. 45280"
+                className="border-[#E8E3DB] focus:border-[#2D5A45] focus-visible:ring-[#2D5A45]"
+              />
+              <span className="text-sm text-[#4A4A4A] shrink-0">km</span>
+            </div>
+            <p className="text-xs text-[#4A4A4A]">{hint}</p>
+          </div>
+          {distance != null && (
+            <div className="flex items-center gap-2 text-sm bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+              <span className="text-green-700 font-medium">Distance: {distance} km</span>
+            </div>
+          )}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onCancel}>Cancel</Button>
+          <Button variant="outline" onClick={() => onConfirm(null)} className="text-[#4A4A4A]">
+            Skip
+          </Button>
+          <Button onClick={() => onConfirm(endNum)} className="bg-[#2D5A45] hover:bg-[#234839] text-white">
+            {label}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -171,9 +410,10 @@ interface TaskTableProps {
   onStart?: (task: TaskRow) => void;
   onComplete?: (task: TaskRow) => void;
   onCancel?: (task: TaskRow) => void;
+  onHandover?: (task: TaskRow) => void;
 }
 
-function TaskTable({ tasks, mode, expandedId, onToggleExpand, onAccept, onDecline, onStart, onComplete, onCancel }: TaskTableProps) {
+function TaskTable({ tasks, mode, expandedId, onToggleExpand, onAccept, onDecline, onStart, onComplete, onCancel, onHandover }: TaskTableProps) {
   if (tasks.length === 0) {
     return (
       <div className="text-center py-8 text-[#4A4A4A] text-sm">
@@ -187,6 +427,7 @@ function TaskTable({ tasks, mode, expandedId, onToggleExpand, onAccept, onDeclin
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-[#E8E3DB] bg-[#F5F0E8]/50">
+            <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Priority</th>
             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Date</th>
             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Time</th>
             <th className="px-4 py-3 text-left text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Type</th>
@@ -207,6 +448,7 @@ function TaskTable({ tasks, mode, expandedId, onToggleExpand, onAccept, onDeclin
             const expanded = expandedId === task.id;
             const label = task.guest_name ?? task.delegation_name ?? '—';
 
+            const pm = PRIORITY_META[task.priority ?? 'normal'];
             return (
               <>
                 <tr
@@ -214,6 +456,11 @@ function TaskTable({ tasks, mode, expandedId, onToggleExpand, onAccept, onDeclin
                   className="hover:bg-[#F5F0E8]/50 transition-colors cursor-pointer"
                   onClick={() => onToggleExpand(task.id)}
                 >
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full ${pm.cls}`}>
+                      {pm.label}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap font-medium text-[#1A1A1A]">{fmtDate(task.scheduled_date)}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-[#4A4A4A]">{task.scheduled_time ?? '—'}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
@@ -221,7 +468,12 @@ function TaskTable({ tasks, mode, expandedId, onToggleExpand, onAccept, onDeclin
                       {tm.icon}{tm.label}
                     </span>
                   </td>
-                  <td className="px-4 py-3 max-w-[160px] truncate font-medium text-[#1A1A1A]">{label}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="flex items-center gap-2 max-w-[180px]">
+                      {label !== '—' && <Avatar name={label} sizeClass="w-6 h-6" textClass="text-[10px]" />}
+                      <span className="font-medium text-[#1A1A1A] truncate">{label}</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-[#4A4A4A] whitespace-nowrap text-xs">
                     {task.pickup_location && task.dropoff_location
                       ? <>{task.pickup_location} <span className="text-[#D4CFC7]">→</span> {task.dropoff_location}</>
@@ -240,45 +492,43 @@ function TaskTable({ tasks, mode, expandedId, onToggleExpand, onAccept, onDeclin
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {mode === 'suggested' && (
                         <>
-                          <button
-                            onClick={() => onAccept?.(task)}
-                            className="px-2.5 py-1 text-xs font-medium bg-[#2D5A45] text-white rounded-lg hover:bg-[#234839] transition-colors"
-                          >Accept</button>
-                          <button
-                            onClick={() => onDecline?.(task)}
-                            className="px-2.5 py-1 text-xs font-medium border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                          >Decline</button>
+                          <button onClick={() => onAccept?.(task)}
+                            className="px-2.5 py-1 text-xs font-medium bg-[#2D5A45] text-white rounded-lg hover:bg-[#234839] transition-colors">
+                            Accept</button>
+                          <button onClick={() => onDecline?.(task)}
+                            className="px-2.5 py-1 text-xs font-medium border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors">
+                            Decline</button>
                         </>
                       )}
                       {mode === 'active' && task.status === 'pending' && (
                         <>
-                          <button
-                            onClick={() => onStart?.(task)}
-                            className="px-2.5 py-1 text-xs font-medium bg-[#2D5A45] text-white rounded-lg hover:bg-[#234839] transition-colors"
-                          >Start Journey</button>
-                          <button
-                            onClick={() => onCancel?.(task)}
-                            className="px-2.5 py-1 text-xs font-medium border border-[#E8E3DB] text-[#4A4A4A] rounded-lg hover:bg-[#F5F0E8] transition-colors"
-                          >Cancel</button>
+                          <button onClick={() => onStart?.(task)}
+                            className="px-2.5 py-1 text-xs font-medium bg-[#2D5A45] text-white rounded-lg hover:bg-[#234839] transition-colors">
+                            Start Journey</button>
+                          <button onClick={() => onHandover?.(task)}
+                            className="px-2.5 py-1 text-xs font-medium text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors flex items-center gap-1">
+                            <ArrowRightLeft className="w-3 h-3" />Handover</button>
+                          <button onClick={() => onCancel?.(task)}
+                            className="px-2.5 py-1 text-xs font-medium border border-[#E8E3DB] text-[#4A4A4A] rounded-lg hover:bg-[#F5F0E8] transition-colors">
+                            Cancel</button>
                         </>
                       )}
                       {mode === 'active' && task.status === 'in_progress' && (
                         <>
-                          <button
-                            onClick={() => onComplete?.(task)}
-                            className="px-2.5 py-1 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                          >Complete</button>
-                          <button
-                            onClick={() => onCancel?.(task)}
-                            className="px-2.5 py-1 text-xs font-medium border border-[#E8E3DB] text-[#4A4A4A] rounded-lg hover:bg-[#F5F0E8] transition-colors"
-                          >Cancel</button>
+                          <button onClick={() => onComplete?.(task)}
+                            className="px-2.5 py-1 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                            Complete</button>
+                          <button onClick={() => onHandover?.(task)}
+                            className="px-2.5 py-1 text-xs font-medium text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors flex items-center gap-1">
+                            <ArrowRightLeft className="w-3 h-3" />Handover</button>
+                          <button onClick={() => onCancel?.(task)}
+                            className="px-2.5 py-1 text-xs font-medium border border-[#E8E3DB] text-[#4A4A4A] rounded-lg hover:bg-[#F5F0E8] transition-colors">
+                            Cancel</button>
                         </>
                       )}
-                      <button
-                        onClick={() => onToggleExpand(task.id)}
+                      <button onClick={() => onToggleExpand(task.id)}
                         className="p-1 text-[#4A4A4A] hover:text-[#2D5A45] rounded-md hover:bg-[#F5F0E8] transition-colors"
-                        title={expanded ? 'Collapse' : 'Expand'}
-                      >
+                        title={expanded ? 'Collapse' : 'Expand'}>
                         {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </button>
                     </div>
@@ -306,9 +556,11 @@ export default function DriverTasksPage() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Confirm dialogs
+  // Confirm + handover dialogs
   const [declineTask, setDeclineTask]   = useState<TaskRow | null>(null);
   const [cancelTask, setCancelTask]     = useState<TaskRow | null>(null);
+  const [handoverTask, setHandoverTask] = useState<TaskRow | null>(null);
+  const [mileageDlg, setMileageDlg]    = useState<{ task: TaskRow; action: 'start' | 'complete' } | null>(null);
 
   const loadedRef = useRef(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -401,31 +653,43 @@ export default function DriverTasksPage() {
     }
   }, [declineTask]);
 
-  const handleStart = useCallback(async (task: TaskRow) => {
+  const handleStart = useCallback(async (task: TaskRow, mileage?: number | null) => {
     try {
-      await supabase
-        .from('driver_tasks')
-        .update({ status: 'in_progress', started_at: new Date().toISOString() })
-        .eq('id', task.id);
-      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'in_progress' as DriverTaskStatus } : t));
+      const patch: Record<string, unknown> = { status: 'in_progress', started_at: new Date().toISOString() };
+      if (mileage != null) patch.start_mileage = mileage;
+      await supabase.from('driver_tasks').update(patch).eq('id', task.id);
+      setTasks(prev => prev.map(t => t.id === task.id
+        ? { ...t, status: 'in_progress' as DriverTaskStatus, ...(mileage != null ? { start_mileage: mileage } : {}) }
+        : t));
       toast.success('Journey started — drive safe!');
     } catch {
       toast.error('Failed to start journey');
     }
   }, []);
 
-  const handleComplete = useCallback(async (task: TaskRow) => {
+  const handleComplete = useCallback(async (task: TaskRow, mileage?: number | null) => {
     try {
-      await supabase
-        .from('driver_tasks')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('id', task.id);
+      const patch: Record<string, unknown> = { status: 'completed', completed_at: new Date().toISOString() };
+      if (mileage != null) patch.end_mileage = mileage;
+      await supabase.from('driver_tasks').update(patch).eq('id', task.id);
       setTasks(prev => prev.filter(t => t.id !== task.id));
       toast.success('Task completed');
     } catch {
       toast.error('Failed to complete task');
     }
   }, []);
+
+  // Wrappers that open mileage dialog
+  const onStartTask    = useCallback((task: TaskRow) => setMileageDlg({ task, action: 'start' }),    []);
+  const onCompleteTask = useCallback((task: TaskRow) => setMileageDlg({ task, action: 'complete' }), []);
+
+  const handleMileageConfirm = useCallback(async (mileage: number | null) => {
+    if (!mileageDlg) return;
+    const { task, action } = mileageDlg;
+    setMileageDlg(null);
+    if (action === 'start')    await handleStart(task, mileage);
+    else                       await handleComplete(task, mileage);
+  }, [mileageDlg, handleStart, handleComplete]);
 
   const handleCancelConfirm = useCallback(async () => {
     if (!cancelTask) return;
@@ -468,8 +732,8 @@ export default function DriverTasksPage() {
     });
   }, [tasks, dateFilter, typeFilter, search, today, tomorrow, weekEnd]);
 
-  const suggested = useMemo(() => filtered.filter(t => t.is_suggestion && t.status === 'suggested'), [filtered]);
-  const active    = useMemo(() => filtered.filter(t => !t.is_suggestion && (t.status === 'pending' || t.status === 'in_progress')), [filtered]);
+  const suggested = useMemo(() => sortByPriority(filtered.filter(t => t.is_suggestion && t.status === 'suggested')), [filtered]);
+  const active    = useMemo(() => sortByPriority(filtered.filter(t => !t.is_suggestion && (t.status === 'pending' || t.status === 'in_progress'))), [filtered]);
 
   const totalCount = tasks.length;
 
@@ -559,6 +823,7 @@ export default function DriverTasksPage() {
                   onToggleExpand={toggleExpand}
                   onAccept={handleAccept}
                   onDecline={setDeclineTask}
+                  onHandover={setHandoverTask}
                 />
               </section>
             )}
@@ -577,9 +842,10 @@ export default function DriverTasksPage() {
                 mode="active"
                 expandedId={expandedId}
                 onToggleExpand={toggleExpand}
-                onStart={handleStart}
-                onComplete={handleComplete}
+                onStart={onStartTask}
+                onComplete={onCompleteTask}
                 onCancel={setCancelTask}
+                onHandover={setHandoverTask}
               />
             </section>
           </div>
@@ -606,6 +872,27 @@ export default function DriverTasksPage() {
         confirmCls="bg-red-600 hover:bg-red-700 text-white"
         onConfirm={handleCancelConfirm}
         onCancel={() => setCancelTask(null)}
+      />
+
+      {/* Mileage dialog */}
+      <MileageDlg
+        open={!!mileageDlg}
+        action={mileageDlg?.action ?? 'start'}
+        task={mileageDlg?.task ?? null}
+        onConfirm={handleMileageConfirm}
+        onCancel={() => setMileageDlg(null)}
+      />
+
+      {/* Handover dialog */}
+      <HandoverDialog
+        open={!!handoverTask}
+        onClose={() => setHandoverTask(null)}
+        task={handoverTask}
+        locationName={user?.location}
+        onHandedOver={(taskId) => {
+          setTasks(prev => prev.filter(t => t.id !== taskId));
+          setHandoverTask(null);
+        }}
       />
     </div>
   );

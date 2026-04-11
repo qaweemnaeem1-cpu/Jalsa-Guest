@@ -19,16 +19,19 @@ export interface User {
   isAvailable?: boolean;
 }
 
-export type DriverTaskType = 'airport_pickup' | 'airport_dropoff' | 'mulaqat_transport' | 'other';
-export type DriverTaskStatus = 'suggested' | 'pending' | 'in_progress' | 'completed';
+export type DriverTaskType     = 'airport_pickup' | 'airport_dropoff' | 'mulaqat_transport' | 'other';
+export type DriverTaskStatus   = 'suggested' | 'pending' | 'in_progress' | 'completed';
+export type DriverTaskPriority = 'normal' | 'urgent' | 'vip';
 
 export interface DriverTask {
   id: string;
   driver_id: string;
   task_type: DriverTaskType;
   status: DriverTaskStatus;
+  priority?: DriverTaskPriority;
   scheduled_date: string;   // YYYY-MM-DD
   scheduled_time?: string;  // HH:MM
+  guest_id?: string;
   guest_name?: string;
   delegation_name?: string;
   pickup_location?: string;
@@ -38,6 +41,23 @@ export interface DriverTask {
   notes?: string;
   started_at?: string;
   completed_at?: string;
+  start_mileage?: number;
+  end_mileage?: number;
+  // Handover fields
+  handed_over_from?: string;      // previous driver_id
+  handed_over_from_name?: string; // previous driver name
+  handed_over_at?: string;        // ISO timestamp
+  handover_reason?: string;
+}
+
+/** One row in driver_task_passengers — each guest in a batch pickup */
+export interface DriverTaskPassenger {
+  id: string;
+  task_id: string;
+  guest_id?: string;
+  guest_name: string;
+  guest_phone?: string;
+  guest_photo?: string;
 }
 
 export type FamilyMemberStatus =

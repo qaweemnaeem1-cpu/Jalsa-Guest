@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Star, Loader2, Eye, ClipboardList, Pencil } from 'lucide-react';
+import { Star, Loader2, Eye, ClipboardList, Pencil, MessageCircle, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { DriverSidebar } from '@/components/DriverSidebar';
@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { DriverTask } from '@/types';
+import { DriverMessagesDialog } from '@/components/DriverMessagesDialog';
+import { AddMaintenanceDialog, ViewMaintenanceLogDialog } from '@/components/VehicleMaintenanceDialog';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -245,8 +247,11 @@ export default function DriverAllDriversPage() {
   const [drivers, setDrivers]       = useState<DriverRow[]>([]);
   const [loading, setLoading]       = useState(true);
   const [viewDriver, setViewDriver] = useState<DriverRow | null>(null);
-  const [editDriver, setEditDriver] = useState<DriverRow | null>(null);
-  const loadedRef                   = useRef(false);
+  const [editDriver, setEditDriver]   = useState<DriverRow | null>(null);
+  const [msgDriver, setMsgDriver]     = useState<DriverRow | null>(null);
+  const [maintViewDriver, setMaintViewDriver] = useState<DriverRow | null>(null);
+  const [maintAddDriver, setMaintAddDriver]   = useState<DriverRow | null>(null);
+  const loadedRef                     = useRef(false);
 
   // ── fetch drivers + today task counts ───────────────────────────────────────
   useEffect(() => {
@@ -392,6 +397,20 @@ export default function DriverAllDriversPage() {
                               <Eye className="w-3.5 h-3.5" /> View Tasks
                             </button>
                             <button
+                              onClick={() => setMsgDriver(driver)}
+                              className="p-1.5 text-[#4A4A4A] hover:text-[#2D5A45] rounded-md hover:bg-[#F5F0E8] transition-colors"
+                              title="Messages"
+                            >
+                              <MessageCircle className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setMaintViewDriver(driver)}
+                              className="p-1.5 text-[#4A4A4A] hover:text-[#2D5A45] rounded-md hover:bg-[#F5F0E8] transition-colors"
+                              title="Maintenance Log"
+                            >
+                              <Wrench className="w-4 h-4" />
+                            </button>
+                            <button
                               onClick={() => setEditDriver(driver)}
                               className="p-1.5 text-[#4A4A4A] hover:text-[#2D5A45] rounded-md hover:bg-[#F5F0E8] transition-colors"
                               title="Edit vehicle"
@@ -412,6 +431,34 @@ export default function DriverAllDriversPage() {
 
       <DriverTasksDialog driver={viewDriver} onClose={() => setViewDriver(null)} />
       <EditVehicleDialog driver={editDriver} onClose={() => setEditDriver(null)} onSaved={handleVehicleSaved} />
+      {user && (
+        <DriverMessagesDialog
+          open={!!msgDriver}
+          onClose={() => setMsgDriver(null)}
+          driverId={msgDriver?.id ?? ''}
+          driverName={msgDriver?.name ?? ''}
+          currentUser={{ id: user.id, name: user.name, role: user.role }}
+        />
+      )}
+
+      {maintViewDriver && (
+        <ViewMaintenanceLogDialog
+          open={!!maintViewDriver}
+          onClose={() => setMaintViewDriver(null)}
+          driverId={maintViewDriver.id}
+          driverName={maintViewDriver.name}
+          onAddEntry={() => { setMaintAddDriver(maintViewDriver); setMaintViewDriver(null); }}
+        />
+      )}
+
+      {maintAddDriver && (
+        <AddMaintenanceDialog
+          open={!!maintAddDriver}
+          onClose={() => setMaintAddDriver(null)}
+          driverId={maintAddDriver.id}
+          onSaved={() => setMaintAddDriver(null)}
+        />
+      )}
     </div>
   );
 }
