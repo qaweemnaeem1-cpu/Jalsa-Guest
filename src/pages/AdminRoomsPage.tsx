@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { SortableHeader, sortData } from '@/components/SortableHeader';
 import { useNavigate } from 'react-router-dom';
 import {
   BedDouble, Plus, Pencil, Trash2, MoveRight, UserX,
@@ -151,6 +152,14 @@ export default function AdminRoomsPage() {
 
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [deptFilter, setDeptFilter] = useState('all');
+
+  // List-view sort
+  const [roomSortCol, setRoomSortCol] = useState<string | null>(null);
+  const [roomSortDir, setRoomSortDir] = useState<'asc' | 'desc'>('asc');
+  const handleRoomSort = (col: string) => {
+    if (roomSortCol === col) setRoomSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setRoomSortCol(col); setRoomSortDir('asc'); }
+  };
   const [locFilter, setLocFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
@@ -874,13 +883,23 @@ export default function AdminRoomsPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-[#E8E3DB] bg-[#F9F8F6]">
-                        {['Department', 'Location', 'Block', 'Room', 'Cap.', 'Occ.', 'Avail.', 'Occupancy', 'Status', 'Dates', 'Notes', 'Actions'].map(h => (
-                          <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider whitespace-nowrap">{h}</th>
-                        ))}
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Department</th>
+                        <SortableHeader label="Location" column="locationId" sortCol={roomSortCol} sortDir={roomSortDir} onSort={handleRoomSort} />
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Block</th>
+                        <SortableHeader label="Room" column="name" sortCol={roomSortCol} sortDir={roomSortDir} onSort={handleRoomSort} />
+                        <SortableHeader label="Cap." column="capacity" sortCol={roomSortCol} sortDir={roomSortDir} onSort={handleRoomSort} />
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Occ.</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Avail.</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Occupancy</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Status</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Dates</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Notes</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E8E3DB]">
-                      {filteredRooms.map(room => {
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      {(sortData(filteredRooms as any[], roomSortCol, roomSortDir) as typeof filteredRooms).map(room => {
                         const dept = locToDept.get(room.locationId) ?? '—';
                         const block = room.blockId ? blocks.find(b => b.id === room.blockId) : null;
                         const occ = getOccupancy(room.id);

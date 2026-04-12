@@ -3,6 +3,7 @@
  * Sub-tabs: Drivers | Tasks | Suggestions
  */
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { SortableHeader, sortData } from '@/components/SortableHeader';
 import {
   Plus, Eye, Pencil, Trash2, Car, Users, CheckCircle2, ClipboardList, FileText,
   MessageCircle, Wrench, ChevronDown, ChevronUp, ArrowLeftRight, BarChart3, MapPin, ExternalLink,
@@ -145,6 +146,14 @@ export default function AdminDriversPage() {
   const [locFilter, setLocFilter]     = useState('');
   const [statFilter, setStatFilter]   = useState('');
   const [taskStatus, setTaskStatus]   = useState('');
+
+  // drivers table sort
+  const [driverSortCol, setDriverSortCol] = useState<string | null>(null);
+  const [driverSortDir, setDriverSortDir] = useState<'asc' | 'desc'>('asc');
+  const handleDriverSort = (col: string) => {
+    if (driverSortCol === col) setDriverSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setDriverSortCol(col); setDriverSortDir('asc'); }
+  };
 
   // existing dialogs
   const [formOpen, setFormOpen]         = useState(false);
@@ -801,16 +810,17 @@ export default function AdminDriversPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-[#E8E3DB] bg-[#F5F0E8]">
-                        <th className="px-4 py-3 text-left font-medium text-[#4A4A4A]">Name</th>
-                        <th className="px-4 py-3 text-left font-medium text-[#4A4A4A]">Dept / Location</th>
-                        <th className="px-4 py-3 text-left font-medium text-[#4A4A4A]">Vehicle</th>
-                        <th className="px-4 py-3 text-left font-medium text-[#4A4A4A]">Status</th>
-                        <th className="px-4 py-3 text-left font-medium text-[#4A4A4A]">Today</th>
-                        <th className="px-4 py-3 text-left font-medium text-[#4A4A4A]">Actions</th>
+                        <SortableHeader label="Name" column="name" sortCol={driverSortCol} sortDir={driverSortDir} onSort={handleDriverSort} />
+                        <SortableHeader label="Dept / Location" column="location" sortCol={driverSortCol} sortDir={driverSortDir} onSort={handleDriverSort} />
+                        <SortableHeader label="Vehicle" column="vehicle_type" sortCol={driverSortCol} sortDir={driverSortDir} onSort={handleDriverSort} />
+                        <SortableHeader label="Status" column="is_available" sortCol={driverSortCol} sortDir={driverSortDir} onSort={handleDriverSort} />
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Today</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E8E3DB]">
-                      {filteredDrivers.map(d => (
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      {(sortData(filteredDrivers as any[], driverSortCol, driverSortDir) as typeof filteredDrivers).map(d => (
                         <tr key={d.id} className="hover:bg-[#F5F0E8]/50 transition-colors">
                           <td className="px-4 py-3">
                             <div className="font-medium text-[#1A1A1A]">{d.name}</div>

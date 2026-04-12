@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { SortableHeader, sortData } from '@/components/SortableHeader';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useUsers, USER_TYPE_LABELS, type UserType, type SystemUser } from '@/hooks/useUsers';
@@ -205,6 +206,20 @@ export default function UsersPage() {
   // Eye toggle for edit modal password field
   const [editPwVisible, setEditPwVisible] = useState(false);
 
+  // ── Sort states (one pair per table section) ───────────────────────────────
+  const [diSortCol, setDiSortCol] = useState<string | null>(null);
+  const [diSortDir, setDiSortDir] = useState<'asc' | 'desc'>('asc');
+  const [coordSortCol, setCoordSortCol] = useState<string | null>(null);
+  const [coordSortDir, setCoordSortDir] = useState<'asc' | 'desc'>('asc');
+  const [deptHeadSortCol, setDeptHeadSortCol] = useState<string | null>(null);
+  const [deptHeadSortDir, setDeptHeadSortDir] = useState<'asc' | 'desc'>('asc');
+  const [locMgrSortCol, setLocMgrSortCol] = useState<string | null>(null);
+  const [locMgrSortDir, setLocMgrSortDir] = useState<'asc' | 'desc'>('asc');
+  const [headDriverSortCol, setHeadDriverSortCol] = useState<string | null>(null);
+  const [headDriverSortDir, setHeadDriverSortDir] = useState<'asc' | 'desc'>('asc');
+  const [regDriverSortCol, setRegDriverSortCol] = useState<string | null>(null);
+  const [regDriverSortDir, setRegDriverSortDir] = useState<'asc' | 'desc'>('asc');
+
   // Fetch drivers when switching to driver tab
   useEffect(() => {
     if (activeTab !== 'driver') return;
@@ -261,7 +276,9 @@ export default function UsersPage() {
   }, [coordinators, searchQuery]);
 
   const coordTotalPages = Math.max(1, Math.ceil(filteredCoordinators.length / COORD_PAGE_SIZE));
-  const pagedCoordinators = filteredCoordinators.slice(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sortedCoordinators = sortData(filteredCoordinators as any[], coordSortCol, coordSortDir);
+  const pagedCoordinators = sortedCoordinators.slice(
     (coordPage - 1) * COORD_PAGE_SIZE,
     coordPage * COORD_PAGE_SIZE
   );
@@ -571,6 +588,39 @@ export default function UsersPage() {
 
   const stats = getStats();
 
+  // ── Sort handlers ──────────────────────────────────────────────────────────
+  const makeSort = useCallback((
+    setCol: React.Dispatch<React.SetStateAction<string | null>>,
+    setDir: React.Dispatch<React.SetStateAction<'asc' | 'desc'>>,
+    currentCol: string | null,
+  ) => (col: string) => {
+    if (currentCol === col) {
+      setDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setCol(col);
+      setDir('asc');
+    }
+  }, []);
+
+  const handleDiSort = makeSort(setDiSortCol, setDiSortDir, diSortCol);
+  const handleCoordSort = makeSort(setCoordSortCol, setCoordSortDir, coordSortCol);
+  const handleDeptHeadSort = makeSort(setDeptHeadSortCol, setDeptHeadSortDir, deptHeadSortCol);
+  const handleLocMgrSort = makeSort(setLocMgrSortCol, setLocMgrSortDir, locMgrSortCol);
+  const handleHeadDriverSort = makeSort(setHeadDriverSortCol, setHeadDriverSortDir, headDriverSortCol);
+  const handleRegDriverSort = makeSort(setRegDriverSortCol, setRegDriverSortDir, regDriverSortCol);
+
+  // ── Sorted data ────────────────────────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sortedDiUsers = sortData(filteredUsers as any[], diSortCol, diSortDir) as SystemUser[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sortedDeptHeads = sortData(filteredDeptHeads as any[], deptHeadSortCol, deptHeadSortDir) as SystemUser[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sortedLocManagers = sortData(filteredLocManagers as any[], locMgrSortCol, locMgrSortDir) as SystemUser[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sortedHeadDrivers = sortData(headDrivers as any[], headDriverSortCol, headDriverSortDir) as DriverRow[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sortedRegDrivers = sortData(filteredRegularDrivers as any[], regDriverSortCol, regDriverSortDir) as DriverRow[];
+
   return (
     <div className="min-h-screen bg-[#F5F0E8]">
       <div className="flex">
@@ -854,25 +904,25 @@ export default function UsersPage() {
                       <table className="w-full">
                         <thead className="bg-[#F9F8F6]">
                           <tr>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Name</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Email</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Password</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Department</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Locations</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Phone</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Status</th>
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-[#1A1A1A]">Actions</th>
+                            <SortableHeader label="Name" column="name" sortCol={deptHeadSortCol} sortDir={deptHeadSortDir} onSort={handleDeptHeadSort} />
+                            <SortableHeader label="Email" column="email" sortCol={deptHeadSortCol} sortDir={deptHeadSortDir} onSort={handleDeptHeadSort} />
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Password</th>
+                            <SortableHeader label="Department" column="department" sortCol={deptHeadSortCol} sortDir={deptHeadSortDir} onSort={handleDeptHeadSort} />
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Locations</th>
+                            <SortableHeader label="Phone" column="phone" sortCol={deptHeadSortCol} sortDir={deptHeadSortDir} onSort={handleDeptHeadSort} />
+                            <SortableHeader label="Status" column="isActive" sortCol={deptHeadSortCol} sortDir={deptHeadSortDir} onSort={handleDeptHeadSort} />
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#E8E3DB]">
-                          {filteredDeptHeads.length === 0 ? (
+                          {sortedDeptHeads.length === 0 ? (
                             <tr>
                               <td colSpan={8} className="px-4 py-8 text-center text-[#4A4A4A]">
                                 No department heads found.
                               </td>
                             </tr>
                           ) : (
-                            filteredDeptHeads.map((u) => (
+                            sortedDeptHeads.map((u) => (
                               <tr key={u.id} className="hover:bg-[#FAFAFA]">
                                 <td className="px-4 py-3">
                                   <div className="flex items-center gap-3">
@@ -1152,26 +1202,26 @@ export default function UsersPage() {
                       <table className="w-full">
                         <thead className="bg-[#F9F8F6]">
                           <tr>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Name</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Email</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Password</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Department</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Location</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Rooms</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Phone</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Status</th>
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-[#1A1A1A]">Actions</th>
+                            <SortableHeader label="Name" column="name" sortCol={locMgrSortCol} sortDir={locMgrSortDir} onSort={handleLocMgrSort} />
+                            <SortableHeader label="Email" column="email" sortCol={locMgrSortCol} sortDir={locMgrSortDir} onSort={handleLocMgrSort} />
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Password</th>
+                            <SortableHeader label="Department" column="department" sortCol={locMgrSortCol} sortDir={locMgrSortDir} onSort={handleLocMgrSort} />
+                            <SortableHeader label="Location" column="location" sortCol={locMgrSortCol} sortDir={locMgrSortDir} onSort={handleLocMgrSort} />
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Rooms</th>
+                            <SortableHeader label="Phone" column="phone" sortCol={locMgrSortCol} sortDir={locMgrSortDir} onSort={handleLocMgrSort} />
+                            <SortableHeader label="Status" column="isActive" sortCol={locMgrSortCol} sortDir={locMgrSortDir} onSort={handleLocMgrSort} />
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#E8E3DB]">
-                          {filteredLocManagers.length === 0 ? (
+                          {sortedLocManagers.length === 0 ? (
                             <tr>
                               <td colSpan={9} className="px-4 py-8 text-center text-[#4A4A4A]">
                                 No location managers found.
                               </td>
                             </tr>
                           ) : (
-                            filteredLocManagers.map((u) => (
+                            sortedLocManagers.map((u) => (
                               <tr key={u.id} className="hover:bg-[#FAFAFA]">
                                 <td className="px-4 py-3">
                                   <div className="flex items-center gap-3">
@@ -1283,15 +1333,21 @@ export default function UsersPage() {
                           <table className="w-full">
                             <thead className="bg-[#F9F8F6]">
                               <tr>
-                                {['Name','Email','Password','Department','Location','Vehicle','Phone','Status','Actions'].map(h => (
-                                  <th key={h} className={`px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A] ${h === 'Actions' ? 'text-right' : ''}`}>{h}</th>
-                                ))}
+                                <SortableHeader label="Name" column="name" sortCol={headDriverSortCol} sortDir={headDriverSortDir} onSort={handleHeadDriverSort} />
+                                <SortableHeader label="Email" column="email" sortCol={headDriverSortCol} sortDir={headDriverSortDir} onSort={handleHeadDriverSort} />
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Password</th>
+                                <SortableHeader label="Department" column="department" sortCol={headDriverSortCol} sortDir={headDriverSortDir} onSort={handleHeadDriverSort} />
+                                <SortableHeader label="Location" column="location" sortCol={headDriverSortCol} sortDir={headDriverSortDir} onSort={handleHeadDriverSort} />
+                                <SortableHeader label="Vehicle" column="vehicle_type" sortCol={headDriverSortCol} sortDir={headDriverSortDir} onSort={handleHeadDriverSort} />
+                                <SortableHeader label="Phone" column="phone" sortCol={headDriverSortCol} sortDir={headDriverSortDir} onSort={handleHeadDriverSort} />
+                                <SortableHeader label="Status" column="is_available" sortCol={headDriverSortCol} sortDir={headDriverSortDir} onSort={handleHeadDriverSort} />
+                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-[#E8E3DB]">
-                              {headDrivers.length === 0 ? (
+                              {sortedHeadDrivers.length === 0 ? (
                                 <tr><td colSpan={9} className="px-4 py-8 text-center text-[#4A4A4A]">No Nazim Transport found. Click "Add" to create one.</td></tr>
-                              ) : headDrivers.map(d => (
+                              ) : sortedHeadDrivers.map(d => (
                                 <tr key={d.id} className="hover:bg-[#FAFAFA]">
                                   <td className="px-4 py-3">
                                     <div className="flex items-center gap-3">
@@ -1385,17 +1441,24 @@ export default function UsersPage() {
                           <table className="w-full">
                             <thead className="bg-[#F9F8F6]">
                               <tr>
-                                {['Name','Email','Password','Department','Location','Nazim Transport','Vehicle','Phone','Status','Actions'].map(h => (
-                                  <th key={h} className={`px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A] whitespace-nowrap ${h === 'Actions' ? 'text-right' : ''}`}>{h}</th>
-                                ))}
+                                <SortableHeader label="Name" column="name" sortCol={regDriverSortCol} sortDir={regDriverSortDir} onSort={handleRegDriverSort} />
+                                <SortableHeader label="Email" column="email" sortCol={regDriverSortCol} sortDir={regDriverSortDir} onSort={handleRegDriverSort} />
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Password</th>
+                                <SortableHeader label="Department" column="department" sortCol={regDriverSortCol} sortDir={regDriverSortDir} onSort={handleRegDriverSort} />
+                                <SortableHeader label="Location" column="location" sortCol={regDriverSortCol} sortDir={regDriverSortDir} onSort={handleRegDriverSort} />
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Nazim Transport</th>
+                                <SortableHeader label="Vehicle" column="vehicle_type" sortCol={regDriverSortCol} sortDir={regDriverSortDir} onSort={handleRegDriverSort} />
+                                <SortableHeader label="Phone" column="phone" sortCol={regDriverSortCol} sortDir={regDriverSortDir} onSort={handleRegDriverSort} />
+                                <SortableHeader label="Status" column="is_available" sortCol={regDriverSortCol} sortDir={regDriverSortDir} onSort={handleRegDriverSort} />
+                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-[#E8E3DB]">
-                              {filteredRegularDrivers.length === 0 ? (
+                              {sortedRegDrivers.length === 0 ? (
                                 <tr><td colSpan={10} className="px-4 py-8 text-center text-[#4A4A4A]">
                                   {regularDrivers.length === 0 ? 'No drivers found. Click "Add Driver" to create one.' : 'No drivers match your search.'}
                                 </td></tr>
-                              ) : filteredRegularDrivers.map(d => {
+                              ) : sortedRegDrivers.map(d => {
                                 const nazim = getNazimTransport(d);
                                 return (
                                   <tr key={d.id} className="hover:bg-[#FAFAFA]">
@@ -1474,21 +1537,37 @@ export default function UsersPage() {
                     <table className="w-full">
                       <thead className="bg-[#F9F8F6]">
                         <tr>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Name</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Email</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Password</th>
+                          {activeTab === 'coordinator' ? (
+                            <SortableHeader label="Name" column="name" sortCol={coordSortCol} sortDir={coordSortDir} onSort={handleCoordSort} />
+                          ) : (
+                            <SortableHeader label="Name" column="name" sortCol={diSortCol} sortDir={diSortDir} onSort={handleDiSort} />
+                          )}
+                          {activeTab === 'coordinator' ? (
+                            <SortableHeader label="Email" column="email" sortCol={coordSortCol} sortDir={coordSortDir} onSort={handleCoordSort} />
+                          ) : (
+                            <SortableHeader label="Email" column="email" sortCol={diSortCol} sortDir={diSortDir} onSort={handleDiSort} />
+                          )}
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Password</th>
                           {activeTab === 'coordinator' && (
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Country</th>
+                            <SortableHeader label="Country" column="country" sortCol={coordSortCol} sortDir={coordSortDir} onSort={handleCoordSort} />
                           )}
                           {activeTab === 'coordinator' && (
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Desk Incharge</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Desk Incharge</th>
                           )}
                           {activeTab === 'desk-in-charge' && (
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Countries</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Countries</th>
                           )}
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Phone</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Status</th>
-                          <th className="px-4 py-3 text-right text-sm font-semibold text-[#1A1A1A]">Actions</th>
+                          {activeTab === 'coordinator' ? (
+                            <SortableHeader label="Phone" column="phone" sortCol={coordSortCol} sortDir={coordSortDir} onSort={handleCoordSort} />
+                          ) : (
+                            <SortableHeader label="Phone" column="phone" sortCol={diSortCol} sortDir={diSortDir} onSort={handleDiSort} />
+                          )}
+                          {activeTab === 'coordinator' ? (
+                            <SortableHeader label="Status" column="isActive" sortCol={coordSortCol} sortDir={coordSortDir} onSort={handleCoordSort} />
+                          ) : (
+                            <SortableHeader label="Status" column="isActive" sortCol={diSortCol} sortDir={diSortDir} onSort={handleDiSort} />
+                          )}
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#E8E3DB]">
@@ -1570,14 +1649,14 @@ export default function UsersPage() {
                               </tr>
                             ))
                           )
-                        ) : filteredUsers.length === 0 ? (
+                        ) : sortedDiUsers.length === 0 ? (
                           <tr>
                             <td colSpan={6} className="px-4 py-8 text-center text-[#4A4A4A]">
                               No {USER_TYPE_LABELS[activeTab].toLowerCase()} found. Click "Add" to create one.
                             </td>
                           </tr>
                         ) : (
-                          filteredUsers.map((u) => (
+                          sortedDiUsers.map((u) => (
                             <tr key={u.id} className="hover:bg-[#FAFAFA]">
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-3">

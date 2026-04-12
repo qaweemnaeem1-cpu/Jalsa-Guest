@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { SortableHeader, sortData } from '@/components/SortableHeader';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useAssignableItems, type AssignableItem } from '@/hooks/useAssignableItems';
@@ -305,6 +306,14 @@ export default function CountriesDepartmentsPage() {
   // Pagination
   const [page, setPage] = useState(1);
 
+  // Sort
+  const [sortCol, setSortCol] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const handleSort = (col: string) => {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('asc'); }
+  };
+
   // Dialogs
   const [addEditItem, setAddEditItem] = useState<AssignableItem | null | 'new'>( null); // null=closed, 'new'=add, item=edit
   const [deletingItem, setDeletingItem] = useState<AssignableItem | null>(null);
@@ -346,9 +355,11 @@ export default function CountriesDepartmentsPage() {
   const activeDepts = departments.filter(d => d.isActive).length;
   const totalAssigned = useMemo(() => Object.keys(itemToDIs).length, [itemToDIs]);
 
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
-  const pagedItems = filteredItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  // Pagination (sort before paging)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sortedItems = sortData(filteredItems as any[], sortCol, sortDir) as AssignableItem[];
+  const totalPages = Math.max(1, Math.ceil(sortedItems.length / PAGE_SIZE));
+  const pagedItems = sortedItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const resetPage = () => setPage(1);
 
@@ -536,12 +547,12 @@ export default function CountriesDepartmentsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[#E8E3DB] bg-[#F9F8F6]">
-                    <th className="text-left px-4 py-3 font-medium text-[#4A4A4A]">Name</th>
-                    <th className="text-left px-4 py-3 font-medium text-[#4A4A4A]">Type</th>
-                    <th className="text-left px-4 py-3 font-medium text-[#4A4A4A]">Continent / Category</th>
-                    <th className="text-left px-4 py-3 font-medium text-[#4A4A4A]">Assigned To</th>
-                    <th className="text-left px-4 py-3 font-medium text-[#4A4A4A]">Status</th>
-                    <th className="text-right px-4 py-3 font-medium text-[#4A4A4A]">Actions</th>
+                    <SortableHeader label="Name" column="name" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                    <SortableHeader label="Type" column="type" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                    <SortableHeader label="Continent / Category" column="continent" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned To</th>
+                    <SortableHeader label="Status" column="isActive" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody>

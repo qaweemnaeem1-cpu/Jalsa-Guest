@@ -12,6 +12,8 @@ import {
   Users,
   Briefcase,
   ChevronDown,
+  ChevronUp,
+  ChevronsUpDown,
   LogOut,
   Plus,
   Trash2,
@@ -70,6 +72,14 @@ export default function DesignationListPage() {
   const [newDesignationName, setNewDesignationName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+
+  // Sort state
+  const [desigSortCol, setDesigSortCol] = useState<'name' | 'isActive' | null>(null);
+  const [desigSortDir, setDesigSortDir] = useState<'asc' | 'desc'>('asc');
+  const handleDesigSort = (col: 'name' | 'isActive') => {
+    if (desigSortCol === col) setDesigSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setDesigSortCol(col); setDesigSortDir('asc'); }
+  };
 
   if (!user) return null;
 
@@ -244,16 +254,38 @@ export default function DesignationListPage() {
 
                 <div className="border border-[#E8E3DB] rounded-lg overflow-hidden">
                   <div className="bg-[#F9F8F6] px-4 py-3 border-b border-[#E8E3DB] flex items-center justify-between">
-                    <span className="font-medium text-[#1A1A1A]">Designation Name</span>
-                    <span className="font-medium text-[#1A1A1A]">Status</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDesigSort('name')}
+                      className={`flex items-center gap-1 text-xs font-semibold uppercase tracking-wider cursor-pointer select-none transition-colors ${desigSortCol === 'name' ? 'text-[#2D5A45]' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                      Designation Name
+                      {desigSortCol === 'name' ? (desigSortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ChevronsUpDown className="w-3 h-3 opacity-40" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDesigSort('isActive')}
+                      className={`flex items-center gap-1 text-xs font-semibold uppercase tracking-wider cursor-pointer select-none transition-colors ${desigSortCol === 'isActive' ? 'text-[#2D5A45]' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                      Status
+                      {desigSortCol === 'isActive' ? (desigSortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ChevronsUpDown className="w-3 h-3 opacity-40" />}
+                    </button>
                   </div>
                   <div className="max-h-[400px] overflow-y-auto">
                     {designations.length === 0 ? (
                       <div className="p-8 text-center text-[#4A4A4A]">No designations found. Add your first designation above.</div>
                     ) : (
-                      designations
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map(designation => (
+                      (() => {
+                        const sorted = desigSortCol
+                          ? [...designations].sort((a, b) => {
+                              const va = desigSortCol === 'name' ? a.name.toLowerCase() : String(a.isActive);
+                              const vb = desigSortCol === 'name' ? b.name.toLowerCase() : String(b.isActive);
+                              if (va < vb) return desigSortDir === 'asc' ? -1 : 1;
+                              if (va > vb) return desigSortDir === 'asc' ? 1 : -1;
+                              return 0;
+                            })
+                          : [...designations].sort((a, b) => a.name.localeCompare(b.name));
+                        return sorted.map(designation => (
                           <div
                             key={designation.id}
                             className="px-4 py-3 border-b border-[#E8E3DB] last:border-b-0 flex items-center justify-between hover:bg-[#FAFAFA]"
@@ -299,7 +331,8 @@ export default function DesignationListPage() {
                               </>
                             )}
                           </div>
-                        ))
+                        ));
+                      })()
                     )}
                   </div>
                 </div>
