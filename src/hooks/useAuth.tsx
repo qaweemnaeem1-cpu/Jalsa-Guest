@@ -23,16 +23,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
   const checkedRef = useRef(false);
 
-  // Restore session from localStorage on mount (no DB call)
+  // Restore session from sessionStorage on mount — each tab has its own session
   useEffect(() => {
     if (checkedRef.current) return;
     checkedRef.current = true;
-    const stored = localStorage.getItem(SESSION_KEY);
+    const stored = sessionStorage.getItem(SESSION_KEY);
     if (stored) {
       try {
         setUser(JSON.parse(stored) as User);
       } catch {
-        localStorage.removeItem(SESSION_KEY);
+        sessionStorage.removeItem(SESSION_KEY);
       }
     }
     setIsLoading(false);
@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('[auth] Logged in user:', JSON.stringify(normalizedUser));
 
       setUser(normalizedUser);
-      localStorage.setItem(SESSION_KEY, JSON.stringify(normalizedUser));
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(normalizedUser));
       setAuthError(null);
       return true;
     } catch {
@@ -96,14 +96,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setUser(null);
     setAuthError(null);
-    localStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
   }, []);
 
   const updateUser = useCallback((updates: Partial<User>) => {
     setUser(prev => {
       if (!prev) return prev;
       const updated = { ...prev, ...updates };
-      localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(updated));
       return updated;
     });
   }, []);

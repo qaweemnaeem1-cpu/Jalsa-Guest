@@ -14,6 +14,7 @@ export interface SystemUser {
   id: string;
   name: string;
   email: string;
+  password?: string;
   userType: UserType;
   country?: string;
   countryCode?: string;
@@ -35,6 +36,7 @@ function rowToUser(row: any): SystemUser {
     id: row.id,
     name: row.name,
     email: row.email,
+    password: row.password_hash ?? undefined,
     userType: row.role as UserType,
     country: row.country ?? undefined,
     assignedCountries: (row.assigned_countries as string[]) ?? undefined,
@@ -47,7 +49,7 @@ function rowToUser(row: any): SystemUser {
 }
 
 const USER_SELECT =
-  'id, name, email, phone, role, country, assigned_countries, department, location, is_active, created_at';
+  'id, name, email, password_hash, phone, role, country, assigned_countries, department, location, is_active, created_at';
 
 interface UsersContextType {
   users: SystemUser[];
@@ -95,16 +97,17 @@ export function UsersProvider({ children }: { children: ReactNode }) {
       .channel('users-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, (payload) => {
         if (payload.eventType === 'INSERT') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { password_hash: _, ...safeRow } = payload.new as any;
-          const user = rowToUser(safeRow);
+          const user = rowToUser(payload.new as any);
           setUsers(prev => prev.some(u => u.id === user.id) ? prev : [...prev, user]);
         }
         if (payload.eventType === 'UPDATE') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { password_hash: _, ...safeRow } = payload.new as any;
-          const updated = rowToUser(safeRow);
-          setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
+          const updated = rowToUser(payload.new as any);
+          // Preserve existing password if realtime payload omits it
+          setUsers(prev => prev.map(u =>
+            u.id === updated.id
+              ? { ...updated, password: updated.password ?? u.password }
+              : u,
+          ));
         }
         if (payload.eventType === 'DELETE') {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -155,6 +158,7 @@ export function UsersProvider({ children }: { children: ReactNode }) {
     if (updates.department   !== undefined) dbUpdates.department        = updates.department ?? null;
     if (updates.location     !== undefined) dbUpdates.location          = updates.location ?? null;
     if (updates.assignedCountries !== undefined) dbUpdates.assigned_countries = updates.assignedCountries ?? null;
+    if (updates.password) dbUpdates.password_hash = updates.password;
 
     const { data, error } = await supabase
       .from('users')

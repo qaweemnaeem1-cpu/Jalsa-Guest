@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useCallback } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { GuestsProvider } from '@/hooks/useGuests';
 import { DesignationsProvider } from '@/hooks/useDesignations';
@@ -9,7 +10,9 @@ import { AuditTrailProvider } from '@/hooks/useAuditTrail';
 import { AuditTrail2Provider } from '@/hooks/useAuditTrail2';
 import { DepartmentsProvider } from '@/hooks/useDepartments';
 import { RoomsProvider } from '@/hooks/useRooms';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
+import { useSessionTimeout } from '@/hooks/useSessionTimeout';
+import { SessionWarningDialog } from '@/components/SessionWarningDialog';
 
 import LandingPage from '@/pages/LandingPage';
 import LoginPage from '@/pages/LoginPage';
@@ -90,9 +93,30 @@ function DashboardOrRedirect() {
   return <DashboardPage />;
 }
 
+const SESSION_KEY = 'jalsa_guest_session';
+
+/** Runs inside BrowserRouter + AuthProvider — wires up inactivity timeout. */
+function SessionManager() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleAutoLogout = useCallback(() => {
+    sessionStorage.removeItem(SESSION_KEY);
+    logout();
+    navigate('/login', { replace: true });
+    toast.error('You have been logged out due to 45 minutes of inactivity');
+  }, [logout, navigate]);
+
+  useSessionTimeout(handleAutoLogout, !!user);
+
+  return <SessionWarningDialog />;
+}
+
 function AppRoutes() {
   return (
-    <Routes>
+    <>
+      <SessionManager />
+      <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route
@@ -190,6 +214,7 @@ function AppRoutes() {
       <Route path="/driver/vehicles"    element={<ProtectedRoute requiredRoles={['driver']}><DriverVehiclesPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }
 

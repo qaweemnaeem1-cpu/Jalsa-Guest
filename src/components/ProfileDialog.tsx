@@ -99,7 +99,7 @@ export function ProfileDialog({ open, onClose }: ProfileDialogProps) {
     // Save new password
     const { error } = await supabase
       .from('users')
-      .update({ password: newPassword, updated_at: new Date().toISOString() })
+      .update({ password_hash: newPassword, updated_at: new Date().toISOString() })
       .eq('id', user.id);
 
     setSavingPw(false);

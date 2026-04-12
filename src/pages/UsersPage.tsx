@@ -98,6 +98,7 @@ interface DriverRow {
   id: string;
   name: string;
   email: string;
+  password_hash?: string | null;
   phone?: string | null;
   department?: string | null;
   location?: string | null;
@@ -193,12 +194,23 @@ export default function UsersPage() {
   const [deleteDriverTaskCount, setDeleteDriverTaskCount] = useState(0);
   const [deleteDriverDeleting, setDeleteDriverDeleting] = useState(false);
 
+  // ── Quick change-password dialog (super admin) ─────────────────────────────
+  const [pwTarget, setPwTarget] = useState<{ id: string; name: string; email: string } | null>(null);
+  const [pwNew, setPwNew] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError] = useState('');
+  const [pwShowNew, setPwShowNew] = useState(false);
+  const [pwShowConfirm, setPwShowConfirm] = useState(false);
+  // Eye toggle for edit modal password field
+  const [editPwVisible, setEditPwVisible] = useState(false);
+
   // Fetch drivers when switching to driver tab
   useEffect(() => {
     if (activeTab !== 'driver') return;
     let mounted = true;
     setDriversLoading(true);
-    const SELECT = 'id,name,email,phone,department,location,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_head_driver,is_available';
+    const SELECT = 'id,name,email,password_hash,phone,department,location,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_head_driver,is_available';
     Promise.all([
       supabase.from('users').select(SELECT).eq('role', 'driver').eq('is_head_driver', true).order('name'),
       supabase.from('users').select(SELECT).eq('role', 'driver').eq('is_head_driver', false).order('name'),
@@ -317,13 +329,19 @@ export default function UsersPage() {
     setIsModalOpen(false);
     setEditingUser(null);
     setEditingCoordinator(null);
+    setEditPwVisible(false);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name.trim() || !formData.email.trim() || !formData.password.trim()) {
-      toast.error('Please fill in all required fields');
+    const isEditing = !!(editingUser || editingCoordinator);
+    if (!formData.name.trim() || !formData.email.trim()) {
+      toast.error('Name and email are required');
+      return;
+    }
+    if (!isEditing && !formData.password.trim()) {
+      toast.error('Password is required');
       return;
     }
 
@@ -333,7 +351,7 @@ export default function UsersPage() {
         updateCoordinator(editingCoordinator.id, {
           name: formData.name,
           email: formData.email,
-          password: formData.password,
+          ...(formData.password.trim() ? { password: formData.password } : {}),
           phone: formData.phone,
           country: formData.country,
           isActive: formData.isActive,
@@ -361,8 +379,13 @@ export default function UsersPage() {
       }
       if (editingUser) {
         updateUser(editingUser.id, {
-          ...formData,
-          country: formData.country,
+          name: formData.name,
+          phone: formData.phone || undefined,
+          country: formData.country || undefined,
+          department: formData.department || undefined,
+          location: formData.location || undefined,
+          isActive: formData.isActive,
+          ...(formData.password.trim() ? { password: formData.password.trim() } : {}),
         });
         toast.success('User updated successfully');
       } else {
@@ -404,7 +427,7 @@ export default function UsersPage() {
   // ── Driver tab handlers ────────────────────────────────────────────────────────
 
   const refreshDrivers = async () => {
-    const SELECT = 'id,name,email,phone,department,location,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_head_driver,is_available';
+    const SELECT = 'id,name,email,password_hash,phone,department,location,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_head_driver,is_available';
     const [headRes, regRes] = await Promise.all([
       supabase.from('users').select(SELECT).eq('role', 'driver').eq('is_head_driver', true).order('name'),
       supabase.from('users').select(SELECT).eq('role', 'driver').eq('is_head_driver', false).order('name'),
@@ -492,6 +515,28 @@ export default function UsersPage() {
     setDeleteDriverTarget(null);
     setDeleteDriverDeleting(false);
     await refreshDrivers();
+  };
+
+  // ── Quick password change (super admin) ───────────────────────────────────
+  const openPwChange = (id: string, name: string, email: string) => {
+    setPwTarget({ id, name, email });
+    setPwNew(''); setPwConfirm(''); setPwError('');
+    setPwShowNew(false); setPwShowConfirm(false);
+  };
+
+  const handleSavePasswordChange = async () => {
+    if (pwNew.length < 8) { setPwError('Password must be at least 8 characters'); return; }
+    if (pwNew !== pwConfirm) { setPwError('Passwords do not match'); return; }
+    if (!pwTarget) return;
+    setPwSaving(true);
+    const { error } = await supabase.from('users').update({ password_hash: pwNew }).eq('id', pwTarget.id);
+    setPwSaving(false);
+    if (error) { setPwError('Failed to update password'); return; }
+    // Update in-memory state for drivers
+    setHeadDrivers(prev => prev.map(d => d.id === pwTarget.id ? { ...d, password_hash: pwNew } : d));
+    setRegularDrivers(prev => prev.map(d => d.id === pwTarget.id ? { ...d, password_hash: pwNew } : d));
+    toast.success(`Password changed for ${pwTarget.name}`);
+    setPwTarget(null);
   };
 
   // Driver tab computed
@@ -615,7 +660,7 @@ export default function UsersPage() {
           </header>
 
           {/* Content */}
-          <div className="p-6 max-w-6xl mx-auto">
+          <div className="p-6 w-full">
             {/* Tabs */}
             <div className="flex flex-wrap gap-2 mb-6">
               {TABS.map((tab) => (
@@ -811,6 +856,7 @@ export default function UsersPage() {
                           <tr>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Name</th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Email</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Password</th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Department</th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Locations</th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Phone</th>
@@ -821,7 +867,7 @@ export default function UsersPage() {
                         <tbody className="divide-y divide-[#E8E3DB]">
                           {filteredDeptHeads.length === 0 ? (
                             <tr>
-                              <td colSpan={7} className="px-4 py-8 text-center text-[#4A4A4A]">
+                              <td colSpan={8} className="px-4 py-8 text-center text-[#4A4A4A]">
                                 No department heads found.
                               </td>
                             </tr>
@@ -837,6 +883,19 @@ export default function UsersPage() {
                                   </div>
                                 </td>
                                 <td className="px-4 py-3 text-[#4A4A4A]">{u.email}</td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[#4A4A4A] font-mono text-sm">
+                                      {showPasswordMap[u.id] ? (u.password || '—') : '••••••••'}
+                                    </span>
+                                    <button onClick={() => togglePasswordVisibility(u.id)} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600">
+                                      {showPasswordMap[u.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                    <button onClick={() => openPwChange(u.id, u.name, u.email)} className="p-1 hover:bg-blue-50 rounded text-gray-400 hover:text-blue-600" title="Change password">
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
                                 <td className="px-4 py-3">
                                   {u.department ? (
                                     <Badge variant="outline" className={getDeptBadgeCls(u.department ?? '')}>
@@ -1095,6 +1154,7 @@ export default function UsersPage() {
                           <tr>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Name</th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Email</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Password</th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Department</th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Location</th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Rooms</th>
@@ -1106,7 +1166,7 @@ export default function UsersPage() {
                         <tbody className="divide-y divide-[#E8E3DB]">
                           {filteredLocManagers.length === 0 ? (
                             <tr>
-                              <td colSpan={8} className="px-4 py-8 text-center text-[#4A4A4A]">
+                              <td colSpan={9} className="px-4 py-8 text-center text-[#4A4A4A]">
                                 No location managers found.
                               </td>
                             </tr>
@@ -1122,6 +1182,19 @@ export default function UsersPage() {
                                   </div>
                                 </td>
                                 <td className="px-4 py-3 text-[#4A4A4A] text-sm">{u.email}</td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[#4A4A4A] font-mono text-sm">
+                                      {showPasswordMap[u.id] ? (u.password || '—') : '••••••••'}
+                                    </span>
+                                    <button onClick={() => togglePasswordVisibility(u.id)} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600">
+                                      {showPasswordMap[u.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                    <button onClick={() => openPwChange(u.id, u.name, u.email)} className="p-1 hover:bg-blue-50 rounded text-gray-400 hover:text-blue-600" title="Change password">
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
                                 <td className="px-4 py-3">
                                   {u.department ? (
                                     <Badge variant="outline" className={getDeptBadgeCls(u.department ?? '')}>
@@ -1210,14 +1283,14 @@ export default function UsersPage() {
                           <table className="w-full">
                             <thead className="bg-[#F9F8F6]">
                               <tr>
-                                {['Name','Email','Department','Location','Vehicle','Registration','Capacity','Phone','Status','Actions'].map(h => (
+                                {['Name','Email','Password','Department','Location','Vehicle','Phone','Status','Actions'].map(h => (
                                   <th key={h} className={`px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A] ${h === 'Actions' ? 'text-right' : ''}`}>{h}</th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-[#E8E3DB]">
                               {headDrivers.length === 0 ? (
-                                <tr><td colSpan={10} className="px-4 py-8 text-center text-[#4A4A4A]">No Nazim Transport found. Click "Add" to create one.</td></tr>
+                                <tr><td colSpan={9} className="px-4 py-8 text-center text-[#4A4A4A]">No Nazim Transport found. Click "Add" to create one.</td></tr>
                               ) : headDrivers.map(d => (
                                 <tr key={d.id} className="hover:bg-[#FAFAFA]">
                                   <td className="px-4 py-3">
@@ -1227,6 +1300,19 @@ export default function UsersPage() {
                                     </div>
                                   </td>
                                   <td className="px-4 py-3 text-sm text-[#4A4A4A]">{d.email}</td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[#4A4A4A] font-mono text-sm">
+                                        {showPasswordMap[d.id] ? (d.password_hash || '—') : '••••••••'}
+                                      </span>
+                                      <button onClick={() => togglePasswordVisibility(d.id)} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600">
+                                        {showPasswordMap[d.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                      </button>
+                                      <button onClick={() => openPwChange(d.id, d.name, d.email)} className="p-1 hover:bg-blue-50 rounded text-gray-400 hover:text-blue-600" title="Change password">
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </td>
                                   <td className="px-4 py-3">
                                     {d.department ? <Badge variant="outline" className={getDeptBadgeCls(d.department)}>{d.department}</Badge> : '—'}
                                   </td>
@@ -1238,8 +1324,6 @@ export default function UsersPage() {
                                   <td className="px-4 py-3 text-sm text-[#4A4A4A]">
                                     {d.vehicle_type && d.vehicle_model ? `${d.vehicle_type} · ${d.vehicle_model}` : d.vehicle_model ?? d.vehicle_type ?? '—'}
                                   </td>
-                                  <td className="px-4 py-3 text-sm font-mono text-[#4A4A4A]">{d.vehicle_registration ?? '—'}</td>
-                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">{d.vehicle_capacity ? `${d.vehicle_capacity} pax` : '—'}</td>
                                   <td className="px-4 py-3 text-sm text-[#4A4A4A]">{d.phone ?? '—'}</td>
                                   <td className="px-4 py-3">
                                     <Badge variant="outline" className={d.is_available !== false ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-600 border-gray-200'}>
@@ -1301,14 +1385,14 @@ export default function UsersPage() {
                           <table className="w-full">
                             <thead className="bg-[#F9F8F6]">
                               <tr>
-                                {['Name','Email','Department','Location','Nazim Transport','Vehicle','Registration','Capacity','Phone','Status','Actions'].map(h => (
+                                {['Name','Email','Password','Department','Location','Nazim Transport','Vehicle','Phone','Status','Actions'].map(h => (
                                   <th key={h} className={`px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A] whitespace-nowrap ${h === 'Actions' ? 'text-right' : ''}`}>{h}</th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-[#E8E3DB]">
                               {filteredRegularDrivers.length === 0 ? (
-                                <tr><td colSpan={11} className="px-4 py-8 text-center text-[#4A4A4A]">
+                                <tr><td colSpan={10} className="px-4 py-8 text-center text-[#4A4A4A]">
                                   {regularDrivers.length === 0 ? 'No drivers found. Click "Add Driver" to create one.' : 'No drivers match your search.'}
                                 </td></tr>
                               ) : filteredRegularDrivers.map(d => {
@@ -1322,6 +1406,19 @@ export default function UsersPage() {
                                       </div>
                                     </td>
                                     <td className="px-4 py-3 text-sm text-[#4A4A4A]">{d.email}</td>
+                                    <td className="px-4 py-3">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[#4A4A4A] font-mono text-sm">
+                                          {showPasswordMap[d.id] ? (d.password_hash || '—') : '••••••••'}
+                                        </span>
+                                        <button onClick={() => togglePasswordVisibility(d.id)} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600">
+                                          {showPasswordMap[d.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                        </button>
+                                        <button onClick={() => openPwChange(d.id, d.name, d.email)} className="p-1 hover:bg-blue-50 rounded text-gray-400 hover:text-blue-600" title="Change password">
+                                          <Pencil className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </td>
                                     <td className="px-4 py-3">
                                       {d.department ? <Badge variant="outline" className={getDeptBadgeCls(d.department)}>{d.department}</Badge> : '—'}
                                     </td>
@@ -1341,8 +1438,6 @@ export default function UsersPage() {
                                     <td className="px-4 py-3 text-sm text-[#4A4A4A]">
                                       {d.vehicle_type && d.vehicle_model ? `${d.vehicle_type} · ${d.vehicle_model}` : d.vehicle_model ?? d.vehicle_type ?? '—'}
                                     </td>
-                                    <td className="px-4 py-3 text-sm font-mono text-[#4A4A4A]">{d.vehicle_registration ?? '—'}</td>
-                                    <td className="px-4 py-3 text-sm text-[#4A4A4A]">{d.vehicle_capacity ? `${d.vehicle_capacity} pax` : '—'}</td>
                                     <td className="px-4 py-3 text-sm text-[#4A4A4A]">{d.phone ?? '—'}</td>
                                     <td className="px-4 py-3">
                                       <Badge variant="outline" className={d.is_available !== false ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-600 border-gray-200'}>
@@ -1381,9 +1476,7 @@ export default function UsersPage() {
                         <tr>
                           <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Name</th>
                           <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Email</th>
-                          {activeTab !== 'desk-in-charge' && (
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Password</th>
-                          )}
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Password</th>
                           {activeTab === 'coordinator' && (
                             <th className="px-4 py-3 text-left text-sm font-semibold text-[#1A1A1A]">Country</th>
                           )}
@@ -1495,21 +1588,22 @@ export default function UsersPage() {
                                 </div>
                               </td>
                               <td className="px-4 py-3 text-[#4A4A4A]">{u.email}</td>
-                              {activeTab !== 'desk-in-charge' && (
-                                <td className="px-4 py-3">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[#4A4A4A] font-mono">
-                                      {showPasswordMap[u.id] ? u.password : '••••••••'}
-                                    </span>
-                                    <button
-                                      onClick={() => togglePasswordVisibility(u.id)}
-                                      className="p-1 hover:bg-gray-100 rounded text-[#4A4A4A]"
-                                    >
-                                      {showPasswordMap[u.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                    </button>
-                                  </div>
-                                </td>
-                              )}
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[#4A4A4A] font-mono text-sm">
+                                    {showPasswordMap[u.id] ? (u.password || '—') : '••••••••'}
+                                  </span>
+                                  <button
+                                    onClick={() => togglePasswordVisibility(u.id)}
+                                    className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600"
+                                  >
+                                    {showPasswordMap[u.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                  </button>
+                                  <button onClick={() => openPwChange(u.id, u.name, u.email)} className="p-1 hover:bg-blue-50 rounded text-gray-400 hover:text-blue-600" title="Change password">
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
                               {activeTab === 'desk-in-charge' && (
                                 <td className="px-4 py-3">
                                   {((u.assignedCountries?.length ?? 0) > 0 || (u.assignedDepartments?.length ?? 0) > 0) ? (
@@ -1732,16 +1826,25 @@ export default function UsersPage() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-[#1A1A1A]">Password *</Label>
+                <Label className="text-[#1A1A1A]">
+                  {editingUser || editingCoordinator ? 'Password' : 'Password *'}
+                </Label>
+                {(editingUser || editingCoordinator) && (
+                  <p className="text-xs text-[#4A4A4A]">Leave blank to keep current password</p>
+                )}
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
                   <Input
-                    type="text"
+                    type={editPwVisible ? 'text' : 'password'}
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="Enter password"
-                    className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-11"
+                    placeholder={editingUser || editingCoordinator ? 'Leave blank to keep current' : 'Enter password'}
+                    className="pl-10 pr-10 border-[#D4CFC7] focus:border-[#2D5A45] h-11"
                   />
+                  <button type="button" onClick={() => setEditPwVisible(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600" tabIndex={-1}>
+                    {editPwVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
 
@@ -2011,6 +2114,53 @@ export default function UsersPage() {
                 className="bg-red-600 hover:bg-red-700 text-white h-10 px-5">
                 {deleteDriverDeleting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Removing…</> : 'Remove'}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Quick Change Password Dialog (Super Admin) ── */}
+      {pwTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full">
+            <div className="flex items-center gap-3 px-6 py-4 border-b border-[#E8E3DB]">
+              <Lock className="w-5 h-5 text-[#2D5A45]" />
+              <div>
+                <h2 className="text-base font-semibold text-[#1A1A1A]">Change Password</h2>
+                <p className="text-xs text-[#4A4A4A]">{pwTarget.name} · {pwTarget.email}</p>
+              </div>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="space-y-2">
+                <Label className="text-sm text-[#1A1A1A]">New Password</Label>
+                <div className="relative">
+                  <Input type={pwShowNew ? 'text' : 'password'} value={pwNew} onChange={e => { setPwNew(e.target.value); setPwError(''); }}
+                    placeholder="At least 8 characters" className="pr-10 border-[#D4CFC7] focus:border-[#2D5A45] h-10" autoFocus />
+                  <button type="button" onClick={() => setPwShowNew(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600" tabIndex={-1}>
+                    {pwShowNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm text-[#1A1A1A]">Confirm Password</Label>
+                <div className="relative">
+                  <Input type={pwShowConfirm ? 'text' : 'password'} value={pwConfirm} onChange={e => { setPwConfirm(e.target.value); setPwError(''); }}
+                    placeholder="Repeat new password" className="pr-10 border-[#D4CFC7] focus:border-[#2D5A45] h-10" />
+                  <button type="button" onClick={() => setPwShowConfirm(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600" tabIndex={-1}>
+                    {pwShowConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              {pwError && <p className="text-xs text-red-600">{pwError}</p>}
+              <p className="text-xs text-[#4A4A4A]">Minimum 8 characters.</p>
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="outline" onClick={() => setPwTarget(null)} disabled={pwSaving} className="border-[#D4CFC7] h-10 px-5">
+                  Cancel
+                </Button>
+                <Button onClick={handleSavePasswordChange} disabled={pwSaving} className="bg-[#2D5A45] hover:bg-[#234839] text-white h-10 px-5">
+                  {pwSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</> : 'Change Password'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
