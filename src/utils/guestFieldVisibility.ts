@@ -84,7 +84,7 @@ const FIELD_VISIBILITY: Record<string, FieldVisibility> = {
     transportTeam: true, driverAssigned: true, checkInOut: false, status: true,
   },
   'transport-head': {
-    name: true, gender: false, dob: false, age: false, country: true, photo: true,
+    name: true, gender: true, dob: false, age: false, country: true, photo: true,
     religion: true, designation: true, tierBadge: false, specialStar: true,
     introduction: true, contactNumber: true, email: false,
     passport: false, passportCountry: false, visaStatus: false,
