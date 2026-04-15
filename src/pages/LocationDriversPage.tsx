@@ -118,7 +118,7 @@ export default function LocationDriversPage() {
 
     const [driversRes, tasksRes, suggestionsRes] = await Promise.all([
       supabase.from('users')
-        .select('id,name,email,phone,location,department,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_head_driver,is_available')
+        .select('*')
         .eq('role', 'driver').eq('location', location),
       supabase.from('driver_tasks')
         .select('driver_id,task_type,guest_name,status,scheduled_time,pickup_location,dropoff_location')

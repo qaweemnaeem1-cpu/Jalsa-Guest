@@ -502,7 +502,7 @@ export default function DeptDriversPage() {
 
     const [driversRes, tasksRes] = await Promise.all([
       supabase.from('users')
-        .select('id,name,email,phone,location,department,transport_department_id,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_head_driver,is_available')
+        .select('*')
         .eq('role', 'driver')
         .in('transport_department_id', tdIds),
       supabase.from('driver_tasks')

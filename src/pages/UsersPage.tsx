@@ -305,48 +305,50 @@ export default function UsersPage() {
     let mounted = true;
     setDriversLoading(true);
 
-    console.log('[Transport Tab] Fetching drivers...');
+    console.log('[Transport] NOTE: verify_login may need updating to return transport_department_name');
+    console.log('[Transport] Fetching department heads...');
+    console.log('[Transport] Fetching drivers...');
 
     Promise.all([
       supabase
         .from('users')
-        .select('*, transport_departments(name)')
+        .select('*')
         .eq('role', 'driver')
         .eq('is_head_driver', true)
-        .eq('is_active', true)
         .order('name'),
       supabase
         .from('users')
-        .select('*, transport_departments(name)')
+        .select('*')
         .eq('role', 'driver')
         .eq('is_head_driver', false)
-        .eq('is_active', true)
         .order('name'),
     ]).then(([headRes, regRes]) => {
       if (!mounted) return;
 
-      console.log('[Transport Tab] Department Heads result:', {
+      console.log('[Transport] Heads result:', {
         count: headRes.data?.length ?? 0,
         error: headRes.error ?? null,
-        drivers: headRes.data,
+        data: headRes.data,
       });
-      console.log('[Transport Tab] Regular Drivers result:', {
+      console.log('[Transport] Drivers result:', {
         count: regRes.data?.length ?? 0,
         error: regRes.error ?? null,
-        drivers: regRes.data,
+        data: regRes.data,
       });
 
-      // If both came back empty, do a broader probe to see what's in the DB
+      // Probe: if both empty, fetch all role=driver rows with no extra filters to expose the real schema
       if ((headRes.data?.length ?? 0) === 0 && (regRes.data?.length ?? 0) === 0) {
         supabase
           .from('users')
-          .select('id,name,role,is_head_driver,is_active,transport_department_id')
+          .select('*')
           .eq('role', 'driver')
+          .limit(5)
           .then(({ data: allDrivers, error: probeErr }) => {
-            console.log('[Transport Tab] Probe — all rows with role=driver (no other filters):', {
+            console.log('[Transport] Probe — role=driver rows (no is_head_driver filter):', {
               count: allDrivers?.length ?? 0,
               error: probeErr ?? null,
-              rows: allDrivers,
+              columns: allDrivers?.[0] ? Object.keys(allDrivers[0]) : 'no rows found',
+              data: allDrivers,
             });
           });
       }
@@ -357,6 +359,15 @@ export default function UsersPage() {
     });
     return () => { mounted = false; };
   }, [activeTab]);
+
+  // Log transport departments whenever they change while on the driver tab
+  useEffect(() => {
+    if (activeTab !== 'driver') return;
+    console.log('[Transport] Depts result:', {
+      count: transportDepts.length,
+      data: transportDepts,
+    });
+  }, [activeTab, transportDepts]);
 
   if (!user) return null;
 
@@ -567,20 +578,18 @@ export default function UsersPage() {
     const [headRes, regRes] = await Promise.all([
       supabase
         .from('users')
-        .select('*, transport_departments(name)')
+        .select('*')
         .eq('role', 'driver')
         .eq('is_head_driver', true)
-        .eq('is_active', true)
         .order('name'),
       supabase
         .from('users')
-        .select('*, transport_departments(name)')
+        .select('*')
         .eq('role', 'driver')
         .eq('is_head_driver', false)
-        .eq('is_active', true)
         .order('name'),
     ]);
-    console.log('[Transport Tab] refreshDrivers — heads:', headRes.data?.length ?? 0, 'drivers:', regRes.data?.length ?? 0);
+    console.log('[Transport] refreshDrivers — heads:', headRes.data?.length ?? 0, 'drivers:', regRes.data?.length ?? 0);
     setHeadDrivers((headRes.data ?? []) as DriverRow[]);
     setRegularDrivers((regRes.data ?? []) as DriverRow[]);
   };

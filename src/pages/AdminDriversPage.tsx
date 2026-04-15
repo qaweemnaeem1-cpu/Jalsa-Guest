@@ -193,7 +193,7 @@ export default function AdminDriversPage() {
     const today = new Date().toISOString().substring(0, 10);
     const [driversRes, tasksRes, maintRes] = await Promise.all([
       supabase.from('users')
-        .select('id,name,email,phone,location,department,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_head_driver,is_available,transport_department_id,transport_department_name')
+        .select('*')
         .eq('role', 'driver'),
       supabase.from('driver_tasks')
         .select('id,driver_id,driver_name,task_type,status,is_suggestion,scheduled_date,scheduled_time,started_at,guest_name,pickup_location,dropoff_location,passenger_count,location,department,notes')

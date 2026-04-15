@@ -61,9 +61,8 @@ import { MulaqatTypeSelect } from '@/components/MulaqatTypeSelect';
 import { useDelegations } from '@/hooks/useDelegations';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { FamilyStatusCell } from '@/components/FamilyStatusCell';
-import { FamilyBadge, type FamilyMemberInfo } from '@/components/FamilyBadge';
-import { FamilyLinkDialog } from '@/components/FamilyLinkDialog';
 import { DepartmentSelect } from '@/components/DepartmentSelect';
+import { FamilyMemberDrawer } from '@/components/FamilyMemberDrawer';
 import { supabase } from '@/lib/supabase';
 import { useDesignations } from '@/hooks/useDesignations';
 import type { UserRole, Guest, Designation } from '@/types';
@@ -768,7 +767,6 @@ export default function GuestsPage() {
                         <th className="w-8 px-2 py-3"></th>
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Reference</th>
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Name</th>
-                        <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Family</th>
                         <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Country</th>
                         {(user.role !== 'super-admin' || visibleCols.passportCountry) && (
                           <th className="text-left px-4 py-3 text-sm font-semibold text-[#1A1A1A]">Passport Country</th>
@@ -801,18 +799,20 @@ export default function GuestsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E8E3DB]">
-                      {filteredGuests.map((guest) => (
+                      {filteredGuests.map((guest) => {
+                        const isExpandable = guest.guestType === 'family' || (!!guest.familyGroupId && !!guest.isHeadOfFamily);
+                        return (
                         <Fragment key={guest.id}>
                           <tr
                             className={`${
-                              guest.guestType === 'family'
+                              isExpandable
                                 ? `cursor-pointer hover:bg-gray-50 ${expandedFamilyId === guest.id ? 'bg-gray-50' : ''}`
                                 : 'hover:bg-[#F5F0E8]'
                             }`}
-                            onClick={guest.guestType === 'family' ? () => toggleFamilyExpand(guest.id) : undefined}
+                            onClick={isExpandable ? () => toggleFamilyExpand(guest.id) : undefined}
                           >
                             <td className="w-8 px-2 py-3 text-center">
-                              {guest.guestType === 'family' && (
+                              {isExpandable && (
                                 <ChevronRight
                                   className={`w-4 h-4 text-gray-400 transition-transform duration-200 inline-block ${
                                     expandedFamilyId === guest.id ? 'rotate-90' : ''
@@ -824,30 +824,7 @@ export default function GuestsPage() {
                               {guest.referenceNumber.replace(/^([A-Z]+).*?(\d{4})$/, '$1.....$2')}
                             </td>
                             <td className="px-4 py-3">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span>{guest.fullName}</span>
-                                {guest.familyGroupId && (() => {
-                                  const groupMembers = guests.filter(g => g.familyGroupId === guest.familyGroupId);
-                                  const lastName = (guest.familyName ?? guest.fullName).replace(' Family', '') || guest.fullName.split(' ').pop() || '';
-                                  const memberInfos: FamilyMemberInfo[] = groupMembers.map(g => ({
-                                    name: g.fullName,
-                                    relationship: g.isHeadOfFamily ? 'Head' : (g.relationship ?? '—'),
-                                    status: g.status,
-                                    assignedDepartment: g.assignedDepartment,
-                                    placedLocation: g.placedLocation,
-                                  }));
-                                  return <FamilyBadge lastName={lastName} members={memberInfos} currentDept={guest.assignedDepartment ?? ''} />;
-                                })()}
-                              </div>
-                            </td>
-                            {/* Family */}
-                            <td className="px-4 py-3">
-                              {guest.familyGroupId ? (
-                                <FamilyLinkDialog
-                                  familyGroupId={guest.familyGroupId}
-                                  familyName={(guest.familyName ?? guest.fullName).replace(' Family', '').split(' ').pop() ?? guest.fullName}
-                                />
-                              ) : <span className="text-gray-300">—</span>}
+                              <span>{guest.fullName}</span>
                             </td>
                             <td className="px-4 py-3">{guest.country}</td>
                             {(user.role !== 'super-admin' || visibleCols.passportCountry) && (
@@ -1083,49 +1060,59 @@ export default function GuestsPage() {
                           )}
 
                           {/* Family Members Expanded Section */}
-                          {guest.guestType === 'family' && (
+                          {(guest.familyGroupId || guest.guestType === 'family') && (
                             <tr>
-                              <td colSpan={user.role === 'desk-in-charge' ? 11 : 10} className="p-0">
+                              <td colSpan={20} className="p-0">
                                 <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                                  expandedFamilyId === guest.id ? 'max-h-[400px] opacity-100' : 'max-h-0 opacity-0'
+                                  expandedFamilyId === guest.id ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'
                                 }`}>
-                                  <div className="mx-4 mb-3 mt-1 rounded-lg bg-white border border-gray-200 shadow-md p-5">
-                                    <h5 className="text-sm font-semibold text-[#2D5A45] mb-3 flex items-center gap-1.5">
-                                      <Users className="w-4 h-4" />
-                                      Family Members ({guest.familyMembers.length})
-                                    </h5>
-                                    {guest.familyMembers.length === 0 ? (
-                                      <div className="text-center py-4">
-                                        <Users className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                                        <p className="text-sm text-gray-400 italic">No family members added yet</p>
-                                      </div>
-                                    ) : (
-                                      <div>
-                                        {guest.familyMembers.map((member, idx) => (
-                                          <div
-                                            key={member.id}
-                                            className="flex items-center gap-4 py-2.5 border-b border-gray-100 last:border-b-0"
-                                          >
-                                            <span className="w-6 h-6 rounded-full bg-[#D6E4D9] text-[#2D5A45] text-xs font-bold flex items-center justify-center flex-shrink-0">
-                                              {idx + 1}
-                                            </span>
-                                            <span className="font-medium text-gray-800 min-w-[150px]">{member.name}</span>
-                                            <span className="text-sm text-gray-500 min-w-[60px]">Age: {member.age}</span>
-                                            <span className="text-sm text-gray-500 min-w-[70px] capitalize">{member.gender}</span>
-                                            <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-[#F5F0E8] text-[#2D5A45] border border-[#D6E4D9] capitalize">
-                                              {member.relationship}
-                                            </span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
+                                  {guest.familyGroupId ? (
+                                    <FamilyMemberDrawer
+                                      headGuest={guest}
+                                      allGuests={guests}
+                                      onViewMember={id => { setViewGuestId(id); setViewGuestEditMode(false); }}
+                                      onEditMember={id => { setViewGuestId(id); setViewGuestEditMode(true); }}
+                                    />
+                                  ) : (
+                                    <div className="mx-4 mb-3 mt-1 rounded-lg bg-white border border-gray-200 shadow-md p-5">
+                                      <h5 className="text-sm font-semibold text-[#2D5A45] mb-3 flex items-center gap-1.5">
+                                        <Users className="w-4 h-4" />
+                                        Family Members ({guest.familyMembers.length})
+                                      </h5>
+                                      {guest.familyMembers.length === 0 ? (
+                                        <div className="text-center py-4">
+                                          <Users className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                                          <p className="text-sm text-gray-400 italic">No family members added yet</p>
+                                        </div>
+                                      ) : (
+                                        <div>
+                                          {guest.familyMembers.map((member, idx) => (
+                                            <div
+                                              key={member.id}
+                                              className="flex items-center gap-4 py-2.5 border-b border-gray-100 last:border-b-0"
+                                            >
+                                              <span className="w-6 h-6 rounded-full bg-[#D6E4D9] text-[#2D5A45] text-xs font-bold flex items-center justify-center flex-shrink-0">
+                                                {idx + 1}
+                                              </span>
+                                              <span className="font-medium text-gray-800 min-w-[150px]">{member.name}</span>
+                                              <span className="text-sm text-gray-500 min-w-[60px]">Age: {member.age}</span>
+                                              <span className="text-sm text-gray-500 min-w-[70px] capitalize">{member.gender}</span>
+                                              <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-[#F5F0E8] text-[#2D5A45] border border-[#D6E4D9] capitalize">
+                                                {member.relationship}
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               </td>
                             </tr>
                           )}
                         </Fragment>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
