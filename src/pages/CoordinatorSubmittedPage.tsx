@@ -41,7 +41,27 @@ export default function CoordinatorSubmittedPage() {
 
   if (!user) return null;
 
+  console.log('[CoordinatorSubmitted] Current user:', {
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    country: user.country,
+  });
+  console.log('[CoordinatorSubmitted] Total guests in context:', guests.length);
+
   const myGuests = guests.filter(g => g.submittedBy === user.id);
+
+  const submittedFilterStatuses = ['Approved', 'Accommodated'];
+  console.log('[CoordinatorSubmitted] Submitted filter statuses:', submittedFilterStatuses);
+  console.log('[CoordinatorSubmitted] myGuests (submitted_by match):', {
+    total: myGuests.length,
+    statuses: myGuests.map(g => ({ name: g.fullName, status: g.status, submittedBy: g.submittedBy })),
+  });
+
+  const statusCounts: Record<string, number> = {};
+  myGuests.forEach(g => { statusCounts[g.status] = (statusCounts[g.status] ?? 0) + 1; });
+  console.log('[CoordinatorSubmitted] Status counts:', statusCounts);
+
   const pendingCount = new Set(
     myGuests.filter(g => g.status === 'Awaiting Review' || g.status === 'Needs Correction')
       .map(g => g.familyGroupId ?? g.id)

@@ -241,6 +241,14 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     setIsLoading(true);
 
+    console.log('[fetchGuests] Current user:', {
+      id: user.id,
+      name: user.name,
+      role: user.role,
+      country: user.country,
+      assignedCountries: user.assignedCountries,
+    });
+
     let query = supabase
       .from('guests')
       .select('*, family_members(*)')
@@ -259,6 +267,8 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
       query = query.in('country', countries);
     } else if (user.role === 'coordinator') {
       // Coordinators see all guests they personally submitted
+      console.log('[fetchGuests] Coordinator filter — submitted_by:', JSON.stringify(user.id));
+      console.log('[fetchGuests] Coordinator country (informational):', JSON.stringify(user.country));
       query = query.eq('submitted_by', user.id);
     } else if (user.role === 'department-head') {
       query = query.eq('assigned_department', user.department ?? '');
@@ -267,6 +277,29 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
     }
 
     const { data, error } = await query;
+
+    console.log('[fetchGuests] Query result:', {
+      role: user.role,
+      total: data?.length ?? 0,
+      error: error ?? null,
+      guests: data?.map(g => ({
+        id: g.id,
+        full_name: g.full_name,
+        status: g.status,
+        submitted_by: g.submitted_by,
+        country: g.country,
+      })),
+    });
+
+    if (user.role === 'coordinator' && data) {
+      const statusCounts: Record<string, number> = {};
+      data.forEach(g => {
+        statusCounts[g.status] = (statusCounts[g.status] ?? 0) + 1;
+      });
+      console.log('[fetchGuests] Coordinator status counts:', statusCounts);
+      console.log('[fetchGuests] Coordinator guest countries in DB:', data.map(g => JSON.stringify(g.country)));
+    }
+
     if (error) {
       toast.error('Failed to load guests');
     } else if (data) {

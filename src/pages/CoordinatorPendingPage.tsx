@@ -51,7 +51,27 @@ export default function CoordinatorPendingPage() {
 
   if (!user) return null;
 
+  console.log('[CoordinatorPending] Current user:', {
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    country: user.country,
+  });
+  console.log('[CoordinatorPending] Total guests in context:', guests.length);
+
   const myGuests = guests.filter(g => g.submittedBy === user.id);
+
+  const pendingFilterStatuses = ['Awaiting Review', 'Needs Correction'];
+  console.log('[CoordinatorPending] Pending filter statuses:', pendingFilterStatuses);
+  console.log('[CoordinatorPending] myGuests (submitted_by match):', {
+    total: myGuests.length,
+    statuses: myGuests.map(g => ({ name: g.fullName, status: g.status, submittedBy: g.submittedBy })),
+  });
+
+  const statusCounts: Record<string, number> = {};
+  myGuests.forEach(g => { statusCounts[g.status] = (statusCounts[g.status] ?? 0) + 1; });
+  console.log('[CoordinatorPending] Status counts:', statusCounts);
+
   // Count unique family groups + individuals that are awaiting/correction
   const awaitingAll = myGuests.filter(g => g.status === 'Awaiting Review');
   const correctionAll = myGuests.filter(g => g.status === 'Needs Correction');

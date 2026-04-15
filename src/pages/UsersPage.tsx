@@ -112,8 +112,11 @@ interface DriverRow {
   vehicle_capacity?: number | null;
   is_head_driver: boolean;
   is_available?: boolean | null;
+  is_active?: boolean | null;
   transport_department_id?: string | null;
   transport_department_name?: string | null;
+  // Joined from transport_departments table
+  transport_departments?: { name: string } | null;
 }
 
 // ── Transport dept form state ─────────────────────────────────────────────────
@@ -301,12 +304,53 @@ export default function UsersPage() {
     if (activeTab !== 'driver') return;
     let mounted = true;
     setDriversLoading(true);
-    const SELECT = 'id,name,email,password_hash,phone,department,location,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_head_driver,is_available,transport_department_id,transport_department_name';
+
+    console.log('[Transport Tab] Fetching drivers...');
+
     Promise.all([
-      supabase.from('users').select(SELECT).eq('role', 'driver').eq('is_head_driver', true).order('name'),
-      supabase.from('users').select(SELECT).eq('role', 'driver').eq('is_head_driver', false).order('name'),
+      supabase
+        .from('users')
+        .select('*, transport_departments(name)')
+        .eq('role', 'driver')
+        .eq('is_head_driver', true)
+        .eq('is_active', true)
+        .order('name'),
+      supabase
+        .from('users')
+        .select('*, transport_departments(name)')
+        .eq('role', 'driver')
+        .eq('is_head_driver', false)
+        .eq('is_active', true)
+        .order('name'),
     ]).then(([headRes, regRes]) => {
       if (!mounted) return;
+
+      console.log('[Transport Tab] Department Heads result:', {
+        count: headRes.data?.length ?? 0,
+        error: headRes.error ?? null,
+        drivers: headRes.data,
+      });
+      console.log('[Transport Tab] Regular Drivers result:', {
+        count: regRes.data?.length ?? 0,
+        error: regRes.error ?? null,
+        drivers: regRes.data,
+      });
+
+      // If both came back empty, do a broader probe to see what's in the DB
+      if ((headRes.data?.length ?? 0) === 0 && (regRes.data?.length ?? 0) === 0) {
+        supabase
+          .from('users')
+          .select('id,name,role,is_head_driver,is_active,transport_department_id')
+          .eq('role', 'driver')
+          .then(({ data: allDrivers, error: probeErr }) => {
+            console.log('[Transport Tab] Probe — all rows with role=driver (no other filters):', {
+              count: allDrivers?.length ?? 0,
+              error: probeErr ?? null,
+              rows: allDrivers,
+            });
+          });
+      }
+
       setHeadDrivers((headRes.data ?? []) as DriverRow[]);
       setRegularDrivers((regRes.data ?? []) as DriverRow[]);
       setDriversLoading(false);
@@ -520,11 +564,23 @@ export default function UsersPage() {
   // ── Driver tab handlers ────────────────────────────────────────────────────────
 
   const refreshDrivers = async () => {
-    const SELECT = 'id,name,email,password_hash,phone,department,location,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_head_driver,is_available,transport_department_id,transport_department_name';
     const [headRes, regRes] = await Promise.all([
-      supabase.from('users').select(SELECT).eq('role', 'driver').eq('is_head_driver', true).order('name'),
-      supabase.from('users').select(SELECT).eq('role', 'driver').eq('is_head_driver', false).order('name'),
+      supabase
+        .from('users')
+        .select('*, transport_departments(name)')
+        .eq('role', 'driver')
+        .eq('is_head_driver', true)
+        .eq('is_active', true)
+        .order('name'),
+      supabase
+        .from('users')
+        .select('*, transport_departments(name)')
+        .eq('role', 'driver')
+        .eq('is_head_driver', false)
+        .eq('is_active', true)
+        .order('name'),
     ]);
+    console.log('[Transport Tab] refreshDrivers — heads:', headRes.data?.length ?? 0, 'drivers:', regRes.data?.length ?? 0);
     setHeadDrivers((headRes.data ?? []) as DriverRow[]);
     setRegularDrivers((regRes.data ?? []) as DriverRow[]);
   };
@@ -581,7 +637,7 @@ export default function UsersPage() {
           vehicle_type: dVType || null, vehicle_model: dVModel.trim() || null,
           vehicle_registration: dVReg.trim() || null,
           vehicle_capacity: dVCap ? Number(dVCap) : null,
-          is_head_driver: driverFormIsHead, is_available: true,
+          is_head_driver: driverFormIsHead, is_available: true, is_active: true,
           transport_department_id: dTransportDeptId || null,
           transport_department_name: selectedTd?.name ?? null,
         });
