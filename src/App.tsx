@@ -71,9 +71,17 @@ import DriverMessagesPage from '@/pages/DriverMessagesPage';
 // Mobile driver pages
 import MobileDriverHomePage from '@/pages/MobileDriverHomePage';
 import MobileDriverTasksPage from '@/pages/MobileDriverTasksPage';
+import MobileDriverTaskDetailPage from '@/pages/MobileDriverTaskDetailPage';
 import MobileDriverMessagesPage from '@/pages/MobileDriverMessagesPage';
 import MobileDriverVehiclePage from '@/pages/MobileDriverVehiclePage';
 import MobileDriverProfilePage from '@/pages/MobileDriverProfilePage';
+// Mobile transport head pages
+import MobileTransportHomePage from '@/pages/MobileTransportHomePage';
+import MobileTransportTeamPage from '@/pages/MobileTransportTeamPage';
+import MobileTransportTasksPage from '@/pages/MobileTransportTasksPage';
+import MobileTransportMessagesPage from '@/pages/MobileTransportMessagesPage';
+import MobileTransportFleetPage from '@/pages/MobileTransportFleetPage';
+import MobileTransportProfilePage from '@/pages/MobileTransportProfilePage';
 
 function ProtectedRoute({ children, requiredRoles }: { children: React.ReactNode; requiredRoles?: string[] }) {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -109,9 +117,12 @@ function DashboardOrRedirect() {
   if (user?.role === 'department-head') return <Navigate to="/dept/dashboard" replace />;
   if (user?.role === 'location-manager') return <Navigate to="/location/dashboard" replace />;
   if (user?.role === 'driver') {
-    // Transport Department Heads get their own portal (desktop only)
-    if (user.isHeadDriver && user.transportDepartmentId) return <Navigate to="/transport/dashboard" replace />;
-    // Mobile drivers go to the Uber-style home screen
+    // Transport Department Heads get their own portal
+    if (user.isHeadDriver && user.transportDepartmentId) {
+      if (isMobile) return <Navigate to="/transport-m/home" replace />;
+      return <Navigate to="/transport/dashboard" replace />;
+    }
+    // Regular drivers: mobile Uber-style or desktop
     if (isMobile) return <Navigate to="/driver/home" replace />;
     return <Navigate to="/driver/dashboard" replace />;
   }
@@ -249,6 +260,7 @@ function AppRoutes() {
       {/* Mobile-only driver routes */}
       <Route path="/driver/home"    element={<ProtectedRoute requiredRoles={['driver']}><DarkModeProvider><MobileDriverHomePage /></DarkModeProvider></ProtectedRoute>} />
       <Route path="/driver/profile" element={<ProtectedRoute requiredRoles={['driver']}><DarkModeProvider><MobileDriverProfilePage /></DarkModeProvider></ProtectedRoute>} />
+      <Route path="/driver/task/:id" element={<ProtectedRoute requiredRoles={['driver']}><DarkModeProvider><MobileDriverTaskDetailPage /></DarkModeProvider></ProtectedRoute>} />
       {/* Transport Department Head portal */}
       <Route path="/transport/dashboard" element={<ProtectedRoute requiredRoles={['driver']}><TransportDashboardPage /></ProtectedRoute>} />
       <Route path="/transport/guests"    element={<ProtectedRoute requiredRoles={['driver']}><TransportGuestsPage /></ProtectedRoute>} />
@@ -258,6 +270,13 @@ function AppRoutes() {
       <Route path="/transport/vehicles"  element={<ProtectedRoute requiredRoles={['driver']}><TransportVehiclesPage /></ProtectedRoute>} />
       <Route path="/transport/completed" element={<ProtectedRoute requiredRoles={['driver']}><TransportCompletedPage /></ProtectedRoute>} />
       <Route path="/transport/messages"  element={<ProtectedRoute requiredRoles={['driver']}><TransportMessagesPage /></ProtectedRoute>} />
+      {/* Mobile Transport Head portal */}
+      <Route path="/transport-m/home"     element={<ProtectedRoute requiredRoles={['driver']}><DarkModeProvider><MobileTransportHomePage /></DarkModeProvider></ProtectedRoute>} />
+      <Route path="/transport-m/team"     element={<ProtectedRoute requiredRoles={['driver']}><DarkModeProvider><MobileTransportTeamPage /></DarkModeProvider></ProtectedRoute>} />
+      <Route path="/transport-m/tasks"    element={<ProtectedRoute requiredRoles={['driver']}><DarkModeProvider><MobileTransportTasksPage /></DarkModeProvider></ProtectedRoute>} />
+      <Route path="/transport-m/messages" element={<ProtectedRoute requiredRoles={['driver']}><DarkModeProvider><MobileTransportMessagesPage /></DarkModeProvider></ProtectedRoute>} />
+      <Route path="/transport-m/fleet"    element={<ProtectedRoute requiredRoles={['driver']}><DarkModeProvider><MobileTransportFleetPage /></DarkModeProvider></ProtectedRoute>} />
+      <Route path="/transport-m/profile"  element={<ProtectedRoute requiredRoles={['driver']}><DarkModeProvider><MobileTransportProfilePage /></DarkModeProvider></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
     </>

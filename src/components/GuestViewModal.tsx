@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Send, Pencil, Trash2, X, Plane, Building2, BedDouble, ChevronDown } from 'lucide-react';
+import { Send, Pencil, Trash2, X, Plane, Building2, BedDouble, ChevronDown, Star } from 'lucide-react';
 import { AuditTimeline } from '@/components/AuditTimeline';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -17,9 +17,10 @@ import { useAuditTrail } from '@/hooks/useAuditTrail';
 import { useDesignations } from '@/hooks/useDesignations';
 import { useAssignableItems } from '@/hooks/useAssignableItems';
 import {
-  GUEST_STATUS_LABELS, ROLE_LABELS, VISA_STATUS_LABELS, formatDesignation,
+  GUEST_STATUS_LABELS, ROLE_LABELS, VISA_STATUS_LABELS,
   TIER_ORDER, TIER_SECTION_LABEL, getTierBadgeLabel, getTierBadgeClass,
 } from '@/lib/constants';
+import { getVisibility } from '@/utils/guestFieldVisibility';
 import { useDepartments } from '@/hooks/useDepartments';
 import { useRooms } from '@/hooks/useRooms';
 import { DepartmentSelect } from '@/components/DepartmentSelect';
@@ -305,6 +306,8 @@ export function GuestViewModal({
   const [bedAssignNum, setBedAssignNum] = useState<number | ''>('');
   const [editDesignations, setEditDesignations] = useState<string[]>([]);
 
+  const visibility = getVisibility(user);
+
   const canComment    = user ? ['desk-in-charge', 'super-admin', 'coordinator'].includes(user.role) : false;
   const canAssignRoom = user ? ['super-admin', 'accommodation'].includes(user.role) : false;
   const isSuperAdmin  = user?.role === 'super-admin';
@@ -538,18 +541,34 @@ export function GuestViewModal({
         {/* ── Header ── */}
         <DialogHeader className="flex-shrink-0 bg-[#D6E4D9] p-8">
           <div className="flex items-center gap-5">
-            <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center text-[#2D5A45] text-3xl font-bold flex-shrink-0 border-2 border-[#B5CCB9]">
-              {guest.fullName.charAt(0)}
+            {/* Avatar — photo if available, else initials */}
+            <div className="w-20 h-20 rounded-full flex-shrink-0 border-2 border-[#B5CCB9] overflow-hidden bg-white">
+              {guest.photoUrl ? (
+                <img src={guest.photoUrl} alt={guest.fullName} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-[#2D5A45] text-3xl font-bold">
+                  {guest.fullName.charAt(0)}
+                </div>
+              )}
             </div>
 
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-3 flex-wrap mb-1">
+                {/* Star for special guests — dept-head / transport-head / location-manager / driver */}
+                {visibility.specialStar && (() => {
+                  const names = Array.isArray(guest.designation) ? guest.designation : (guest.designation ? [guest.designation] : []);
+                  const tierMap = new Map(activeDesignations.map(d => [d.name, d.tier]));
+                  const isSpecial = names.some(n => { const t = tierMap.get(n); return t === '1(a)' || t === '1(b)' || t === '2'; });
+                  return isSpecial ? <Star className="w-5 h-5 text-amber-500 shrink-0" fill="currentColor" /> : null;
+                })()}
                 <DialogTitle className="text-2xl font-bold text-slate-800 leading-tight">
                   {guest.fullName}
                 </DialogTitle>
-                <Badge variant="outline" className={getStatusBadgeStyle(guest.status)}>
-                  {GUEST_STATUS_LABELS[guest.status]}
-                </Badge>
+                {visibility.status && (
+                  <Badge variant="outline" className={getStatusBadgeStyle(guest.status)}>
+                    {GUEST_STATUS_LABELS[guest.status]}
+                  </Badge>
+                )}
                 {isEditMode && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-full border border-amber-200">
                     <Pencil className="w-3 h-3" />
@@ -557,6 +576,39 @@ export function GuestViewModal({
                   </span>
                 )}
               </div>
+              {/* Designation subtitle — role-aware */}
+              {visibility.designation && guest.designation && (
+                <p className="text-sm text-slate-600 mb-0.5 flex items-center gap-1.5 flex-wrap">
+                  {(() => {
+                    const names = Array.isArray(guest.designation) ? guest.designation : [guest.designation];
+                    const label = names.length > 1 ? `${names[0]} +${names.length - 1}` : names[0];
+                    if (visibility.tierBadge) {
+                      const tierMap = new Map(activeDesignations.map(d => [d.name, d.tier]));
+                      const tier = (() => {
+                        let best: string | null | undefined = null;
+                        let bestIdx = Infinity;
+                        for (const n of names) {
+                          const t = tierMap.get(n);
+                          if (t == null) continue;
+                          const idx = TIER_ORDER.indexOf(t as typeof TIER_ORDER[number]);
+                          if (idx !== -1 && idx < bestIdx) { bestIdx = idx; best = t; }
+                        }
+                        return best;
+                      })();
+                      const badge = getTierBadgeLabel(tier);
+                      return (
+                        <>
+                          <span>{label}</span>
+                          {badge && (
+                            <span className={`text-[10px] font-bold px-1.5 py-px rounded-full ${getTierBadgeClass(tier)}`}>{badge}</span>
+                          )}
+                        </>
+                      );
+                    }
+                    return <span>{label}</span>;
+                  })()}
+                </p>
+              )}
               <p className="text-sm text-slate-500 font-mono">{guest.referenceNumber}</p>
             </div>
 
@@ -598,23 +650,38 @@ export function GuestViewModal({
         </DialogHeader>
 
         {/* ── Tabs ── */}
+        {/* Compute which tabs to show */}
+        {(() => {
+          const showFlight  = visibility.flightDetails;
+          const showDept    = visibility.department || visibility.location || visibility.roomBed || visibility.transportTeam || visibility.driverAssigned || visibility.checkInOut;
+          const showRemarks = canComment;
+          const showHistory = ['super-admin', 'desk-in-charge', 'coordinator', 'department-head', 'location-manager'].includes(user.role);
+          return (
         <Tabs defaultValue="personal" className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="flex-shrink-0 border-b border-[#E8E3DB] px-6 bg-white">
             <TabsList className="h-auto p-0 bg-transparent gap-0 w-full justify-start rounded-none flex-wrap">
               <TabsTrigger value="personal" className={tabTriggerCls}>Personal Details</TabsTrigger>
-              <TabsTrigger value="flight"   className={tabTriggerCls}>Flight &amp; Travel</TabsTrigger>
-              <TabsTrigger value="room"     className={tabTriggerCls}>Department</TabsTrigger>
-              <TabsTrigger value="remarks"  className={tabTriggerCls}>
-                Remarks
-                {(guest.remarks?.length ?? 0) > 0 && (
-                  <span className="ml-1.5 bg-[#2D5A45] text-white text-[10px] rounded-full w-4 h-4 inline-flex items-center justify-center leading-none">
-                    {guest.remarks!.length}
-                  </span>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="history" className={tabTriggerCls}>
-                {isCoordinator || user?.role === 'desk-in-charge' ? 'Messages' : 'Audit Trail'}
-              </TabsTrigger>
+              {showFlight && (
+                <TabsTrigger value="flight" className={tabTriggerCls}>Flight &amp; Travel</TabsTrigger>
+              )}
+              {showDept && (
+                <TabsTrigger value="room" className={tabTriggerCls}>Department</TabsTrigger>
+              )}
+              {showRemarks && (
+                <TabsTrigger value="remarks" className={tabTriggerCls}>
+                  Remarks
+                  {(guest.remarks?.length ?? 0) > 0 && (
+                    <span className="ml-1.5 bg-[#2D5A45] text-white text-[10px] rounded-full w-4 h-4 inline-flex items-center justify-center leading-none">
+                      {guest.remarks!.length}
+                    </span>
+                  )}
+                </TabsTrigger>
+              )}
+              {showHistory && (
+                <TabsTrigger value="history" className={tabTriggerCls}>
+                  {isCoordinator || user?.role === 'desk-in-charge' ? 'Messages' : 'Audit Trail'}
+                </TabsTrigger>
+              )}
             </TabsList>
           </div>
 
@@ -625,37 +692,46 @@ export function GuestViewModal({
             <TabsContent value="personal" className="mt-0 px-8 py-6 space-y-6">
               {isEditMode ? (
                 <>
-                  {/* Personal Information — edit */}
+                  {/* Personal Information — edit (role-filtered) */}
                   <div>
                     <SectionHeading>Personal Information</SectionHeading>
                     <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                      <div className="lg:col-span-2">
-                        <EditField label="Full Name" required error={errors.fullName?.message}>
-                          <Input
-                            {...register('fullName')}
-                            className={errors.fullName ? 'border-red-500' : ''}
-                          />
-                        </EditField>
-                      </div>
-
-                      <EditField label="Gender" error={errors.gender?.message}>
-                        <select {...register('gender')} className={selectCls}>
-                          <option value="male">Male</option>
-                          <option value="female">Female</option>
-                        </select>
-                      </EditField>
-
-                      <EditField label="Date of Birth" error={errors.dateOfBirth?.message}>
-                        <Input type="date" {...register('dateOfBirth')} />
-                      </EditField>
-
-                      <div>
-                        <p className="text-xs font-medium text-[#4A4A4A] mb-1">Age (auto-calculated)</p>
-                        <div className="px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-[#F5F0E8] text-[#4A4A4A]">
-                          {displayAge}
+                      {visibility.name && (
+                        <div className="lg:col-span-2">
+                          <EditField label="Full Name" required error={errors.fullName?.message}>
+                            <Input
+                              {...register('fullName')}
+                              className={errors.fullName ? 'border-red-500' : ''}
+                            />
+                          </EditField>
                         </div>
-                      </div>
+                      )}
 
+                      {visibility.gender && (
+                        <EditField label="Gender" error={errors.gender?.message}>
+                          <select {...register('gender')} className={selectCls}>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                          </select>
+                        </EditField>
+                      )}
+
+                      {visibility.dob && (
+                        <EditField label="Date of Birth" error={errors.dateOfBirth?.message}>
+                          <Input type="date" {...register('dateOfBirth')} />
+                        </EditField>
+                      )}
+
+                      {visibility.age && (
+                        <div>
+                          <p className="text-xs font-medium text-[#4A4A4A] mb-1">Age (auto-calculated)</p>
+                          <div className="px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-[#F5F0E8] text-[#4A4A4A]">
+                            {displayAge}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Guest type always editable when in edit mode */}
                       <EditField label="Guest Type" error={errors.guestType?.message}>
                         <select {...register('guestType')} className={selectCls}>
                           <option value="individual">Individual</option>
@@ -663,122 +739,131 @@ export function GuestViewModal({
                         </select>
                       </EditField>
 
-                      <EditField label="Visa Status" error={errors.visaStatus?.message}>
-                        <select {...register('visaStatus')} className={selectCls}>
-                          <option value="not-required">Not Required</option>
-                          <option value="pending">Pending</option>
-                          <option value="approved">Approved</option>
-                          <option value="rejected">Rejected</option>
-                          <option value="expired">Expired</option>
-                        </select>
-                      </EditField>
-
-                      <div className="flex items-center gap-2 pt-5">
-                        <input
-                          type="checkbox"
-                          id="vm-wheelchair"
-                          {...register('wheelchairRequired')}
-                          className="w-4 h-4 accent-[#2D5A45]"
-                        />
-                        <Label htmlFor="vm-wheelchair" className="text-sm text-[#4A4A4A]">
-                          Wheelchair Required
-                        </Label>
-                      </div>
-
-                      <div className="lg:col-span-2">
-                        <EditField label="Special Needs" error={errors.specialNeeds?.message}>
-                          <textarea
-                            {...register('specialNeeds')}
-                            rows={2}
-                            className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] outline-none resize-none"
-                          />
+                      {visibility.visaStatus && (
+                        <EditField label="Visa Status" error={errors.visaStatus?.message}>
+                          <select {...register('visaStatus')} className={selectCls}>
+                            <option value="not-required">Not Required</option>
+                            <option value="pending">Pending</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                            <option value="expired">Expired</option>
+                          </select>
                         </EditField>
+                      )}
+
+                      {visibility.wheelchair && (
+                        <div className="flex items-center gap-2 pt-5">
+                          <input
+                            type="checkbox"
+                            id="vm-wheelchair"
+                            {...register('wheelchairRequired')}
+                            className="w-4 h-4 accent-[#2D5A45]"
+                          />
+                          <Label htmlFor="vm-wheelchair" className="text-sm text-[#4A4A4A]">
+                            Wheelchair Required
+                          </Label>
+                        </div>
+                      )}
+
+                      {visibility.specialNeeds && (
+                        <div className="lg:col-span-2">
+                          <EditField label="Special Needs" error={errors.specialNeeds?.message}>
+                            <textarea
+                              {...register('specialNeeds')}
+                              rows={2}
+                              className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] outline-none resize-none"
+                            />
+                          </EditField>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Contact Details — edit (role-filtered) */}
+                  {(visibility.passport || visibility.contactNumber || visibility.email || visibility.country || visibility.designation) && (
+                    <div>
+                      <SectionHeading>Contact Details</SectionHeading>
+                      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                        {visibility.passport && (
+                          <EditField label="Passport Number" required error={errors.passportNumber?.message}>
+                            <Input
+                              {...register('passportNumber')}
+                              className={`font-mono ${errors.passportNumber ? 'border-red-500' : ''}`}
+                            />
+                          </EditField>
+                        )}
+
+                        {visibility.contactNumber && (
+                          <EditField label="Contact Number" required error={errors.contactNumber?.message}>
+                            <Input
+                              {...register('contactNumber')}
+                              className={errors.contactNumber ? 'border-red-500' : ''}
+                            />
+                          </EditField>
+                        )}
+
+                        {visibility.email && (
+                          <EditField label="Email Address" error={errors.email?.message}>
+                            <Input
+                              type="email"
+                              {...register('email')}
+                              className={errors.email ? 'border-red-500' : ''}
+                            />
+                          </EditField>
+                        )}
+
+                        {visibility.country && (
+                          <EditField label="Country" required error={errors.country?.message}>
+                            <select
+                              {...register('country')}
+                              className={`${selectCls} ${errors.country ? 'border-red-500' : ''}`}
+                            >
+                              <option value="">Select country…</option>
+                              {assignableCountries.filter(c => c.isActive).map(c => (
+                                <option key={c.id} value={c.name}>{c.name}</option>
+                              ))}
+                            </select>
+                          </EditField>
+                        )}
+
+                        {visibility.designation && (
+                          <EditField label="Designation">
+                            <DesignationMultiSelect
+                              value={editDesignations}
+                              onChange={setEditDesignations}
+                              options={activeDesignations}
+                            />
+                          </EditField>
+                        )}
                       </div>
                     </div>
-                  </div>
-
-                  {/* Contact Details — edit */}
-                  <div>
-                    <SectionHeading>Contact Details</SectionHeading>
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                      <EditField label="Passport Number" required error={errors.passportNumber?.message}>
-                        <Input
-                          {...register('passportNumber')}
-                          className={`font-mono ${errors.passportNumber ? 'border-red-500' : ''}`}
-                        />
-                      </EditField>
-
-                      <EditField label="Contact Number" required error={errors.contactNumber?.message}>
-                        <Input
-                          {...register('contactNumber')}
-                          className={errors.contactNumber ? 'border-red-500' : ''}
-                        />
-                      </EditField>
-
-                      <EditField label="Email Address" error={errors.email?.message}>
-                        <Input
-                          type="email"
-                          {...register('email')}
-                          className={errors.email ? 'border-red-500' : ''}
-                        />
-                      </EditField>
-
-                      <EditField label="Country" required error={errors.country?.message}>
-                        <select
-                          {...register('country')}
-                          className={`${selectCls} ${errors.country ? 'border-red-500' : ''}`}
-                        >
-                          <option value="">Select country…</option>
-                          {assignableCountries.filter(c => c.isActive).map(c => (
-                            <option key={c.id} value={c.name}>{c.name}</option>
-                          ))}
-                        </select>
-                      </EditField>
-
-                      <EditField label="Designation">
-                        <DesignationMultiSelect
-                          value={editDesignations}
-                          onChange={setEditDesignations}
-                          options={activeDesignations}
-                        />
-                      </EditField>
-                    </div>
-                  </div>
+                  )}
                 </>
               ) : (
                 <>
-                  {/* Personal Information — view */}
+                  {/* Personal Information — view (role-filtered) */}
                   <div>
                     <SectionHeading>Personal Information</SectionHeading>
-                    {guest.photoUrl && (
-                      <div className="mb-4">
-                        <img
-                          src={guest.photoUrl}
-                          alt={guest.fullName}
-                          className="w-24 h-24 object-cover rounded-lg border border-[#E8E3DB]"
-                        />
-                      </div>
-                    )}
                     <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                      <FieldCard label="Full Name" value={guest.fullName} />
-                      <FieldCard label="Gender" value={<span className="capitalize">{guest.gender}</span>} />
-                      <FieldCard label="Date of Birth" value={guest.dateOfBirth} />
-                      <FieldCard label="Age" value={guest.age} />
-                      <FieldCard label="Guest Type" value={<span className="capitalize">{guest.guestType}</span>} />
-                      {guest.guestType === 'individual' && (
-                        <FieldCard label="Head of Family" value={guest.isHeadOfFamily ? <span className="text-[#2D5A45] font-medium">Yes</span> : 'No'} />
+                      {visibility.name && <FieldCard label="Full Name" value={guest.fullName} />}
+                      {visibility.gender && <FieldCard label="Gender" value={<span className="capitalize">{guest.gender}</span>} />}
+                      {visibility.dob && <FieldCard label="Date of Birth" value={guest.dateOfBirth} />}
+                      {visibility.age && <FieldCard label="Age" value={guest.age} />}
+                      {visibility.name && <FieldCard label="Guest Type" value={<span className="capitalize">{guest.guestType}</span>} />}
+                      {visibility.religion && <FieldCard label="Religion" value={guest.religion} />}
+                      {visibility.visaStatus && <FieldCard label="Visa Status" value={VISA_STATUS_LABELS[guest.visaStatus]} />}
+                      {visibility.wheelchair && (
+                        <FieldCard
+                          label="Wheelchair Required"
+                          value={guest.wheelchairRequired
+                            ? <span className="text-amber-700 font-medium">Yes</span>
+                            : 'No'}
+                        />
                       )}
-                      <FieldCard label="Religion" value={guest.religion} />
-                      <FieldCard label="Visa Status" value={VISA_STATUS_LABELS[guest.visaStatus]} />
-                      <FieldCard
-                        label="Wheelchair Required"
-                        value={guest.wheelchairRequired
-                          ? <span className="text-amber-700 font-medium">Yes</span>
-                          : 'No'}
-                      />
-                      <FieldCard label="Special Needs" value={guest.specialNeeds} />
+                      {visibility.specialNeeds && <FieldCard label="Special Needs" value={guest.specialNeeds} />}
+                      {visibility.dietary && <FieldCard label="Dietary Requirements" value={guest.dietaryRequirements} />}
                     </div>
-                    {guest.introduction && (
+                    {visibility.introduction && guest.introduction && (
                       <div className="mt-4 p-3 bg-[#F5F0E8] rounded-lg">
                         <p className="text-xs font-medium text-[#4A4A4A] mb-1">Introduction</p>
                         <p className="text-sm text-[#1A1A1A] whitespace-pre-wrap">{guest.introduction}</p>
@@ -786,34 +871,78 @@ export function GuestViewModal({
                     )}
                   </div>
 
-                  {/* Expenses — view */}
-                  {(guest.expenses || guest.tabshirReference) && (
+                  {/* Expenses — view (super-admin / desk-in-charge / coordinator only) */}
+                  {(visibility.expenses || visibility.tabshirReference) && (guest.expenses || guest.tabshirReference) && (
                     <div>
                       <SectionHeading>Expenses</SectionHeading>
                       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                        <FieldCard label="Expenses Covered By" value={guest.expenses ?? 'Self'} />
-                        {guest.tabshirReference && (
+                        {visibility.expenses && <FieldCard label="Expenses Covered By" value={guest.expenses ?? 'Self'} />}
+                        {visibility.tabshirReference && guest.tabshirReference && (
                           <FieldCard label="Tabshir Reference Nr." value={<span className="font-mono">{guest.tabshirReference}</span>} />
                         )}
                       </div>
                     </div>
                   )}
 
-
-                  {/* Contact Details — view */}
-                  <div>
-                    <SectionHeading>Contact Details</SectionHeading>
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                      <FieldCard label="Passport Number" value={<span className="font-mono">{guest.passportNumber}</span>} />
-                      <FieldCard label="Contact Number" value={guest.contactNumber} />
-                      <FieldCard label="Email Address" value={guest.email} />
-                      <FieldCard label="Country" value={guest.country} />
-                      <FieldCard label="Designation" value={formatDesignation(guest.designation)} />
+                  {/* Contact Details — view (role-filtered) */}
+                  {(visibility.passport || visibility.contactNumber || visibility.email || visibility.country || visibility.designation) && (
+                    <div>
+                      <SectionHeading>Contact Details</SectionHeading>
+                      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                        {visibility.passport && (
+                          <FieldCard label="Passport Number" value={<span className="font-mono">{guest.passportNumber}</span>} />
+                        )}
+                        {visibility.passportCountry && <FieldCard label="Passport Country" value={guest.passportCountry} />}
+                        {visibility.contactNumber && <FieldCard label="Contact Number" value={guest.contactNumber} />}
+                        {visibility.email && <FieldCard label="Email Address" value={guest.email} />}
+                        {visibility.country && <FieldCard label="Country" value={guest.country} />}
+                        {visibility.designation && guest.designation && (
+                          <FieldCard
+                            label="Designation"
+                            value={(() => {
+                              const names = Array.isArray(guest.designation) ? guest.designation : [guest.designation];
+                              const label = names.length > 1 ? `${names[0]} +${names.length - 1}` : names[0];
+                              if (visibility.tierBadge) {
+                                const tierMap = new Map(activeDesignations.map(d => [d.name, d.tier]));
+                                const tier = (() => {
+                                  let best: string | null | undefined = null;
+                                  let bestIdx = Infinity;
+                                  for (const n of names) {
+                                    const t = tierMap.get(n);
+                                    if (t == null) continue;
+                                    const idx = TIER_ORDER.indexOf(t as typeof TIER_ORDER[number]);
+                                    if (idx !== -1 && idx < bestIdx) { bestIdx = idx; best = t; }
+                                  }
+                                  return best;
+                                })();
+                                const badge = getTierBadgeLabel(tier);
+                                return (
+                                  <span className="flex items-center gap-1 flex-wrap">
+                                    <span>{label}</span>
+                                    {badge && <span className={`text-[10px] font-bold px-1.5 py-px rounded-full ${getTierBadgeClass(tier)}`}>{badge}</span>}
+                                  </span>
+                                );
+                              }
+                              if (visibility.specialStar) {
+                                const tierMap = new Map(activeDesignations.map(d => [d.name, d.tier]));
+                                const isSpecial = names.some(n => { const t = tierMap.get(n); return t === '1(a)' || t === '1(b)' || t === '2'; });
+                                return (
+                                  <span className="flex items-center gap-1">
+                                    {isSpecial && <Star className="w-3.5 h-3.5 text-amber-500 shrink-0" fill="currentColor" />}
+                                    <span>{label}</span>
+                                  </span>
+                                );
+                              }
+                              return <span>{label}</span>;
+                            })()}
+                          />
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Family Members — view only */}
-                  {guest.guestType === 'family' && guest.familyMembers.length > 0 && (
+                  {visibility.familyMembers && guest.guestType === 'family' && guest.familyMembers.length > 0 && (
                     <div>
                       <SectionHeading>
                         Family Members ({guest.familyMembers.length + 1} total incl. primary guest)
@@ -933,63 +1062,67 @@ export function GuestViewModal({
             <TabsContent value="room" className="mt-0 px-8 py-6 space-y-5">
               <div className="grid grid-cols-2 gap-6">
                 {/* Department card */}
-                <div className="bg-white rounded-xl border border-[#E8E3DB] p-5 space-y-3">
-                  <SectionHeading>Department Assignment</SectionHeading>
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-xs text-[#4A4A4A] mb-1.5">Assigned Department</p>
-                      {guest.assignedDepartment ? (
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium border ${getDeptBadgeCls(guest.assignedDepartment)}`}>
-                          <Building2 className="w-3.5 h-3.5 mr-1.5" />
-                          {guest.assignedDepartment}
-                        </span>
-                      ) : (
-                        <span className="text-sm text-[#4A4A4A] italic">Not assigned</span>
+                {visibility.department && (
+                  <div className="bg-white rounded-xl border border-[#E8E3DB] p-5 space-y-3">
+                    <SectionHeading>Department Assignment</SectionHeading>
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-xs text-[#4A4A4A] mb-1.5">Assigned Department</p>
+                        {guest.assignedDepartment ? (
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium border ${getDeptBadgeCls(guest.assignedDepartment)}`}>
+                            <Building2 className="w-3.5 h-3.5 mr-1.5" />
+                            {guest.assignedDepartment}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-[#4A4A4A] italic">Not assigned</span>
+                        )}
+                      </div>
+                      {guest.assignedDepartmentByName && (
+                        <PlainField label="Assigned by" value={guest.assignedDepartmentByName} />
+                      )}
+                      {guest.assignedDepartmentAt && (
+                        <PlainField
+                          label="Assigned on"
+                          value={new Date(guest.assignedDepartmentAt).toLocaleString('en-GB', {
+                            day: 'numeric', month: 'short', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit',
+                          })}
+                        />
                       )}
                     </div>
-                    {guest.assignedDepartmentByName && (
-                      <PlainField label="Assigned by" value={guest.assignedDepartmentByName} />
-                    )}
-                    {guest.assignedDepartmentAt && (
-                      <PlainField
-                        label="Assigned on"
-                        value={new Date(guest.assignedDepartmentAt).toLocaleString('en-GB', {
-                          day: 'numeric', month: 'short', year: 'numeric',
-                          hour: '2-digit', minute: '2-digit',
-                        })}
-                      />
-                    )}
                   </div>
-                </div>
+                )}
 
                 {/* Location card */}
-                <div className="bg-white rounded-xl border border-[#E8E3DB] p-5 space-y-3">
-                  <SectionHeading>Location Placement</SectionHeading>
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-xs text-[#4A4A4A] mb-1.5">Placed Location</p>
-                      {guest.placedLocation ? (
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium border ${getLocPillCls(guest.assignedDepartment ?? '', guest.placedLocation)}`}>
-                          {guest.placedLocation}
-                        </span>
-                      ) : (
-                        <span className="text-sm text-[#4A4A4A] italic">Not placed</span>
+                {visibility.location && (
+                  <div className="bg-white rounded-xl border border-[#E8E3DB] p-5 space-y-3">
+                    <SectionHeading>Location Placement</SectionHeading>
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-xs text-[#4A4A4A] mb-1.5">Placed Location</p>
+                        {guest.placedLocation ? (
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium border ${getLocPillCls(guest.assignedDepartment ?? '', guest.placedLocation)}`}>
+                            {guest.placedLocation}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-[#4A4A4A] italic">Not placed</span>
+                        )}
+                      </div>
+                      {guest.placedByName && (
+                        <PlainField label="Placed by" value={guest.placedByName} />
+                      )}
+                      {guest.placedAt && (
+                        <PlainField
+                          label="Placed on"
+                          value={new Date(guest.placedAt).toLocaleString('en-GB', {
+                            day: 'numeric', month: 'short', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit',
+                          })}
+                        />
                       )}
                     </div>
-                    {guest.placedByName && (
-                      <PlainField label="Placed by" value={guest.placedByName} />
-                    )}
-                    {guest.placedAt && (
-                      <PlainField
-                        label="Placed on"
-                        value={new Date(guest.placedAt).toLocaleString('en-GB', {
-                          day: 'numeric', month: 'short', year: 'numeric',
-                          hour: '2-digit', minute: '2-digit',
-                        })}
-                      />
-                    )}
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Edit controls — super-admin + desk-in-charge in edit mode only */}
@@ -1035,7 +1168,7 @@ export function GuestViewModal({
               )}
 
               {/* Room Assignment — super-admin in edit mode, guest must be placed at a location */}
-              {isSuperAdmin && isEditMode && guest.placedLocation && guest.status !== 'Accommodated' && (
+              {visibility.roomBed && isSuperAdmin && isEditMode && guest.placedLocation && guest.status !== 'Accommodated' && (
                 <div className="bg-white rounded-xl border border-[#E8E3DB] p-5 space-y-4">
                   <SectionHeading>Room Assignment</SectionHeading>
                   {locationRooms.length === 0 ? (
@@ -1163,6 +1296,8 @@ export function GuestViewModal({
 
           </div>{/* end scrollable body */}
         </Tabs>
+          ); // end IIFE return
+        })()} {/* end tab visibility IIFE */}
 
         {/* ── Edit mode footer ── */}
         {isEditMode && (

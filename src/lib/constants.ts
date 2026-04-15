@@ -99,23 +99,10 @@ export const GUEST_TYPE_OPTIONS = [
 ] as const;
 
 export const RELATIONSHIP_OPTIONS = [
-  { value: 'spouse', label: 'Spouse' },
-  { value: 'son', label: 'Son' },
-  { value: 'daughter', label: 'Daughter' },
-  { value: 'father', label: 'Father' },
-  { value: 'mother', label: 'Mother' },
-  { value: 'brother', label: 'Brother' },
-  { value: 'sister', label: 'Sister' },
-  { value: 'grandfather', label: 'Grandfather' },
-  { value: 'grandmother', label: 'Grandmother' },
-  { value: 'grandson', label: 'Grandson' },
-  { value: 'granddaughter', label: 'Granddaughter' },
-  { value: 'uncle', label: 'Uncle' },
-  { value: 'aunt', label: 'Aunt' },
-  { value: 'nephew', label: 'Nephew' },
-  { value: 'niece', label: 'Niece' },
-  { value: 'cousin', label: 'Cousin' },
-  { value: 'other', label: 'Other' },
+  { value: 'Father',   label: 'Father'   },
+  { value: 'Mother',   label: 'Mother'   },
+  { value: 'Daughter', label: 'Daughter' },
+  { value: 'Son',      label: 'Son'      },
 ] as const;
 
 export const GUEST_STATUS_LABELS: Record<string, string> = {

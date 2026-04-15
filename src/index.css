@@ -76,3 +76,17 @@
   from { transform: translateY(100%); }
   to   { transform: translateY(0); }
 }
+
+/* Hide scrollbar but keep scrollability (used in filter pill rows) */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Mobile overscroll + momentum scroll */
+@media (max-width: 767px) {
+  body {
+    overscroll-behavior: none;
+  }
+  .overflow-y-auto, .overflow-y-scroll {
+    -webkit-overflow-scrolling: touch;
+  }
+}

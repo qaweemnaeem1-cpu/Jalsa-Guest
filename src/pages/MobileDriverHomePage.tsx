@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   MapPin, Phone, Navigation, Clock, CheckCircle2,
   ChevronRight, AlertCircle, Car, Users, Calendar,
-  MessageSquare, X, Check,
+  MessageSquare, X, Check, Star,
 } from 'lucide-react';
 import MobileDriverLayout from '@/components/MobileDriverLayout';
 import { useAuth } from '@/hooks/useAuth';
@@ -55,6 +55,12 @@ function NewTaskSheet({
         {/* Handle */}
         <div className="w-10 h-1 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-5" />
 
+        {task.priority === 'vip' && (
+          <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl px-3 py-2 mb-4">
+            <Star className="w-4 h-4 text-amber-500 shrink-0" fill="currentColor" />
+            <span className="text-sm font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wide">Special Guest</span>
+          </div>
+        )}
         <div className="flex items-start gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
             <AlertCircle className="w-5 h-5 text-amber-600" />
@@ -471,8 +477,15 @@ export default function MobileDriverHomePage() {
                 {pendingTasks.map(task => (
                   <div
                     key={task.id}
-                    className="rounded-2xl bg-white dark:bg-gray-900 border border-[#E8E3DB] dark:border-gray-800 p-4 shadow-sm"
+                    className={`rounded-2xl bg-white dark:bg-gray-900 border shadow-sm overflow-hidden ${task.priority === 'vip' ? 'border-amber-300 dark:border-amber-700' : 'border-[#E8E3DB] dark:border-gray-800'}`}
                   >
+                    {task.priority === 'vip' && (
+                      <div className="flex items-center gap-1.5 px-4 py-1.5 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
+                        <Star className="w-3 h-3 text-amber-500 shrink-0" fill="currentColor" />
+                        <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 tracking-wide uppercase">Special Guest</span>
+                      </div>
+                    )}
+                    <div className="p-4">
                     <div className="flex items-start justify-between gap-2 mb-1">
                       <div>
                         <p className="font-semibold text-[#1A1A1A] dark:text-white text-sm">
@@ -498,6 +511,7 @@ export default function MobileDriverHomePage() {
                         {task.pickup_location}
                       </div>
                     )}
+                    </div>
                   </div>
                 ))}
               </div>

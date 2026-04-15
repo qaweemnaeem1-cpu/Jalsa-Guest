@@ -92,6 +92,8 @@ export interface FamilyMember {
   age: number;
   relationship: string;
   gender: 'male' | 'female';
+  dateOfBirth?: string;
+  passportNumber?: string;
   passportCountry?: string;
   designation?: string | string[];
   status?: FamilyMemberStatus;
@@ -101,6 +103,28 @@ export interface FamilyMember {
   placedAt?: string;
   rejectionReason?: string;
   remarks?: string;
+  // Full registration fields
+  contactNumber?: string;
+  email?: string;
+  visaStatus?: string;
+  wheelchairRequired?: boolean;
+  specialNeeds?: string;
+  dietaryRequirements?: string;
+  religion?: string;
+  introduction?: string;
+  expenses?: 'Self' | 'Jamaat';
+  tabshirReference?: string;
+  photoUrl?: string;
+  // Flight details (used when sameFlight === false)
+  sameFlight?: boolean;
+  arrivalFlightNumber?: string;
+  arrivalAirport?: string;
+  arrivalTerminal?: string;
+  arrivalTime?: string;
+  departureFlightNumber?: string;
+  departureAirport?: string;
+  departureTerminal?: string;
+  departureTime?: string;
 }
 
 export interface GuestRemark {

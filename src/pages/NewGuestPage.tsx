@@ -20,9 +20,9 @@ import {
   Users,
   ArrowLeft,
   ChevronDown,
+  ChevronRight,
   LogOut,
   Plus,
-  Trash2,
   Plane,
   User,
   Calendar,
@@ -199,99 +199,623 @@ function DesignationMultiSelect({ value, onChange, options, placeholder = 'Selec
   );
 }
 
-// ── Family member form ────────────────────────────────────────────────────────
+// ── Family member form (full accordion) ──────────────────────────────────────
 
 interface FamilyMemberFormProps {
   member: FamilyMember;
   index: number;
+  isExpanded: boolean;
+  onToggle: () => void;
   onUpdate: (index: number, updates: Partial<FamilyMember>) => void;
   onRemove: (index: number) => void;
   designationOptions: Designation[];
+  religions: Array<{ id: string; name: string }>;
+  mainGuestName: string;
+  mainGuestFlight: {
+    arrivalFlightNumber: string;
+    arrivalAirport: string;
+    arrivalTerminal: string;
+    arrivalTime: string;
+    departureFlightNumber: string;
+    departureAirport: string;
+    departureTerminal: string;
+    departureTime: string;
+  };
+  errors?: string[];
 }
 
-function FamilyMemberForm({ member, index, onUpdate, onRemove, designationOptions }: FamilyMemberFormProps) {
+function FamilyMemberForm({
+  member, index, isExpanded, onToggle,
+  onUpdate, onRemove, designationOptions,
+  religions, mainGuestName, mainGuestFlight, errors = [],
+}: FamilyMemberFormProps) {
+  const [relOpen, setRelOpen] = useState(false);
+  const [relSearch, setRelSearch] = useState('');
+  const relRef = useRef<HTMLDivElement>(null);
+  const memberPhotoRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!relOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (relRef.current && !relRef.current.contains(e.target as Node)) {
+        setRelOpen(false); setRelSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [relOpen]);
+
+  const calcAge = (dob: string) => {
+    if (!dob) return 0;
+    const t = new Date(), b = new Date(dob);
+    let a = t.getFullYear() - b.getFullYear();
+    if (t.getMonth() < b.getMonth() || (t.getMonth() === b.getMonth() && t.getDate() < b.getDate())) a--;
+    return a >= 0 ? a : 0;
+  };
+
+  const handleMemberPhoto = (file: File) => {
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return;
+    if (file.size > 5 * 1024 * 1024) return;
+    const reader = new FileReader();
+    reader.onload = (e) => onUpdate(index, { photoUrl: e.target?.result as string });
+    reader.readAsDataURL(file);
+  };
+
+  const sameFlightEnabled = member.sameFlight !== false;
+
+  const fmtDateTime = (dt?: string) => {
+    if (!dt) return '—';
+    const d = new Date(dt);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) + ', ' +
+      d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const getAirportName = (code: string) => AIRPORTS.find(a => a.code === code)?.name ?? code;
+
+  const memberLabel = member.name
+    ? `${member.name}${member.relationship ? ` (${member.relationship})` : ''}`
+    : `Family Member ${index + 1}`;
+
+  const sel = 'w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] h-11';
+  const hasError = errors.length > 0;
+
   return (
-    <div className="bg-[#F5F0E8] rounded-lg p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h4 className="font-medium text-[#1A1A1A]">Family Member {index + 1}</h4>
-        <Button
+    <div className={`border rounded-xl overflow-hidden transition-all duration-200 ${hasError ? 'border-red-400' : 'border-[#E8E3DB]'}`}>
+      {/* ── Accordion header ── */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onToggle}
+        onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onToggle()}
+        className={`flex items-center justify-between px-4 py-3 cursor-pointer select-none transition-colors ${
+          isExpanded ? 'bg-[#D6E4D9]' : hasError ? 'bg-red-50' : 'bg-gray-50 hover:bg-[#EDF4EF]'
+        }`}
+      >
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {isExpanded
+            ? <ChevronDown className="w-4 h-4 text-[#2D5A45] shrink-0" />
+            : <ChevronRight className="w-4 h-4 text-[#4A4A4A] shrink-0" />
+          }
+          <span className={`text-sm font-medium truncate ${isExpanded ? 'text-[#2D5A45]' : 'text-[#1A1A1A]'}`}>
+            {isExpanded ? `Family Member ${index + 1}` : memberLabel}
+          </span>
+          {hasError && <span className="text-xs text-red-500 shrink-0 ml-1">⚠ Required fields missing</span>}
+        </div>
+        <button
           type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => onRemove(index)}
-          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+          onClick={e => { e.stopPropagation(); onRemove(index); }}
+          className="ml-2 p-1.5 text-red-400 hover:text-red-600 hover:bg-red-100 rounded-lg shrink-0 transition-colors"
+          aria-label="Remove family member"
         >
-          <Trash2 className="w-4 h-4" />
-        </Button>
-      </div>
-      
-      <div className="grid md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label className="text-[#1A1A1A]">Full Name *</Label>
-          <Input
-            value={member.name}
-            onChange={(e) => onUpdate(index, { name: e.target.value })}
-            placeholder="Enter full name"
-            className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45]"
-          />
-        </div>
-        
-        <div className="space-y-2">
-          <Label className="text-[#1A1A1A]">Age *</Label>
-          <Input
-            type="number"
-            value={member.age || ''}
-            onChange={(e) => onUpdate(index, { age: parseInt(e.target.value) || 0 })}
-            placeholder="Enter age"
-            className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45]"
-          />
-        </div>
-        
-        <div className="space-y-2">
-          <Label className="text-[#1A1A1A]">Relationship to Applicant *</Label>
-          <select
-            value={member.relationship}
-            onChange={(e) => onUpdate(index, { relationship: e.target.value })}
-            className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-[#2D5A45]"
-          >
-            <option value="">Select relationship</option>
-            {RELATIONSHIP_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </div>
-        
-        <div className="space-y-2">
-          <Label className="text-[#1A1A1A]">Gender *</Label>
-          <select
-            value={member.gender}
-            onChange={(e) => onUpdate(index, { gender: e.target.value as 'male' | 'female' })}
-            className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-[#2D5A45]"
-          >
-            {GENDER_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </div>
+          <X className="w-4 h-4" />
+        </button>
       </div>
 
-      <div className="space-y-2">
-        <Label className="text-[#1A1A1A]">Passport Issuing Country</Label>
-        <CountryCombobox
-          value={member.passportCountry ?? ''}
-          onChange={(v) => onUpdate(index, { passportCountry: v })}
-        />
-      </div>
+      {/* ── Expanded form ── */}
+      {isExpanded && (
+        <div className="bg-white border-t border-[#E8E3DB] px-4 py-5 space-y-6">
 
-      <div className="space-y-2">
-        <Label className="text-[#1A1A1A]">Designation</Label>
-        <DesignationMultiSelect
-          value={Array.isArray(member.designation) ? member.designation : (member.designation ? [member.designation] : [])}
-          onChange={(v) => onUpdate(index, { designation: v })}
-          options={designationOptions}
-          placeholder="Select designations (optional)"
-        />
-      </div>
+          {/* Personal Details */}
+          <div className="space-y-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#4A4A4A] border-b border-[#E8E3DB] pb-2">Personal Details</p>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* Full Name */}
+              <div className="space-y-1">
+                <Label className="text-[#1A1A1A] text-sm font-medium">Full Name *</Label>
+                <Input
+                  value={member.name}
+                  onChange={e => onUpdate(index, { name: e.target.value })}
+                  placeholder="Enter full name"
+                  className={`border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11 ${errors.includes('Name required') ? 'border-red-400' : ''}`}
+                />
+                {errors.includes('Name required') && <p className="text-xs text-red-500">Full name is required</p>}
+              </div>
+
+              {/* Relationship */}
+              <div className="space-y-1">
+                <Label className="text-[#1A1A1A] text-sm font-medium">Relationship *</Label>
+                <select
+                  value={member.relationship}
+                  onChange={e => onUpdate(index, { relationship: e.target.value })}
+                  className={`${sel} ${errors.includes('Relationship required') ? 'border-red-400' : ''}`}
+                >
+                  <option value="">Select relationship</option>
+                  {RELATIONSHIP_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                {errors.includes('Relationship required') && <p className="text-xs text-red-500">Relationship is required</p>}
+              </div>
+
+              {/* Gender */}
+              <div className="space-y-1">
+                <Label className="text-[#1A1A1A] text-sm font-medium">Gender *</Label>
+                <select
+                  value={member.gender}
+                  onChange={e => onUpdate(index, { gender: e.target.value as 'male' | 'female' })}
+                  className={`${sel} ${errors.includes('Gender required') ? 'border-red-400' : ''}`}
+                >
+                  {GENDER_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Date of Birth + auto-age */}
+              <div className="space-y-1">
+                <Label className="text-[#1A1A1A] text-sm font-medium">Date of Birth *</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="date"
+                    value={member.dateOfBirth ?? ''}
+                    onChange={e => {
+                      const dob = e.target.value;
+                      onUpdate(index, { dateOfBirth: dob, age: calcAge(dob) });
+                    }}
+                    className={`border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11 flex-1 ${errors.includes('Date of Birth required') ? 'border-red-400' : ''}`}
+                  />
+                  {member.dateOfBirth && (
+                    <div className="flex items-center justify-center bg-[#F5F0E8] border border-[#E8E3DB] rounded-md px-3 text-sm text-[#2D5A45] font-medium whitespace-nowrap h-11">
+                      Age {calcAge(member.dateOfBirth)}
+                    </div>
+                  )}
+                </div>
+                {errors.includes('Date of Birth required') && <p className="text-xs text-red-500">Date of birth is required</p>}
+              </div>
+
+              {/* Religion */}
+              <div className="space-y-1" ref={relRef}>
+                <Label className="text-[#1A1A1A] text-sm font-medium">Religion</Label>
+                <div className="relative">
+                  <div
+                    tabIndex={0}
+                    role="combobox"
+                    aria-expanded={relOpen}
+                    className="flex items-center justify-between w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white h-11 cursor-pointer hover:border-[#2D5A45] transition-colors focus:outline-none focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45]"
+                    onClick={() => setRelOpen(o => !o)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setRelOpen(o => !o); }
+                      if (e.key === 'Escape') { setRelOpen(false); setRelSearch(''); }
+                    }}
+                  >
+                    <span className={member.religion ? 'text-[#1A1A1A]' : 'text-gray-400'}>
+                      {member.religion || 'Select religion'}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {member.religion && (
+                        <button type="button" onClick={e => { e.stopPropagation(); onUpdate(index, { religion: '' }); }}
+                          className="text-gray-400 hover:text-[#1A1A1A]">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${relOpen ? 'rotate-180' : ''}`} />
+                    </div>
+                  </div>
+                  {relOpen && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+                      <div className="p-2 border-b border-gray-100">
+                        <input
+                          autoFocus
+                          type="text"
+                          value={relSearch}
+                          onChange={e => setRelSearch(e.target.value)}
+                          placeholder="Search religion..."
+                          className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-md outline-none focus:border-[#2D5A45]"
+                        />
+                      </div>
+                      <div className="max-h-48 overflow-y-auto py-1">
+                        {religions
+                          .filter(r => r.name.toLowerCase().includes(relSearch.toLowerCase()))
+                          .map(r => (
+                            <button key={r.id} type="button"
+                              onClick={() => { onUpdate(index, { religion: r.name }); setRelOpen(false); setRelSearch(''); }}
+                              className={`w-[calc(100%-8px)] mx-1 my-0.5 text-left px-3 py-2 text-sm rounded-md transition-colors ${member.religion === r.name ? 'bg-[#D6E4D9] text-[#2D5A45] font-medium' : 'text-gray-700 hover:bg-[#D6E4D9] hover:text-[#2D5A45]'}`}
+                            >
+                              {r.name}
+                            </button>
+                          ))
+                        }
+                        {religions.filter(r => r.name.toLowerCase().includes(relSearch.toLowerCase())).length === 0 && (
+                          <p className="px-3 py-2 text-sm text-gray-400">No results</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Photo */}
+              <div className="space-y-1">
+                <Label className="text-[#1A1A1A] text-sm font-medium">Photo</Label>
+                {member.photoUrl ? (
+                  <div className="flex items-center gap-3 h-11">
+                    <img src={member.photoUrl} alt="Member" className="w-10 h-10 rounded-lg object-cover border border-[#E8E3DB]" />
+                    <button type="button" onClick={() => onUpdate(index, { photoUrl: '' })}
+                      className="text-sm text-red-500 hover:text-red-700">Remove</button>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => memberPhotoRef.current?.click()}
+                    className="flex items-center gap-2 px-3 py-2.5 border border-dashed border-[#D4CFC7] rounded-md cursor-pointer hover:border-[#2D5A45] transition-colors h-11"
+                  >
+                    <ImageIcon className="w-4 h-4 text-gray-400" />
+                    <span className="text-sm text-gray-400">Upload photo (JPG/PNG, max 5MB)</span>
+                  </div>
+                )}
+                <input
+                  ref={memberPhotoRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleMemberPhoto(f); e.target.value = ''; }}
+                />
+              </div>
+            </div>
+
+            {/* Designation */}
+            <div className="space-y-1">
+              <Label className="text-[#1A1A1A] text-sm font-medium">Designation</Label>
+              <DesignationMultiSelect
+                value={Array.isArray(member.designation) ? member.designation : (member.designation ? [member.designation] : [])}
+                onChange={v => onUpdate(index, { designation: v })}
+                options={designationOptions}
+                placeholder="Select designations (optional)"
+              />
+            </div>
+
+            {/* Introduction */}
+            <div className="space-y-1">
+              <Label className="text-[#1A1A1A] text-sm font-medium">Introduction</Label>
+              <textarea
+                value={member.introduction ?? ''}
+                onChange={e => onUpdate(index, { introduction: e.target.value })}
+                placeholder="Brief introduction (optional)"
+                rows={2}
+                className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] resize-none"
+              />
+            </div>
+          </div>
+
+          {/* Contact & Documents */}
+          <div className="space-y-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#4A4A4A] border-b border-[#E8E3DB] pb-2">Contact & Documents</p>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label className="text-[#1A1A1A] text-sm font-medium">Passport Number *</Label>
+                <Input
+                  value={member.passportNumber ?? ''}
+                  onChange={e => onUpdate(index, { passportNumber: e.target.value })}
+                  placeholder="Enter passport number"
+                  className={`border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11 ${errors.includes('Passport number required') ? 'border-red-400' : ''}`}
+                />
+                {errors.includes('Passport number required') && <p className="text-xs text-red-500">Passport number is required</p>}
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[#1A1A1A] text-sm font-medium">Passport Issuing Country</Label>
+                <CountryCombobox
+                  value={member.passportCountry ?? ''}
+                  onChange={v => onUpdate(index, { passportCountry: v })}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[#1A1A1A] text-sm font-medium">Contact Number</Label>
+                <Input
+                  value={member.contactNumber ?? ''}
+                  onChange={e => onUpdate(index, { contactNumber: e.target.value })}
+                  placeholder="Leave blank to use head's number"
+                  className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[#1A1A1A] text-sm font-medium">Email</Label>
+                <Input
+                  type="email"
+                  value={member.email ?? ''}
+                  onChange={e => onUpdate(index, { email: e.target.value })}
+                  placeholder="Optional"
+                  className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Travel Details */}
+          <div className="space-y-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#4A4A4A] border-b border-[#E8E3DB] pb-2">Travel Details</p>
+
+            <div className="space-y-2">
+              <Label className="text-[#1A1A1A] text-sm font-medium">Visa Status</Label>
+              <div className="flex flex-wrap gap-2">
+                {VISA_STATUS_OPTIONS.map(opt => (
+                  <button key={opt.value} type="button"
+                    onClick={() => onUpdate(index, { visaStatus: opt.value })}
+                    className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-all ${
+                      (member.visaStatus ?? 'not-required') === opt.value
+                        ? 'bg-green-50 text-green-700 border-green-300 ring-2 ring-green-300 ring-offset-1'
+                        : 'border-[#D4CFC7] text-[#4A4A4A] hover:bg-[#F5F0E8]'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-[#1A1A1A] text-sm font-medium">Wheelchair Required</Label>
+              <div className="flex gap-3">
+                {([{ v: false, l: 'No' }, { v: true, l: 'Yes' }] as const).map(({ v, l }) => (
+                  <button key={l} type="button"
+                    onClick={() => onUpdate(index, { wheelchairRequired: v })}
+                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
+                      (member.wheelchairRequired ?? false) === v
+                        ? 'bg-[#2D5A45] text-white border-[#2D5A45]'
+                        : 'border-[#D4CFC7] text-[#4A4A4A] hover:bg-[#F5F0E8]'
+                    }`}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[#1A1A1A] text-sm font-medium">Special Needs</Label>
+              <textarea
+                value={member.specialNeeds ?? ''}
+                onChange={e => onUpdate(index, { specialNeeds: e.target.value })}
+                placeholder="Any special requirements..."
+                rows={2}
+                className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] resize-none"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[#1A1A1A] text-sm font-medium">Dietary Requirements</Label>
+              <textarea
+                value={member.dietaryRequirements ?? ''}
+                onChange={e => onUpdate(index, { dietaryRequirements: e.target.value })}
+                placeholder="Any dietary requirements..."
+                rows={2}
+                className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] resize-none"
+              />
+            </div>
+          </div>
+
+          {/* Expenses */}
+          <div className="space-y-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#4A4A4A] border-b border-[#E8E3DB] pb-2">Expenses</p>
+
+            <div className="flex gap-6">
+              {(['Self', 'Jamaat'] as const).map(v => (
+                <label key={v} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name={`expenses-${member.id}`}
+                    value={v}
+                    checked={(member.expenses ?? 'Self') === v}
+                    onChange={() => onUpdate(index, { expenses: v })}
+                    className="accent-[#2D5A45]"
+                  />
+                  <span className="text-sm">{v}</span>
+                </label>
+              ))}
+            </div>
+
+            {member.expenses === 'Jamaat' && (
+              <div className="space-y-1">
+                <Label className="text-[#1A1A1A] text-sm font-medium">Tabshir Reference Nr.</Label>
+                <Input
+                  value={member.tabshirReference ?? ''}
+                  onChange={e => onUpdate(index, { tabshirReference: e.target.value })}
+                  placeholder="Enter Tabshir reference number"
+                  className="border-[#2D5A45] ring-1 ring-[#2D5A45] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Flight Details */}
+          <div className="space-y-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#4A4A4A] border-b border-[#E8E3DB] pb-2 flex items-center gap-1.5">
+              <Plane className="w-3.5 h-3.5 text-[#2D5A45]" />
+              Flight Details
+            </p>
+
+            <div className="space-y-3">
+              <Label className="text-[#1A1A1A] text-sm font-medium">
+                Same flight as {mainGuestName || 'Head Guest'}?
+              </Label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => onUpdate(index, { sameFlight: true })}
+                  className={`px-6 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    sameFlightEnabled ? 'bg-[#2D5A45] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  YES
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onUpdate(index, { sameFlight: false })}
+                  className={`px-6 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    !sameFlightEnabled ? 'bg-[#2D5A45] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  NO
+                </button>
+              </div>
+
+              {sameFlightEnabled ? (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-sm space-y-1.5">
+                  <div className="flex items-center gap-2 text-green-700 font-medium mb-1">
+                    <CheckSquare className="w-4 h-4" />
+                    Same flight as {mainGuestName || 'Head Guest'}
+                  </div>
+                  {(mainGuestFlight.arrivalFlightNumber || mainGuestFlight.arrivalTime) ? (
+                    <>
+                      <div className="flex flex-wrap items-center gap-1.5 text-green-800">
+                        <Plane className="w-3.5 h-3.5 shrink-0" />
+                        <span className="font-medium">Arrival:</span>
+                        <span>{fmtDateTime(mainGuestFlight.arrivalTime)}</span>
+                        {mainGuestFlight.arrivalFlightNumber && <span>· Flight {mainGuestFlight.arrivalFlightNumber}</span>}
+                        {mainGuestFlight.arrivalAirport && (
+                          <span>· {getAirportName(mainGuestFlight.arrivalAirport)}{mainGuestFlight.arrivalTerminal ? ` T${mainGuestFlight.arrivalTerminal}` : ''}</span>
+                        )}
+                      </div>
+                      {(mainGuestFlight.departureFlightNumber || mainGuestFlight.departureTime) && (
+                        <div className="flex flex-wrap items-center gap-1.5 text-green-800">
+                          <Plane className="w-3.5 h-3.5 shrink-0 rotate-180" />
+                          <span className="font-medium">Departure:</span>
+                          <span>{fmtDateTime(mainGuestFlight.departureTime)}</span>
+                          {mainGuestFlight.departureFlightNumber && <span>· Flight {mainGuestFlight.departureFlightNumber}</span>}
+                          {mainGuestFlight.departureAirport && (
+                            <span>· {getAirportName(mainGuestFlight.departureAirport)}{mainGuestFlight.departureTerminal ? ` T${mainGuestFlight.departureTerminal}` : ''}</span>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-green-700 text-xs">
+                      Flight details will be copied from the head guest when saved. Add flight details above.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
+                    This family member is travelling separately. A separate pickup will be arranged.
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-[#1A1A1A] text-sm font-medium">Arrival Flight Number *</Label>
+                      <Input
+                        value={member.arrivalFlightNumber ?? ''}
+                        onChange={e => onUpdate(index, { arrivalFlightNumber: e.target.value })}
+                        placeholder="e.g. BA123"
+                        className={`border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11 ${errors.includes('Arrival flight number required') ? 'border-red-400' : ''}`}
+                      />
+                      {errors.includes('Arrival flight number required') && <p className="text-xs text-red-500">Required when travelling separately</p>}
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-[#1A1A1A] text-sm font-medium">Arrival Airport</Label>
+                      <select
+                        value={member.arrivalAirport ?? ''}
+                        onChange={e => onUpdate(index, { arrivalAirport: e.target.value, arrivalTerminal: '' })}
+                        className={sel}
+                      >
+                        <option value="">Select airport</option>
+                        {AIRPORTS.map(a => <option key={a.code} value={a.code}>{a.name}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-[#1A1A1A] text-sm font-medium">Arrival Terminal</Label>
+                      <select
+                        value={member.arrivalTerminal ?? ''}
+                        onChange={e => onUpdate(index, { arrivalTerminal: e.target.value })}
+                        disabled={!member.arrivalAirport}
+                        className={`${sel} disabled:bg-gray-100`}
+                      >
+                        <option value="">{member.arrivalAirport ? 'Select terminal' : 'Select airport first'}</option>
+                        {(AIRPORTS.find(a => a.code === member.arrivalAirport)?.terminals ?? []).map(t => (
+                          <option key={t} value={t}>Terminal {t}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-[#1A1A1A] text-sm font-medium">Scheduled Arrival *</Label>
+                      <Input
+                        type="datetime-local"
+                        value={member.arrivalTime ?? ''}
+                        onChange={e => onUpdate(index, { arrivalTime: e.target.value })}
+                        className={`border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11 ${errors.includes('Arrival time required') ? 'border-red-400' : ''}`}
+                      />
+                      {errors.includes('Arrival time required') && <p className="text-xs text-red-500">Arrival time is required</p>}
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-[#1A1A1A] text-sm font-medium">Departure Flight Number</Label>
+                      <Input
+                        value={member.departureFlightNumber ?? ''}
+                        onChange={e => onUpdate(index, { departureFlightNumber: e.target.value })}
+                        placeholder="e.g. BA124"
+                        className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-[#1A1A1A] text-sm font-medium">Departure Airport</Label>
+                      <select
+                        value={member.departureAirport ?? ''}
+                        onChange={e => onUpdate(index, { departureAirport: e.target.value, departureTerminal: '' })}
+                        className={sel}
+                      >
+                        <option value="">Select airport</option>
+                        {AIRPORTS.map(a => <option key={a.code} value={a.code}>{a.name}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-[#1A1A1A] text-sm font-medium">Departure Terminal</Label>
+                      <select
+                        value={member.departureTerminal ?? ''}
+                        onChange={e => onUpdate(index, { departureTerminal: e.target.value })}
+                        disabled={!member.departureAirport}
+                        className={`${sel} disabled:bg-gray-100`}
+                      >
+                        <option value="">{member.departureAirport ? 'Select terminal' : 'Select airport first'}</option>
+                        {(AIRPORTS.find(a => a.code === member.departureAirport)?.terminals ?? []).map(t => (
+                          <option key={t} value={t}>Terminal {t}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-[#1A1A1A] text-sm font-medium">Scheduled Departure</Label>
+                      <Input
+                        type="datetime-local"
+                        value={member.departureTime ?? ''}
+                        onChange={e => onUpdate(index, { departureTime: e.target.value })}
+                        className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -307,6 +831,8 @@ export default function NewGuestPage() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [religions, setReligions] = useState<Array<{ id: string; name: string }>>([]);
+  const [expandedMemberIndex, setExpandedMemberIndex] = useState<number | null>(null);
+  const [familyMemberErrors, setFamilyMemberErrors] = useState<Record<number, string[]>>({});
   const [religionSearch, setReligionSearch] = useState('');
   const [religionOpen, setReligionOpen] = useState(false);
   const religionRef = useRef<HTMLDivElement>(null);
@@ -425,11 +951,17 @@ export default function NewGuestPage() {
       age: 0,
       relationship: '',
       gender: 'male',
+      religion: 'Ahmadi Muslim',
+      visaStatus: 'not-required',
+      wheelchairRequired: false,
+      expenses: 'Self',
+      sameFlight: true,
     };
-    setFormData(prev => ({
-      ...prev,
-      familyMembers: [...prev.familyMembers, newMember],
-    }));
+    setFormData(prev => {
+      const newIndex = prev.familyMembers.length;
+      setExpandedMemberIndex(newIndex);
+      return { ...prev, familyMembers: [...prev.familyMembers, newMember] };
+    });
   };
 
   const handleUpdateFamilyMember = (index: number, updates: Partial<FamilyMember>) => {
@@ -496,12 +1028,29 @@ export default function NewGuestPage() {
         toast.error('Please add at least one family member');
         return;
       }
-      for (const member of formData.familyMembers) {
-        if (!member.name.trim() || !member.age || !member.relationship) {
-          toast.error('Please fill in all family member details');
-          return;
+      const errorMap: Record<number, string[]> = {};
+      let hasValidationErrors = false;
+      for (const [idx, member] of formData.familyMembers.entries()) {
+        const errs: string[] = [];
+        if (!member.name.trim() || member.name.trim().length < 2) errs.push('Name required');
+        if (!member.relationship) errs.push('Relationship required');
+        if (!member.gender) errs.push('Gender required');
+        if (!member.dateOfBirth) errs.push('Date of Birth required');
+        if (!member.passportNumber?.trim()) errs.push('Passport number required');
+        if (member.sameFlight === false) {
+          if (!member.arrivalFlightNumber?.trim()) errs.push('Arrival flight number required');
+          if (!member.arrivalTime) errs.push('Arrival time required');
         }
+        if (errs.length > 0) { errorMap[idx] = errs; hasValidationErrors = true; }
       }
+      if (hasValidationErrors) {
+        setFamilyMemberErrors(errorMap);
+        const firstErrIdx = Number(Object.keys(errorMap)[0]);
+        setExpandedMemberIndex(firstErrIdx);
+        toast.error('Please correct family member details');
+        return;
+      }
+      setFamilyMemberErrors({});
     }
 
     setIsSubmitting(true);
@@ -576,35 +1125,44 @@ export default function NewGuestPage() {
           return;
         }
 
-        // Insert each family member
+        // Insert each family member with full data
         for (const m of formData.familyMembers) {
           nextRef++;
+          const useSameFlight = m.sameFlight !== false;
+          const memberAge = m.dateOfBirth
+            ? (() => { const t = new Date(), b = new Date(m.dateOfBirth!); let a = t.getFullYear() - b.getFullYear(); if (t.getMonth() < b.getMonth() || (t.getMonth() === b.getMonth() && t.getDate() < b.getDate())) a--; return a >= 0 ? a : null; })()
+            : toInt(m.age);
           await supabase.from('guests').insert({
             ...sharedFields,
-            reference:         `MEH-2024-${String(nextRef).padStart(6, '0')}`,
-            full_name:         toNull(m.name),
-            gender:            toNull(m.gender),
-            age:               toInt(m.age),
-            date_of_birth:     null,
-            designation:       Array.isArray(m.designation) && m.designation.length > 0 ? m.designation : null,
-            religion:          null,
-            relationship:      m.relationship,
-            is_head_of_family: false,
-            passport_number:   null,
-            contact_number:    null,
-            email:             null,
-            flight_number:     null,
-            arrival_airport:   null,
-            arrival_terminal:  null,
-            arrival_time:      null,
-            departure_airport:  null,
-            departure_terminal: null,
-            departure_time:    null,
-            special_needs:     null,
-            dietary_requirements: null,
-            wheelchair_required: false,
-            introduction:      null,
-            photo_url:         null,
+            reference:            `MEH-2024-${String(nextRef).padStart(6, '0')}`,
+            full_name:            toNull(m.name),
+            gender:               toNull(m.gender),
+            age:                  memberAge,
+            date_of_birth:        toNull(m.dateOfBirth),
+            designation:          Array.isArray(m.designation) && m.designation.length > 0 ? m.designation : null,
+            religion:             toNull(m.religion),
+            relationship:         m.relationship,
+            is_head_of_family:    false,
+            passport_number:      toNull(m.passportNumber),
+            passport_country:     toNull(m.passportCountry),
+            contact_number:       toNull(m.contactNumber) ?? toNull(formData.contactNumber),
+            email:                toNull(m.email),
+            visa_status:          m.visaStatus ?? sharedFields.visa_status,
+            wheelchair_required:  m.wheelchairRequired ?? false,
+            special_needs:        toNull(m.specialNeeds),
+            dietary_requirements: toNull(m.dietaryRequirements),
+            introduction:         toNull(m.introduction),
+            photo_url:            toNull(m.photoUrl),
+            expenses:             m.expenses ?? formData.expenses,
+            tabshir_reference:    toNull(m.tabshirReference) ?? toNull(formData.tabshirReference),
+            // Flight — inherit from head guest if sameFlight, else use member's own data
+            flight_number:        useSameFlight ? toNull(formData.arrivalFlightNumber)  : toNull(m.arrivalFlightNumber),
+            arrival_airport:      useSameFlight ? toNull(formData.arrivalAirport)       : toNull(m.arrivalAirport),
+            arrival_terminal:     useSameFlight ? toNull(formData.arrivalTerminal)      : toNull(m.arrivalTerminal),
+            arrival_time:         useSameFlight ? toNull(formData.arrivalTime)          : toNull(m.arrivalTime),
+            departure_airport:    useSameFlight ? toNull(formData.departureAirport)     : toNull(m.departureAirport),
+            departure_terminal:   useSameFlight ? toNull(formData.departureTerminal)    : toNull(m.departureTerminal),
+            departure_time:       useSameFlight ? toNull(formData.departureTime)        : toNull(m.departureTime),
           });
         }
 
@@ -1018,15 +1576,30 @@ export default function NewGuestPage() {
                         </p>
                       )}
                       
-                      <div className="space-y-4">
+                      <div className="space-y-3">
                         {formData.familyMembers.map((member, index) => (
                           <FamilyMemberForm
                             key={member.id}
                             member={member}
                             index={index}
+                            isExpanded={expandedMemberIndex === index}
+                            onToggle={() => setExpandedMemberIndex(prev => prev === index ? null : index)}
                             onUpdate={handleUpdateFamilyMember}
                             onRemove={handleRemoveFamilyMember}
                             designationOptions={activeDesignations}
+                            religions={religions}
+                            mainGuestName={formData.fullName}
+                            mainGuestFlight={{
+                              arrivalFlightNumber: formData.arrivalFlightNumber,
+                              arrivalAirport: formData.arrivalAirport,
+                              arrivalTerminal: formData.arrivalTerminal,
+                              arrivalTime: formData.arrivalTime,
+                              departureFlightNumber: formData.departureFlightNumber,
+                              departureAirport: formData.departureAirport,
+                              departureTerminal: formData.departureTerminal,
+                              departureTime: formData.departureTime,
+                            }}
+                            errors={familyMemberErrors[index] ?? []}
                           />
                         ))}
                       </div>

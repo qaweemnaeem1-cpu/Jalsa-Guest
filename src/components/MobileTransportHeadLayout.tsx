@@ -1,20 +1,25 @@
 import { type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Home, ClipboardList, MessageSquare, Car, User, Moon, Sun, LogOut } from 'lucide-react';
+import {
+  Home, Users, ClipboardList, MessageSquare, Truck, User,
+  Moon, Sun, LogOut,
+} from 'lucide-react';
 import { useDarkMode } from '@/contexts/DarkModeContext';
 import { useAuth } from '@/hooks/useAuth';
 import OfflineBanner from '@/components/OfflineBanner';
 
-interface MobileDriverLayoutProps {
+interface MobileTransportHeadLayoutProps {
   children: ReactNode;
-  /** Unread message count — shows badge on Messages tab */
   unreadMessages?: number;
 }
 
 const TOP_BAR_H = 56;
 const BOTTOM_NAV_H = 64;
 
-export default function MobileDriverLayout({ children, unreadMessages = 0 }: MobileDriverLayoutProps) {
+export default function MobileTransportHeadLayout({
+  children,
+  unreadMessages = 0,
+}: MobileTransportHeadLayoutProps) {
   const { darkMode, toggleDarkMode } = useDarkMode();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -25,12 +30,16 @@ export default function MobileDriverLayout({ children, unreadMessages = 0 }: Mob
   };
 
   const navItems = [
-    { to: '/driver/home',     icon: Home,          label: 'Home'     },
-    { to: '/driver/tasks',    icon: ClipboardList,  label: 'Tasks'    },
-    { to: '/driver/messages', icon: MessageSquare,  label: 'Messages', badge: unreadMessages },
-    { to: '/driver/vehicle',  icon: Car,            label: 'Vehicle'  },
-    { to: '/driver/profile',  icon: User,           label: 'Profile'  },
+    { to: '/transport-m/home',     icon: Home,          label: 'Home'     },
+    { to: '/transport-m/team',     icon: Users,         label: 'Team'     },
+    { to: '/transport-m/tasks',    icon: ClipboardList, label: 'Tasks'    },
+    { to: '/transport-m/messages', icon: MessageSquare, label: 'Messages', badge: unreadMessages },
+    { to: '/transport-m/fleet',    icon: Truck,         label: 'Fleet'    },
+    { to: '/transport-m/profile',  icon: User,          label: 'Profile'  },
   ];
+
+  const deptName =
+    (user as { transportDepartmentName?: string })?.transportDepartmentName ?? 'Transport Dept';
 
   return (
     <div className="flex flex-col min-h-screen bg-[#F5F0E8] dark:bg-gray-950 text-[#1A1A1A] dark:text-gray-100">
@@ -40,25 +49,22 @@ export default function MobileDriverLayout({ children, unreadMessages = 0 }: Mob
         className="fixed top-0 left-0 right-0 z-50 bg-[#2D5A45] dark:bg-gray-900 flex items-center justify-between px-4 shadow-md"
         style={{ height: TOP_BAR_H, paddingTop: 'env(safe-area-inset-top)' }}
       >
-        {/* Left: driver info */}
+        {/* Left: head driver info */}
         <div className="flex flex-col leading-tight min-w-0">
-          <span className="text-white font-semibold text-sm truncate max-w-[160px]">
-            {user?.name ?? 'Driver'}
+          <span className="text-white font-semibold text-sm truncate max-w-[170px]">
+            {user?.name ?? 'Head Driver'}
           </span>
-          <span className="text-white/60 text-xs truncate max-w-[160px]">
-            {(user as { transportDepartmentName?: string })?.transportDepartmentName ?? 'Transport'}
+          <span className="text-white/60 text-xs truncate max-w-[170px]">
+            {deptName}
           </span>
         </div>
 
-        {/* Right: availability dot + dark mode toggle + logout */}
+        {/* Right: role badge + dark mode + logout */}
         <div className="flex items-center gap-3">
-          {/* Availability dot */}
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_2px_rgba(52,211,153,0.6)]" />
-            <span className="text-white/70 text-xs">On duty</span>
-          </div>
+          <span className="text-[10px] font-semibold bg-emerald-500/30 text-emerald-200 px-2 py-0.5 rounded-full border border-emerald-500/40">
+            HEAD
+          </span>
 
-          {/* Dark mode toggle */}
           <button
             onClick={toggleDarkMode}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 active:bg-white/20 transition-colors"
@@ -70,7 +76,6 @@ export default function MobileDriverLayout({ children, unreadMessages = 0 }: Mob
             }
           </button>
 
-          {/* Logout */}
           <button
             onClick={handleLogout}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 active:bg-white/20 transition-colors"
@@ -87,9 +92,8 @@ export default function MobileDriverLayout({ children, unreadMessages = 0 }: Mob
       <main
         className="flex-1 overflow-y-auto"
         style={{
-          paddingTop: TOP_BAR_H + 0,
+          paddingTop: TOP_BAR_H,
           paddingBottom: BOTTOM_NAV_H,
-          // account for safe areas
           paddingLeft: 'env(safe-area-inset-left)',
           paddingRight: 'env(safe-area-inset-right)',
         }}
@@ -97,7 +101,7 @@ export default function MobileDriverLayout({ children, unreadMessages = 0 }: Mob
         {children}
       </main>
 
-      {/* ── Fixed bottom nav ── */}
+      {/* ── Fixed bottom nav (6 items) ── */}
       <nav
         className="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-gray-900 border-t border-[#E8E3DB] dark:border-gray-800 flex items-stretch"
         style={{ height: BOTTOM_NAV_H, paddingBottom: 'env(safe-area-inset-bottom)' }}
@@ -117,16 +121,16 @@ export default function MobileDriverLayout({ children, unreadMessages = 0 }: Mob
             {({ isActive }) => (
               <>
                 <span className="relative">
-                  <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : 'stroke-[1.5]'}`} />
+                  <Icon className={`w-[18px] h-[18px] ${isActive ? 'stroke-[2.5]' : 'stroke-[1.5]'}`} />
                   {badge != null && badge > 0 && (
-                    <span className="absolute -top-1 -right-1.5 min-w-[16px] h-4 px-0.5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+                    <span className="absolute -top-1 -right-1.5 min-w-[14px] h-3.5 px-0.5 flex items-center justify-center rounded-full bg-red-500 text-white text-[9px] font-bold leading-none">
                       {badge > 99 ? '99+' : badge}
                     </span>
                   )}
                 </span>
-                <span className="text-[10px] font-medium">{label}</span>
+                <span className="text-[9px] font-medium leading-tight">{label}</span>
                 {isActive && (
-                  <span className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-b-full bg-[#2D5A45] dark:bg-emerald-400" />
+                  <span className="absolute top-0 left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-b-full bg-[#2D5A45] dark:bg-emerald-400" />
                 )}
               </>
             )}

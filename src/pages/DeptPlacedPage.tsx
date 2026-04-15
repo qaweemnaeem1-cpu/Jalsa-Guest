@@ -13,7 +13,7 @@ import { FamilyLinkDialog } from '@/components/FamilyLinkDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase';
-import { formatDesignation } from '@/lib/constants';
+import DesignationDisplay from '@/components/DesignationDisplay';
 import type { Guest, TransportDepartment } from '@/types';
 import { fetchTransportDeptsForDept, getTransportDeptBadgeClass } from '@/hooks/useTransportDepartments';
 import { ChevronDown as ChevronDownIcon } from 'lucide-react';
@@ -742,7 +742,7 @@ export default function DeptPlacedPage() {
                           ) : <span className="text-gray-300 text-sm">—</span>}
                         </td>
                         <td className="px-4 py-3 text-sm text-[#4A4A4A]">{row.country}</td>
-                        <td className="px-4 py-3 text-sm text-[#4A4A4A]">{formatDesignation(row.designation)}</td>
+                        <td className="px-4 py-3 text-sm text-[#4A4A4A]"><DesignationDisplay designation={row.designation} /></td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getLocPillCls(dept, row.placedLocation)}`}>
                             {row.placedLocation}

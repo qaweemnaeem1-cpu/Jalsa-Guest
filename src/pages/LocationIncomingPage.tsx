@@ -15,7 +15,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { formatDesignation } from '@/lib/constants';
+import DesignationDisplay from '@/components/DesignationDisplay';
 import type { Guest, Room, BedAssignment } from '@/types';
 
 // ── Row model ─────────────────────────────────────────────────────────────────
@@ -315,7 +315,7 @@ export default function LocationIncomingPage() {
                           </td>
                           <td className="px-4 py-3 text-xs text-[#4A4A4A]">{row.country}</td>
                           {/* Designation */}
-                          <td className="px-4 py-3 text-xs text-[#4A4A4A]">{formatDesignation(row.designation)}</td>
+                          <td className="px-4 py-3 text-xs text-[#4A4A4A]"><DesignationDisplay designation={row.designation} /></td>
                           {/* Arrival */}
                           <td className="px-4 py-3 whitespace-nowrap">
                             {row.arrivalTime ? (
