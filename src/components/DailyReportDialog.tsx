@@ -53,6 +53,8 @@ interface DailyReportDialogProps {
   defaultLocation?: string;
   /** Name shown in report footer */
   generatedBy?: string;
+  /** When set, filter drivers/tasks by transport_department_id instead of location */
+  transportDepartmentId?: string;
 }
 
 // ── checkbox preferences (localStorage) ──────────────────────────────────────
@@ -452,7 +454,7 @@ function generatePDF(
 
 // ── main component ────────────────────────────────────────────────────────────
 
-export function DailyReportDialog({ open, onClose, defaultLocation, generatedBy = 'Driver Management' }: DailyReportDialogProps) {
+export function DailyReportDialog({ open, onClose, defaultLocation, generatedBy = 'Driver Management', transportDepartmentId }: DailyReportDialogProps) {
   const [selectedDate,     setSelectedDate]     = useState(new Date().toISOString().split('T')[0]);
   const [locationInput,    setLocationInput]    = useState(defaultLocation ?? '');
   const [prefs,            setPrefs]            = useState<ReportPrefs>(loadPrefs);
@@ -481,7 +483,7 @@ export function DailyReportDialog({ open, onClose, defaultLocation, generatedBy 
           .order('scheduled_time'),
         supabase
           .from('users')
-          .select('id,name,phone,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_available,location')
+          .select('id,name,phone,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_available,location,transport_department_id')
           .eq('role', 'driver')
           .order('name'),
         supabase
@@ -494,17 +496,21 @@ export function DailyReportDialog({ open, onClose, defaultLocation, generatedBy 
       let tasks   = (tasksRes.data   ?? []) as ReportTask[];
       let drivers = (driversRes.data ?? []) as ReportDriver[];
 
-      // filter by location
-      if (locationInput.trim()) {
+      if (transportDepartmentId) {
+        // Transport department mode: filter by transport_department_id
+        tasks   = tasks.filter(t => (t as ReportTask & { transport_department_id?: string }).transport_department_id === transportDepartmentId);
+        drivers = drivers.filter(d => (d as ReportDriver & { transport_department_id?: string }).transport_department_id === transportDepartmentId);
+      } else if (locationInput.trim()) {
+        // Location mode: filter by location column
         tasks   = tasks.filter(t => (t as ReportTask & { location?: string }).location === locationInput.trim()
           || drivers.find(d => d.id === t.driver_id)?.location === locationInput.trim());
         drivers = drivers.filter(d => d.location === locationInput.trim());
       }
 
-      // only include drivers who have tasks or are at this location
+      // only include drivers who have tasks or are in scope
       const driverIdsWithTasks = new Set(tasks.map(t => t.driver_id).filter(Boolean));
-      if (locationInput.trim()) {
-        // keep all location drivers even with no tasks
+      if (transportDepartmentId || locationInput.trim()) {
+        // keep all in-scope drivers even with no tasks
       } else {
         drivers = drivers.filter(d => driverIdsWithTasks.has(d.id));
       }

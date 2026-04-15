@@ -23,9 +23,9 @@ import { Pencil, Trash2, Send, ChevronDown, X as XIcon } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { useDesignations } from '@/hooks/useDesignations';
-import { GUEST_STATUS_LABELS, ROLE_LABELS, VISA_STATUS_LABELS, formatDesignation } from '@/lib/constants';
+import { GUEST_STATUS_LABELS, ROLE_LABELS, VISA_STATUS_LABELS, formatDesignation, TIER_ORDER, TIER_SECTION_LABEL, getTierBadgeLabel, getTierBadgeClass } from '@/lib/constants';
 import { CountryCombobox } from '@/components/CountryCombobox';
-import type { Guest, GuestStatus, UserRole } from '@/types';
+import type { Guest, GuestStatus, UserRole, Designation } from '@/types';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -74,7 +74,7 @@ const getRemarkBubbleStyle = (role: UserRole): string => {
 
 // ─── Designation multi-select ─────────────────────────────────────────────────
 
-function DesignationMultiSelect({ value, onChange, options }: { value: string[]; onChange: (v: string[]) => void; options: string[] }) {
+function DesignationMultiSelect({ value, onChange, options }: { value: string[]; onChange: (v: string[]) => void; options: Designation[] }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
@@ -88,10 +88,17 @@ function DesignationMultiSelect({ value, onChange, options }: { value: string[];
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const toggle = (item: string) =>
-    onChange(value.includes(item) ? value.filter(v => v !== item) : [...value, item]);
+  const toggle = (name: string) =>
+    onChange(value.includes(name) ? value.filter(v => v !== name) : [...value, name]);
 
-  const filtered = options.filter(o => o.toLowerCase().includes(search.toLowerCase()));
+  const q = search.toLowerCase();
+  const filtered = options.filter(o => o.name.toLowerCase().includes(q));
+  const tierMap = new Map(options.map(o => [o.name, o.tier]));
+  const tierGroups: Array<{ tier: string; label: string; items: Designation[] }> = [];
+  for (const tier of [...TIER_ORDER, '__none__'] as string[]) {
+    const items = filtered.filter(o => (o.tier ?? '__none__') === tier);
+    if (items.length) tierGroups.push({ tier, label: TIER_SECTION_LABEL[tier] ?? 'No Tier', items });
+  }
 
   return (
     <div ref={ref} className="relative mt-1">
@@ -106,14 +113,19 @@ function DesignationMultiSelect({ value, onChange, options }: { value: string[];
       >
         {value.length === 0
           ? <span className="text-gray-400 self-center text-xs">Select designations…</span>
-          : value.map(v => (
-            <span key={v} className="inline-flex items-center gap-1 bg-[#D6E4D9] text-[#2D5A45] text-xs font-medium px-2 py-0.5 rounded-full">
-              {v}
-              <button type="button" onClick={e => { e.stopPropagation(); toggle(v); }} className="hover:text-[#1A1A1A]">
-                <XIcon className="w-3 h-3" />
-              </button>
-            </span>
-          ))
+          : value.map(v => {
+              const tier = tierMap.get(v);
+              const lbl = getTierBadgeLabel(tier);
+              return (
+                <span key={v} className="inline-flex items-center gap-1 bg-[#D6E4D9] text-[#2D5A45] text-xs font-medium px-2 py-0.5 rounded-full">
+                  {v}
+                  {lbl && <span className={`text-[10px] font-bold px-1 py-px rounded ${getTierBadgeClass(tier)}`}>{lbl}</span>}
+                  <button type="button" onClick={e => { e.stopPropagation(); toggle(v); }} className="hover:text-[#1A1A1A]">
+                    <XIcon className="w-3 h-3" />
+                  </button>
+                </span>
+              );
+            })
         }
         <ChevronDown className={`w-3.5 h-3.5 text-gray-400 ml-auto self-center shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </div>
@@ -123,18 +135,24 @@ function DesignationMultiSelect({ value, onChange, options }: { value: string[];
             <input autoFocus type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search…" className="w-full px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:border-[#2D5A45]" />
           </div>
-          <div className="max-h-48 overflow-y-auto py-1">
-            {filtered.map(opt => (
-              <button key={opt} type="button" onClick={() => toggle(opt)}
-                className={`w-[calc(100%-8px)] mx-1 my-0.5 flex items-center gap-2 text-left px-2.5 py-1.5 text-xs rounded transition-colors ${value.includes(opt) ? 'bg-[#D6E4D9] text-[#2D5A45] font-medium' : 'text-gray-700 hover:bg-[#D6E4D9] hover:text-[#2D5A45]'}`}
-              >
-                <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${value.includes(opt) ? 'bg-[#2D5A45] border-[#2D5A45]' : 'border-gray-300'}`}>
-                  {value.includes(opt) && <span className="text-white text-[8px] font-bold">✓</span>}
-                </span>
-                {opt}
-              </button>
+          <div className="max-h-56 overflow-y-auto py-1">
+            {tierGroups.length === 0 && <p className="px-2.5 py-2 text-xs text-gray-400">No results</p>}
+            {tierGroups.map(({ tier, label, items }) => (
+              <div key={tier}>
+                <div className="px-2.5 pt-1.5 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 select-none">{label}</div>
+                {items.map(opt => (
+                  <button key={opt.name} type="button" onClick={() => toggle(opt.name)}
+                    className={`w-[calc(100%-8px)] mx-1 my-0.5 flex items-center gap-2 text-left px-2.5 py-1.5 text-xs rounded transition-colors ${value.includes(opt.name) ? 'bg-[#D6E4D9] text-[#2D5A45] font-medium' : 'text-gray-700 hover:bg-[#D6E4D9] hover:text-[#2D5A45]'}`}
+                  >
+                    <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${value.includes(opt.name) ? 'bg-[#2D5A45] border-[#2D5A45]' : 'border-gray-300'}`}>
+                      {value.includes(opt.name) && <span className="text-white text-[8px] font-bold">✓</span>}
+                    </span>
+                    <span className="flex-1">{opt.name}</span>
+                    {opt.tier && <span className={`text-[10px] font-bold px-1 py-px rounded shrink-0 ${getTierBadgeClass(opt.tier)}`}>{getTierBadgeLabel(opt.tier)}</span>}
+                  </button>
+                ))}
+              </div>
             ))}
-            {filtered.length === 0 && <p className="px-3 py-2 text-xs text-gray-400">No results</p>}
           </div>
         </div>
       )}

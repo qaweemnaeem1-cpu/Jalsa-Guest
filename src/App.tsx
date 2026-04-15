@@ -10,6 +10,9 @@ import { AuditTrailProvider } from '@/hooks/useAuditTrail';
 import { AuditTrail2Provider } from '@/hooks/useAuditTrail2';
 import { DepartmentsProvider } from '@/hooks/useDepartments';
 import { RoomsProvider } from '@/hooks/useRooms';
+import { TransportDeptsProvider } from '@/hooks/useTransportDepartments';
+import { DarkModeProvider } from '@/contexts/DarkModeContext';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { Toaster, toast } from 'sonner';
 import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 import { SessionWarningDialog } from '@/components/SessionWarningDialog';
@@ -56,6 +59,21 @@ import DriverSchedulePage from '@/pages/DriverSchedulePage';
 import LocationDriversPage from '@/pages/LocationDriversPage';
 import DeptDriversPage from '@/pages/DeptDriversPage';
 import AdminDriversPage from '@/pages/AdminDriversPage';
+import TransportDashboardPage from '@/pages/TransportDashboardPage';
+import TransportGuestsPage from '@/pages/TransportGuestsPage';
+import TransportDriversPage from '@/pages/TransportDriversPage';
+import TransportMessagesPage from '@/pages/TransportMessagesPage';
+import TransportTasksPage from '@/pages/TransportTasksPage';
+import TransportSchedulePage from '@/pages/TransportSchedulePage';
+import TransportVehiclesPage from '@/pages/TransportVehiclesPage';
+import TransportCompletedPage from '@/pages/TransportCompletedPage';
+import DriverMessagesPage from '@/pages/DriverMessagesPage';
+// Mobile driver pages
+import MobileDriverHomePage from '@/pages/MobileDriverHomePage';
+import MobileDriverTasksPage from '@/pages/MobileDriverTasksPage';
+import MobileDriverMessagesPage from '@/pages/MobileDriverMessagesPage';
+import MobileDriverVehiclePage from '@/pages/MobileDriverVehiclePage';
+import MobileDriverProfilePage from '@/pages/MobileDriverProfilePage';
 
 function ProtectedRoute({ children, requiredRoles }: { children: React.ReactNode; requiredRoles?: string[] }) {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -87,9 +105,16 @@ function GuestsPageOrRedirect() {
 
 function DashboardOrRedirect() {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   if (user?.role === 'department-head') return <Navigate to="/dept/dashboard" replace />;
   if (user?.role === 'location-manager') return <Navigate to="/location/dashboard" replace />;
-  if (user?.role === 'driver') return <Navigate to="/driver/dashboard" replace />;
+  if (user?.role === 'driver') {
+    // Transport Department Heads get their own portal (desktop only)
+    if (user.isHeadDriver && user.transportDepartmentId) return <Navigate to="/transport/dashboard" replace />;
+    // Mobile drivers go to the Uber-style home screen
+    if (isMobile) return <Navigate to="/driver/home" replace />;
+    return <Navigate to="/driver/dashboard" replace />;
+  }
   return <DashboardPage />;
 }
 
@@ -110,6 +135,13 @@ function SessionManager() {
   useSessionTimeout(handleAutoLogout, !!user);
 
   return <SessionWarningDialog />;
+}
+
+/** Renders `mobile` on small viewports, `desktop` otherwise. Mobile variant is wrapped in DarkModeProvider. */
+function MobileOrDesktopDriverRoute({ mobile, desktop }: { mobile: React.ReactNode; desktop: React.ReactNode }) {
+  const isMobile = useIsMobile();
+  if (isMobile) return <DarkModeProvider>{mobile}</DarkModeProvider>;
+  return <>{desktop}</>;
 }
 
 function AppRoutes() {
@@ -205,13 +237,27 @@ function AppRoutes() {
       <Route path="/dept/drivers"     element={<ProtectedRoute requiredRoles={['department-head', 'super-admin']}><DeptDriversPage /></ProtectedRoute>} />
       <Route path="/admin/drivers"    element={<ProtectedRoute requiredRoles={['super-admin']}><AdminDriversPage /></ProtectedRoute>} />
       <Route path="/driver/dashboard"   element={<ProtectedRoute requiredRoles={['driver']}><DriverDashboardPage /></ProtectedRoute>} />
-      <Route path="/driver/tasks"       element={<ProtectedRoute requiredRoles={['driver']}><DriverTasksPage /></ProtectedRoute>} />
       <Route path="/driver/completed"   element={<ProtectedRoute requiredRoles={['driver']}><DriverCompletedPage /></ProtectedRoute>} />
-      <Route path="/driver/vehicle"     element={<ProtectedRoute requiredRoles={['driver']}><DriverVehiclePage /></ProtectedRoute>} />
       <Route path="/driver/all-drivers" element={<ProtectedRoute requiredRoles={['driver']}><DriverAllDriversPage /></ProtectedRoute>} />
       <Route path="/driver/all-tasks"   element={<ProtectedRoute requiredRoles={['driver']}><DriverAllTasksPage /></ProtectedRoute>} />
       <Route path="/driver/schedule"    element={<ProtectedRoute requiredRoles={['driver']}><DriverSchedulePage /></ProtectedRoute>} />
       <Route path="/driver/vehicles"    element={<ProtectedRoute requiredRoles={['driver']}><DriverVehiclesPage /></ProtectedRoute>} />
+      {/* Routes that serve mobile or desktop variants based on viewport */}
+      <Route path="/driver/tasks"    element={<ProtectedRoute requiredRoles={['driver']}><MobileOrDesktopDriverRoute mobile={<MobileDriverTasksPage />} desktop={<DriverTasksPage />} /></ProtectedRoute>} />
+      <Route path="/driver/vehicle"  element={<ProtectedRoute requiredRoles={['driver']}><MobileOrDesktopDriverRoute mobile={<MobileDriverVehiclePage />} desktop={<DriverVehiclePage />} /></ProtectedRoute>} />
+      <Route path="/driver/messages" element={<ProtectedRoute requiredRoles={['driver']}><MobileOrDesktopDriverRoute mobile={<MobileDriverMessagesPage />} desktop={<DriverMessagesPage />} /></ProtectedRoute>} />
+      {/* Mobile-only driver routes */}
+      <Route path="/driver/home"    element={<ProtectedRoute requiredRoles={['driver']}><DarkModeProvider><MobileDriverHomePage /></DarkModeProvider></ProtectedRoute>} />
+      <Route path="/driver/profile" element={<ProtectedRoute requiredRoles={['driver']}><DarkModeProvider><MobileDriverProfilePage /></DarkModeProvider></ProtectedRoute>} />
+      {/* Transport Department Head portal */}
+      <Route path="/transport/dashboard" element={<ProtectedRoute requiredRoles={['driver']}><TransportDashboardPage /></ProtectedRoute>} />
+      <Route path="/transport/guests"    element={<ProtectedRoute requiredRoles={['driver']}><TransportGuestsPage /></ProtectedRoute>} />
+      <Route path="/transport/drivers"   element={<ProtectedRoute requiredRoles={['driver']}><TransportDriversPage /></ProtectedRoute>} />
+      <Route path="/transport/tasks"     element={<ProtectedRoute requiredRoles={['driver']}><TransportTasksPage /></ProtectedRoute>} />
+      <Route path="/transport/schedule"  element={<ProtectedRoute requiredRoles={['driver']}><TransportSchedulePage /></ProtectedRoute>} />
+      <Route path="/transport/vehicles"  element={<ProtectedRoute requiredRoles={['driver']}><TransportVehiclesPage /></ProtectedRoute>} />
+      <Route path="/transport/completed" element={<ProtectedRoute requiredRoles={['driver']}><TransportCompletedPage /></ProtectedRoute>} />
+      <Route path="/transport/messages"  element={<ProtectedRoute requiredRoles={['driver']}><TransportMessagesPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
     </>
@@ -230,10 +276,12 @@ function App() {
           <AuditTrail2Provider>
           <GuestsProvider>
           <RoomsProvider>
+          <TransportDeptsProvider>
             <BrowserRouter>
               <AppRoutes />
             </BrowserRouter>
             <Toaster position="top-right" />
+          </TransportDeptsProvider>
           </RoomsProvider>
           </GuestsProvider>
           </AuditTrail2Provider>

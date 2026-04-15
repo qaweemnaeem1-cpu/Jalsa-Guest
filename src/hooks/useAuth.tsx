@@ -79,6 +79,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         vehicleCapacity: raw.vehicle_capacity ?? raw.vehicleCapacity ?? undefined,
         isHeadDriver: raw.is_head_driver ?? raw.isHeadDriver ?? undefined,
         isAvailable: raw.is_available ?? raw.isAvailable ?? undefined,
+        // Transport dept
+        transportDepartmentId: raw.transport_department_id ?? raw.transportDepartmentId ?? undefined,
+        transportDepartmentName: raw.transport_department_name ?? raw.transportDepartmentName ?? undefined,
       };
 
       console.log('[auth] Logged in user:', JSON.stringify(normalizedUser));

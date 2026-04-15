@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { SortableHeader, sortData } from '@/components/SortableHeader';
+import { useTransportDepts, getTransportDeptBadgeClass, type AddTransportDeptInput } from '@/hooks/useTransportDepartments';
+import type { TransportDepartment } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useUsers, USER_TYPE_LABELS, type UserType, type SystemUser } from '@/hooks/useUsers';
@@ -14,6 +16,7 @@ import {
   LayoutDashboard,
   Users,
   ChevronDown,
+  ChevronUp,
   LogOut,
   Plus,
   Trash2,
@@ -78,7 +81,7 @@ const TABS: { value: UserType; label: string }[] = [
   { value: 'desk-in-charge', label: 'Desk In-Charge' },
   { value: 'coordinator', label: 'Coordinators' },
   { value: 'department-head', label: 'Departmental Users' },
-  { value: 'driver', label: 'Drivers' },
+  { value: 'driver', label: 'Transportation' },
 ];
 
 
@@ -109,6 +112,32 @@ interface DriverRow {
   vehicle_capacity?: number | null;
   is_head_driver: boolean;
   is_available?: boolean | null;
+  transport_department_id?: string | null;
+  transport_department_name?: string | null;
+}
+
+// ── Transport dept form state ─────────────────────────────────────────────────
+interface TransportDeptFormData {
+  name: string;
+  description: string;
+  serves: string[];
+  isSeasonal: boolean;
+  activeFrom: string;
+  activeTo: string;
+}
+
+const BLANK_TD_FORM: TransportDeptFormData = {
+  name: '', description: '', serves: [], isSeasonal: false, activeFrom: '', activeTo: '',
+};
+
+const ACCOMMODATION_DEPTS = ['Reserve 1', 'UK Jamaat', 'Central Guests'];
+
+function TransportDeptPill({ name }: { name: string }) {
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getTransportDeptBadgeClass(name)}`}>
+      {name}
+    </span>
+  );
 }
 
 const COORD_PAGE_SIZE = 20;
@@ -118,6 +147,7 @@ export default function UsersPage() {
   const { user, logout } = useAuth();
   const { addUser, updateUser, deleteUser, toggleUserStatus, assignItems, getUsersByType } = useUsers();
   const { coordinators, addCoordinator, updateCoordinator, deleteCoordinator, toggleCoordinatorActive } = useCoordinators();
+  const { transportDepts, addTransportDept, updateTransportDept, deleteTransportDept, toggleTransportDeptStatus } = useTransportDepts();
   const {
     departments, departmentList,
     addDepartment, renameDepartment, deleteDepartment,
@@ -183,6 +213,8 @@ export default function UsersPage() {
   const [dPassword, setDPassword] = useState('');
   const [dDept, setDDept] = useState('');
   const [dLoc, setDLoc] = useState('');
+  const [dTransportDeptId, setDTransportDeptId] = useState('');
+  const [dTransportDeptName, setDTransportDeptName] = useState('');
   const [dVType, setDVType] = useState('');
   const [dVModel, setDVModel] = useState('');
   const [dVReg, setDVReg] = useState('');
@@ -206,6 +238,50 @@ export default function UsersPage() {
   // Eye toggle for edit modal password field
   const [editPwVisible, setEditPwVisible] = useState(false);
 
+  // ── Transport Department section + dialog state ────────────────────────────
+  const [tdSectionOpen, setTdSectionOpen] = useState(false);
+  const [tdDialogOpen, setTdDialogOpen] = useState(false);
+  const [tdEditTarget, setTdEditTarget] = useState<TransportDepartment | null>(null);
+  const [tdForm, setTdForm] = useState<TransportDeptFormData>(BLANK_TD_FORM);
+  const [tdSaving, setTdSaving] = useState(false);
+
+  const openAddTd = () => {
+    setTdEditTarget(null);
+    setTdForm(BLANK_TD_FORM);
+    setTdDialogOpen(true);
+  };
+  const openEditTd = (td: TransportDepartment) => {
+    setTdEditTarget(td);
+    setTdForm({
+      name: td.name,
+      description: td.description ?? '',
+      serves: td.serves,
+      isSeasonal: td.isSeasonal,
+      activeFrom: td.activeFrom ?? '',
+      activeTo: td.activeTo ?? '',
+    });
+    setTdDialogOpen(true);
+  };
+  const handleSaveTd = async () => {
+    if (!tdForm.name.trim()) { toast.error('Name is required'); return; }
+    setTdSaving(true);
+    const input: AddTransportDeptInput = {
+      name: tdForm.name.trim(),
+      description: tdForm.description.trim() || undefined,
+      serves: tdForm.serves,
+      isSeasonal: tdForm.isSeasonal,
+      activeFrom: tdForm.isSeasonal ? (tdForm.activeFrom || undefined) : undefined,
+      activeTo: tdForm.isSeasonal ? (tdForm.activeTo || undefined) : undefined,
+    };
+    if (tdEditTarget) {
+      await updateTransportDept(tdEditTarget.id, input);
+    } else {
+      await addTransportDept(input);
+    }
+    setTdSaving(false);
+    setTdDialogOpen(false);
+  };
+
   // ── Sort states (one pair per table section) ───────────────────────────────
   const [diSortCol, setDiSortCol] = useState<string | null>(null);
   const [diSortDir, setDiSortDir] = useState<'asc' | 'desc'>('asc');
@@ -225,7 +301,7 @@ export default function UsersPage() {
     if (activeTab !== 'driver') return;
     let mounted = true;
     setDriversLoading(true);
-    const SELECT = 'id,name,email,password_hash,phone,department,location,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_head_driver,is_available';
+    const SELECT = 'id,name,email,password_hash,phone,department,location,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_head_driver,is_available,transport_department_id,transport_department_name';
     Promise.all([
       supabase.from('users').select(SELECT).eq('role', 'driver').eq('is_head_driver', true).order('name'),
       supabase.from('users').select(SELECT).eq('role', 'driver').eq('is_head_driver', false).order('name'),
@@ -444,7 +520,7 @@ export default function UsersPage() {
   // ── Driver tab handlers ────────────────────────────────────────────────────────
 
   const refreshDrivers = async () => {
-    const SELECT = 'id,name,email,password_hash,phone,department,location,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_head_driver,is_available';
+    const SELECT = 'id,name,email,password_hash,phone,department,location,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_head_driver,is_available,transport_department_id,transport_department_name';
     const [headRes, regRes] = await Promise.all([
       supabase.from('users').select(SELECT).eq('role', 'driver').eq('is_head_driver', true).order('name'),
       supabase.from('users').select(SELECT).eq('role', 'driver').eq('is_head_driver', false).order('name'),
@@ -459,13 +535,16 @@ export default function UsersPage() {
     if (driver) {
       setDName(driver.name); setDEmail(driver.email); setDPhone(driver.phone ?? '');
       setDPassword(''); setDDept(driver.department ?? ''); setDLoc(driver.location ?? '');
+      setDTransportDeptId(driver.transport_department_id ?? '');
+      setDTransportDeptName(driver.transport_department_name ?? '');
       setDVType(driver.vehicle_type ?? ''); setDVModel(driver.vehicle_model ?? '');
       setDVReg(driver.vehicle_registration ?? '');
       setDVCap(driver.vehicle_capacity != null ? String(driver.vehicle_capacity) : '');
       setDriverFormIsHead(driver.is_head_driver);
     } else {
       setDName(''); setDEmail(''); setDPhone(''); setDPassword('');
-      setDDept(''); setDLoc(''); setDVType(''); setDVModel(''); setDVReg(''); setDVCap('');
+      setDDept(''); setDLoc(''); setDTransportDeptId(''); setDTransportDeptName('');
+      setDVType(''); setDVModel(''); setDVReg(''); setDVCap('');
     }
     setDShowPwd(false);
     setDriverFormOpen(true);
@@ -478,6 +557,7 @@ export default function UsersPage() {
     setDSaving(true);
     try {
       if (editingDriver) {
+        const selectedTd = transportDepts.find(td => td.id === dTransportDeptId);
         const updates: Record<string, unknown> = {
           name: dName.trim(), email: dEmail.trim(), phone: dPhone.trim() || null,
           department: dDept || null, location: dLoc || null,
@@ -485,12 +565,15 @@ export default function UsersPage() {
           vehicle_registration: dVReg.trim() || null,
           vehicle_capacity: dVCap ? Number(dVCap) : null,
           is_head_driver: driverFormIsHead,
+          transport_department_id: dTransportDeptId || null,
+          transport_department_name: selectedTd?.name ?? null,
         };
         if (dPassword.trim()) updates.password = dPassword.trim();
         const { error } = await supabase.from('users').update(updates).eq('id', editingDriver.id);
         if (error) throw error;
         toast.success('Driver updated');
       } else {
+        const selectedTd = transportDepts.find(td => td.id === dTransportDeptId);
         const { error } = await supabase.from('users').insert({
           name: dName.trim(), email: dEmail.trim(), phone: dPhone.trim() || null,
           password: dPassword.trim(), role: 'driver',
@@ -499,9 +582,11 @@ export default function UsersPage() {
           vehicle_registration: dVReg.trim() || null,
           vehicle_capacity: dVCap ? Number(dVCap) : null,
           is_head_driver: driverFormIsHead, is_available: true,
+          transport_department_id: dTransportDeptId || null,
+          transport_department_name: selectedTd?.name ?? null,
         });
         if (error) throw error;
-        toast.success(driverFormIsHead ? 'Nazim Transport created' : 'Driver created');
+        toast.success(driverFormIsHead ? 'Department head created' : 'Driver created');
       }
       setDriverFormOpen(false);
       await refreshDrivers();
@@ -559,16 +644,17 @@ export default function UsersPage() {
   // Driver tab computed
   const filteredRegularDrivers = regularDrivers.filter(d => {
     const q = driverSearch.toLowerCase();
-    const matchesDept = !driverDeptFilter || d.department === driverDeptFilter;
+    const matchesTd = !driverDeptFilter || d.transport_department_id === driverDeptFilter;
     const matchesSearch = !q ||
       d.name.toLowerCase().includes(q) ||
-      d.email.toLowerCase().includes(q) ||
-      (d.location ?? '').toLowerCase().includes(q);
-    return matchesDept && matchesSearch;
+      d.email.toLowerCase().includes(q);
+    return matchesTd && matchesSearch;
   });
 
   const getNazimTransport = (driver: DriverRow) =>
-    headDrivers.find(h => h.location === driver.location)?.name ?? '—';
+    driver.transport_department_id
+      ? (headDrivers.find(h => h.transport_department_id === driver.transport_department_id)?.name ?? '—')
+      : '—';
 
   const getStats = () => {
     if (activeTab === 'coordinator') {
@@ -767,25 +853,18 @@ export default function UsersPage() {
             ) : activeTab === 'driver' ? (
               <div className="flex flex-wrap gap-3 mb-6 text-sm">
                 <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">{transportDepts.length}</Badge>
+                  <span className="text-[#4A4A4A]">Transport Departments</span>
+                </div>
+                <span className="text-[#D4CFC7] self-center">|</span>
+                <div className="flex items-center gap-2">
                   <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">{headDrivers.length}</Badge>
-                  <span className="text-[#4A4A4A]">Nazim Transport</span>
+                  <span className="text-[#4A4A4A]">Department Heads</span>
                 </div>
                 <span className="text-[#D4CFC7] self-center">|</span>
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">{regularDrivers.length}</Badge>
+                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">{regularDrivers.length}</Badge>
                   <span className="text-[#4A4A4A]">Drivers</span>
-                </div>
-                <span className="text-[#D4CFC7] self-center">|</span>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200">{departmentList.length}</Badge>
-                  <span className="text-[#4A4A4A]">Departments</span>
-                </div>
-                <span className="text-[#D4CFC7] self-center">|</span>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                    {departmentList.reduce((sum, d) => sum + (departments[d]?.length ?? 0), 0)}
-                  </Badge>
-                  <span className="text-[#4A4A4A]">Locations</span>
                 </div>
               </div>
             ) : (
@@ -1301,30 +1380,126 @@ export default function UsersPage() {
                 </Card>
               </div>
             ) : activeTab === 'driver' ? (
-              /* ── DRIVERS TAB ─────────────────────────────────────────────────── */
+              /* ── TRANSPORTATION TAB ─────────────────────────────────────────── */
               <div className="space-y-0">
                 {driversLoading ? (
                   <div className="p-12 text-center text-[#4A4A4A] flex items-center justify-center gap-2">
-                    <Loader2 className="w-5 h-5 animate-spin" /> Loading drivers…
+                    <Loader2 className="w-5 h-5 animate-spin" /> Loading…
                   </div>
                 ) : (
                   <>
-                    {/* ── SECTION A: Nazim Transport ── */}
+                    {/* ── SECTION A: Transport Departments (collapsible) ── */}
+                    <div className="bg-white border border-[#E8E3DB] rounded-xl shadow-sm mb-0 overflow-hidden">
+                      {/* Header row */}
+                      <div className="flex items-center justify-between px-5 py-3 bg-[#F9F8F6] border-b border-[#E8E3DB]">
+                        <button
+                          onClick={() => setTdSectionOpen(v => !v)}
+                          className="flex items-center gap-2 text-base font-semibold text-[#1A1A1A] hover:text-[#2D5A45] transition-colors"
+                        >
+                          <Building2 className="w-4 h-4 text-[#2D5A45]" />
+                          Transport Departments
+                          <Badge variant="outline" className="ml-1 text-xs bg-blue-50 text-blue-700 border-blue-200">
+                            {transportDepts.length}
+                          </Badge>
+                          {tdSectionOpen
+                            ? <ChevronUp className="w-4 h-4 text-[#4A4A4A] ml-1" />
+                            : <ChevronDown className="w-4 h-4 text-[#4A4A4A] ml-1" />}
+                        </button>
+                        <button
+                          onClick={openAddTd}
+                          className="flex items-center gap-1.5 bg-white text-[#2D5A45] border border-[#2D5A45] hover:bg-[#F0F7F4] rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                        >
+                          <Plus className="w-4 h-4" /> Add Transport Department
+                        </button>
+                      </div>
+
+                      {/* Collapsible body */}
+                      {tdSectionOpen && (
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead className="bg-[#F9F8F6]">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Description</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Serves</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Seasonal</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Active Period</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#E8E3DB]">
+                              {transportDepts.length === 0 ? (
+                                <tr><td colSpan={7} className="px-4 py-8 text-center text-[#4A4A4A]">No transport departments yet. Click "Add Transport Department" to create one.</td></tr>
+                              ) : transportDepts.map(td => (
+                                <tr key={td.id} className="hover:bg-[#FAFAFA]">
+                                  <td className="px-4 py-3">
+                                    <TransportDeptPill name={td.name} />
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">{td.description || '—'}</td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex flex-wrap gap-1">
+                                      {td.serves.length > 0
+                                        ? td.serves.map(s => (
+                                          <span key={s} className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{s}</span>
+                                        ))
+                                        : <span className="text-xs text-gray-400">None</span>
+                                      }
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    {td.isSeasonal
+                                      ? <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium">Seasonal</span>
+                                      : <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">Always</span>
+                                    }
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">
+                                    {td.isSeasonal && (td.activeFrom || td.activeTo)
+                                      ? `${td.activeFrom ? new Date(td.activeFrom).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '?'} — ${td.activeTo ? new Date(td.activeTo).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '?'}`
+                                      : td.isSeasonal ? <span className="text-amber-600 text-xs">Dates not set</span> : <span className="text-gray-400 text-xs">Always active</span>
+                                    }
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <Badge variant="outline" className={td.isActive ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-600 border-gray-200'}>
+                                      {td.isActive ? 'Active' : 'Inactive'}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center justify-end gap-2">
+                                      <button onClick={() => toggleTransportDeptStatus(td.id)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title={td.isActive ? 'Deactivate' : 'Activate'}>
+                                        {td.isActive ? <ToggleRight className="w-5 h-5 text-green-600" /> : <ToggleLeft className="w-5 h-5 text-gray-400" />}
+                                      </button>
+                                      <button onClick={() => openEditTd(td)} className="p-2 hover:bg-blue-50 text-[#4A4A4A] hover:text-blue-600 rounded-lg transition-colors" title="Edit"><Edit2 className="w-4 h-4" /></button>
+                                      <button onClick={() => { if (confirm(`Delete "${td.name}"?`)) deleteTransportDept(td.id); }} className="p-2 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded-lg transition-colors" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Divider */}
+                    <div className="py-6"><div className="border-t border-gray-200" /></div>
+
+                    {/* ── SECTION 1: Transport Department Heads ── */}
                     <Card className="shadow-sm mb-0">
                       <CardHeader className="bg-[#F9F8F6] py-3 px-5">
                         <div className="flex items-center justify-between">
                           <div>
                             <CardTitle className="flex items-center gap-2 text-base">
                               <Users className="w-4 h-4 text-[#2D5A45]" />
-                              Nazim Transport
+                              Transport Department Heads
                               <Badge variant="outline" className="ml-1 text-xs bg-amber-50 text-amber-700 border-amber-200">
                                 {headDrivers.length}
                               </Badge>
                             </CardTitle>
-                            <p className="text-xs text-[#4A4A4A] mt-1">Transport managers — one per location</p>
+                            <p className="text-xs text-[#4A4A4A] mt-1">Each head manages their department's drivers and assigns tasks</p>
                           </div>
                           <Button onClick={() => openDriverForm(true)} className="bg-[#2D5A45] hover:bg-[#234839] text-white h-8 px-3 text-xs">
-                            <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Nazim Transport
+                            <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Department Head
                           </Button>
                         </div>
                       </CardHeader>
@@ -1336,9 +1511,7 @@ export default function UsersPage() {
                                 <SortableHeader label="Name" column="name" sortCol={headDriverSortCol} sortDir={headDriverSortDir} onSort={handleHeadDriverSort} />
                                 <SortableHeader label="Email" column="email" sortCol={headDriverSortCol} sortDir={headDriverSortDir} onSort={handleHeadDriverSort} />
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Password</th>
-                                <SortableHeader label="Department" column="department" sortCol={headDriverSortCol} sortDir={headDriverSortDir} onSort={handleHeadDriverSort} />
-                                <SortableHeader label="Location" column="location" sortCol={headDriverSortCol} sortDir={headDriverSortDir} onSort={handleHeadDriverSort} />
-                                <SortableHeader label="Vehicle" column="vehicle_type" sortCol={headDriverSortCol} sortDir={headDriverSortDir} onSort={handleHeadDriverSort} />
+                                <SortableHeader label="Transport Department" column="transport_department_name" sortCol={headDriverSortCol} sortDir={headDriverSortDir} onSort={handleHeadDriverSort} />
                                 <SortableHeader label="Phone" column="phone" sortCol={headDriverSortCol} sortDir={headDriverSortDir} onSort={handleHeadDriverSort} />
                                 <SortableHeader label="Status" column="is_available" sortCol={headDriverSortCol} sortDir={headDriverSortDir} onSort={handleHeadDriverSort} />
                                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
@@ -1346,7 +1519,7 @@ export default function UsersPage() {
                             </thead>
                             <tbody className="divide-y divide-[#E8E3DB]">
                               {sortedHeadDrivers.length === 0 ? (
-                                <tr><td colSpan={9} className="px-4 py-8 text-center text-[#4A4A4A]">No Nazim Transport found. Click "Add" to create one.</td></tr>
+                                <tr><td colSpan={7} className="px-4 py-8 text-center text-[#4A4A4A]">No department heads found. Click "Add Department Head" to create one.</td></tr>
                               ) : sortedHeadDrivers.map(d => (
                                 <tr key={d.id} className="hover:bg-[#FAFAFA]">
                                   <td className="px-4 py-3">
@@ -1370,15 +1543,9 @@ export default function UsersPage() {
                                     </div>
                                   </td>
                                   <td className="px-4 py-3">
-                                    {d.department ? <Badge variant="outline" className={getDeptBadgeCls(d.department)}>{d.department}</Badge> : '—'}
-                                  </td>
-                                  <td className="px-4 py-3">
-                                    {d.location
-                                      ? <span className="bg-[#D6E4D9] text-[#2D5A45] rounded-full px-2 py-0.5 text-xs font-medium">{d.location}</span>
-                                      : <span className="text-[#4A4A4A] text-sm">—</span>}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">
-                                    {d.vehicle_type && d.vehicle_model ? `${d.vehicle_type} · ${d.vehicle_model}` : d.vehicle_model ?? d.vehicle_type ?? '—'}
+                                    {d.transport_department_name
+                                      ? <TransportDeptPill name={d.transport_department_name} />
+                                      : <span className="text-gray-400 text-sm">—</span>}
                                   </td>
                                   <td className="px-4 py-3 text-sm text-[#4A4A4A]">{d.phone ?? '—'}</td>
                                   <td className="px-4 py-3">
@@ -1403,7 +1570,7 @@ export default function UsersPage() {
                     {/* Divider */}
                     <div className="py-8"><div className="border-t border-gray-200" /></div>
 
-                    {/* ── SECTION B: Drivers ── */}
+                    {/* ── SECTION 2: Drivers ── */}
                     <Card className="shadow-sm">
                       <CardHeader className="bg-[#F9F8F6] py-3 px-5">
                         <div className="flex items-center justify-between mb-3">
@@ -1415,25 +1582,28 @@ export default function UsersPage() {
                                 {regularDrivers.length}
                               </Badge>
                             </CardTitle>
-                            <p className="text-xs text-[#4A4A4A] mt-1">Drivers assigned to locations</p>
                           </div>
                           <Button onClick={() => openDriverForm(false)} className="bg-[#2D5A45] hover:bg-[#234839] text-white h-8 px-3 text-xs">
                             <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Driver
                           </Button>
                         </div>
-                        {/* Filter chips */}
-                        <div className="flex flex-wrap gap-2 mb-2">
-                          {['', ...departmentList].map(dept => (
-                            <button key={dept || 'all'} onClick={() => setDriverDeptFilter(dept)}
-                              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${driverDeptFilter === dept ? 'bg-[#2D5A45] text-white' : 'bg-white text-[#4A4A4A] border border-[#D4CFC7] hover:bg-[#F5F0E8]'}`}>
-                              {dept || 'All'}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
-                          <Input placeholder="Search by name, email, location…" value={driverSearch} onChange={e => setDriverSearch(e.target.value)}
-                            className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm" />
+                        {/* Filter row */}
+                        <div className="flex items-center gap-3">
+                          <select
+                            value={driverDeptFilter}
+                            onChange={e => setDriverDeptFilter(e.target.value)}
+                            className="border border-[#D4CFC7] rounded-lg px-3 py-1.5 text-sm bg-white focus:border-[#2D5A45] focus:outline-none h-9"
+                          >
+                            <option value="">All Transport Departments</option>
+                            {transportDepts.map(td => (
+                              <option key={td.id} value={td.id}>{td.name}</option>
+                            ))}
+                          </select>
+                          <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A4A4A]" />
+                            <Input placeholder="Search by name or email…" value={driverSearch} onChange={e => setDriverSearch(e.target.value)}
+                              className="pl-10 border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm" />
+                          </div>
                         </div>
                       </CardHeader>
                       <CardContent className="p-0">
@@ -1444,10 +1614,7 @@ export default function UsersPage() {
                                 <SortableHeader label="Name" column="name" sortCol={regDriverSortCol} sortDir={regDriverSortDir} onSort={handleRegDriverSort} />
                                 <SortableHeader label="Email" column="email" sortCol={regDriverSortCol} sortDir={regDriverSortDir} onSort={handleRegDriverSort} />
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Password</th>
-                                <SortableHeader label="Department" column="department" sortCol={regDriverSortCol} sortDir={regDriverSortDir} onSort={handleRegDriverSort} />
-                                <SortableHeader label="Location" column="location" sortCol={regDriverSortCol} sortDir={regDriverSortDir} onSort={handleRegDriverSort} />
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Nazim Transport</th>
-                                <SortableHeader label="Vehicle" column="vehicle_type" sortCol={regDriverSortCol} sortDir={regDriverSortDir} onSort={handleRegDriverSort} />
+                                <SortableHeader label="Transport Department" column="transport_department_name" sortCol={regDriverSortCol} sortDir={regDriverSortDir} onSort={handleRegDriverSort} />
                                 <SortableHeader label="Phone" column="phone" sortCol={regDriverSortCol} sortDir={regDriverSortDir} onSort={handleRegDriverSort} />
                                 <SortableHeader label="Status" column="is_available" sortCol={regDriverSortCol} sortDir={regDriverSortDir} onSort={handleRegDriverSort} />
                                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
@@ -1455,67 +1622,50 @@ export default function UsersPage() {
                             </thead>
                             <tbody className="divide-y divide-[#E8E3DB]">
                               {sortedRegDrivers.length === 0 ? (
-                                <tr><td colSpan={10} className="px-4 py-8 text-center text-[#4A4A4A]">
-                                  {regularDrivers.length === 0 ? 'No drivers found. Click "Add Driver" to create one.' : 'No drivers match your search.'}
+                                <tr><td colSpan={7} className="px-4 py-8 text-center text-[#4A4A4A]">
+                                  {regularDrivers.length === 0 ? 'No drivers found. Click "Add Driver" to create one.' : 'No drivers match your filter.'}
                                 </td></tr>
-                              ) : sortedRegDrivers.map(d => {
-                                const nazim = getNazimTransport(d);
-                                return (
-                                  <tr key={d.id} className="hover:bg-[#FAFAFA]">
-                                    <td className="px-4 py-3">
-                                      <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium">{d.name.charAt(0)}</div>
-                                        <span className="font-medium text-[#1A1A1A]">{d.name}</span>
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-[#4A4A4A]">{d.email}</td>
-                                    <td className="px-4 py-3">
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-[#4A4A4A] font-mono text-sm">
-                                          {showPasswordMap[d.id] ? (d.password_hash || '—') : '••••••••'}
-                                        </span>
-                                        <button onClick={() => togglePasswordVisibility(d.id)} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600">
-                                          {showPasswordMap[d.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                        </button>
-                                        <button onClick={() => openPwChange(d.id, d.name, d.email)} className="p-1 hover:bg-blue-50 rounded text-gray-400 hover:text-blue-600" title="Change password">
-                                          <Pencil className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                      {d.department ? <Badge variant="outline" className={getDeptBadgeCls(d.department)}>{d.department}</Badge> : '—'}
-                                    </td>
-                                    <td className="px-4 py-3">
-                                      {d.location
-                                        ? <span className="bg-[#D6E4D9] text-[#2D5A45] rounded-full px-2 py-0.5 text-xs font-medium">{d.location}</span>
-                                        : <span className="text-[#4A4A4A] text-sm">—</span>}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-[#4A4A4A]">
-                                      {nazim !== '—' ? (
-                                        <span className="flex items-center gap-1.5">
-                                          <span className="w-2 h-2 rounded-full bg-amber-400 inline-block shrink-0" />
-                                          {nazim}
-                                        </span>
-                                      ) : '—'}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-[#4A4A4A]">
-                                      {d.vehicle_type && d.vehicle_model ? `${d.vehicle_type} · ${d.vehicle_model}` : d.vehicle_model ?? d.vehicle_type ?? '—'}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-[#4A4A4A]">{d.phone ?? '—'}</td>
-                                    <td className="px-4 py-3">
-                                      <Badge variant="outline" className={d.is_available !== false ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-600 border-gray-200'}>
-                                        {d.is_available !== false ? 'Active' : 'Inactive'}
-                                      </Badge>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                      <div className="flex items-center justify-end gap-2">
-                                        <button onClick={() => openDriverForm(false, d)} className="p-2 hover:bg-blue-50 text-[#4A4A4A] hover:text-blue-600 rounded-lg transition-colors" title="Edit"><Edit2 className="w-4 h-4" /></button>
-                                        <button onClick={() => confirmDeleteDriver(d)} className="p-2 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded-lg transition-colors" title="Delete"><Trash2 className="w-4 h-4" /></button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
+                              ) : sortedRegDrivers.map(d => (
+                                <tr key={d.id} className="hover:bg-[#FAFAFA]">
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium">{d.name.charAt(0)}</div>
+                                      <span className="font-medium text-[#1A1A1A]">{d.name}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">{d.email}</td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[#4A4A4A] font-mono text-sm">
+                                        {showPasswordMap[d.id] ? (d.password_hash || '—') : '••••••••'}
+                                      </span>
+                                      <button onClick={() => togglePasswordVisibility(d.id)} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600">
+                                        {showPasswordMap[d.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                      </button>
+                                      <button onClick={() => openPwChange(d.id, d.name, d.email)} className="p-1 hover:bg-blue-50 rounded text-gray-400 hover:text-blue-600" title="Change password">
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    {d.transport_department_name
+                                      ? <TransportDeptPill name={d.transport_department_name} />
+                                      : <span className="text-gray-400 text-sm">—</span>}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-[#4A4A4A]">{d.phone ?? '—'}</td>
+                                  <td className="px-4 py-3">
+                                    <Badge variant="outline" className={d.is_available !== false ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-600 border-gray-200'}>
+                                      {d.is_available !== false ? 'Active' : 'Inactive'}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center justify-end gap-2">
+                                      <button onClick={() => openDriverForm(false, d)} className="p-2 hover:bg-blue-50 text-[#4A4A4A] hover:text-blue-600 rounded-lg transition-colors" title="Edit"><Edit2 className="w-4 h-4" /></button>
+                                      <button onClick={() => confirmDeleteDriver(d)} className="p-2 hover:bg-red-50 text-[#4A4A4A] hover:text-red-600 rounded-lg transition-colors" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
                             </tbody>
                           </table>
                         </div>
@@ -2036,13 +2186,93 @@ export default function UsersPage() {
         </div>
       )}
 
+      {/* ── Transport Department Add/Edit Dialog ── */}
+      {tdDialogOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-[#E8E3DB] flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-[#1A1A1A]">
+                {tdEditTarget ? 'Edit' : 'Add'} Transport Department
+              </h2>
+              <button onClick={() => setTdDialogOpen(false)} className="p-2 hover:bg-[#F5F0E8] rounded-lg transition-colors">
+                <X className="w-5 h-5 text-[#4A4A4A]" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* Name */}
+              <div className="space-y-2">
+                <Label className="text-[#1A1A1A]">Name *</Label>
+                <Input value={tdForm.name} onChange={e => setTdForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Jalsa Salana Dept"
+                  className="border-[#D4CFC7] focus:border-[#2D5A45] h-11" />
+              </div>
+              {/* Description */}
+              <div className="space-y-2">
+                <Label className="text-[#1A1A1A]">Description</Label>
+                <Input value={tdForm.description} onChange={e => setTdForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="Optional description"
+                  className="border-[#D4CFC7] focus:border-[#2D5A45] h-11" />
+              </div>
+              {/* Serves */}
+              <div className="space-y-2">
+                <Label className="text-[#1A1A1A]">Serves (Accommodation Departments)</Label>
+                <div className="space-y-2 border border-[#E8E3DB] rounded-lg p-3">
+                  {ACCOMMODATION_DEPTS.map(dept => (
+                    <label key={dept} className="flex items-center gap-2 cursor-pointer text-sm text-[#1A1A1A]">
+                      <input type="checkbox"
+                        checked={tdForm.serves.includes(dept)}
+                        onChange={e => setTdForm(f => ({
+                          ...f,
+                          serves: e.target.checked ? [...f.serves, dept] : f.serves.filter(s => s !== dept),
+                        }))}
+                        className="rounded border-[#D4CFC7] text-[#2D5A45] focus:ring-[#2D5A45]" />
+                      {dept}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {/* Seasonal */}
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="tdSeasonal" checked={tdForm.isSeasonal}
+                  onChange={e => setTdForm(f => ({ ...f, isSeasonal: e.target.checked }))}
+                  className="rounded border-[#D4CFC7] text-[#2D5A45] focus:ring-[#2D5A45]" />
+                <Label htmlFor="tdSeasonal" className="cursor-pointer text-[#1A1A1A]">Seasonal department</Label>
+              </div>
+              {tdForm.isSeasonal && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#4A4A4A]">Active From</Label>
+                    <Input type="date" value={tdForm.activeFrom} onChange={e => setTdForm(f => ({ ...f, activeFrom: e.target.value }))}
+                      className="border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#4A4A4A]">Active To</Label>
+                    <Input type="date" value={tdForm.activeTo} onChange={e => setTdForm(f => ({ ...f, activeTo: e.target.value }))}
+                      className="border-[#D4CFC7] focus:border-[#2D5A45] h-9 text-sm" />
+                  </div>
+                </div>
+              )}
+              {/* Actions */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#E8E3DB]">
+                <Button type="button" variant="outline" onClick={() => setTdDialogOpen(false)} className="border-[#D4CFC7] h-11 px-6">
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveTd} disabled={tdSaving} className="bg-[#2D5A45] hover:bg-[#234839] text-white h-11 px-6">
+                  {tdSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</> : tdEditTarget ? 'Save Changes' : 'Add Department'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Driver Add/Edit Dialog ── */}
       {driverFormOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-[#E8E3DB] flex items-center justify-between">
               <h2 className="text-xl font-semibold text-[#1A1A1A]">
-                {editingDriver ? 'Edit' : 'Add'} {driverFormIsHead ? 'Nazim Transport' : 'Driver'}
+                {editingDriver ? 'Edit' : 'Add'} {driverFormIsHead ? 'Department Head' : 'Driver'}
               </h2>
               <button onClick={() => setDriverFormOpen(false)} className="p-2 hover:bg-[#F5F0E8] rounded-lg transition-colors">
                 <X className="w-5 h-5 text-[#4A4A4A]" />
@@ -2090,22 +2320,17 @@ export default function UsersPage() {
                   </button>
                 </div>
               </div>
-              {/* Department */}
+              {/* Transport Department */}
               <div className="space-y-2">
-                <Label className="text-[#1A1A1A]">Department</Label>
-                <select value={dDept} onChange={e => { setDDept(e.target.value); setDLoc(''); }}
+                <Label className="text-[#1A1A1A]">Transport Department</Label>
+                <select value={dTransportDeptId} onChange={e => {
+                  const td = transportDepts.find(t => t.id === e.target.value);
+                  setDTransportDeptId(e.target.value);
+                  setDTransportDeptName(td?.name ?? '');
+                }}
                   className="w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] h-11">
-                  <option value="">— Select department —</option>
-                  {departmentList.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-              {/* Location */}
-              <div className="space-y-2">
-                <Label className="text-[#1A1A1A]">Location</Label>
-                <select value={dLoc} onChange={e => setDLoc(e.target.value)} disabled={!dDept}
-                  className={`w-full px-3 py-2.5 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] h-11 ${!dDept ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                  <option value="">— Select location —</option>
-                  {(departments[dDept] ?? []).map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                  <option value="">— No transport department —</option>
+                  {transportDepts.map(td => <option key={td.id} value={td.id}>{td.name}</option>)}
                 </select>
               </div>
               {/* Vehicle section */}
@@ -2143,7 +2368,7 @@ export default function UsersPage() {
                     onChange={e => setDriverFormIsHead(e.target.checked)}
                     className="rounded border-amber-300 text-amber-600 focus:ring-amber-500" />
                   <Label htmlFor="isHeadDriver" className="cursor-pointer text-sm text-[#1A1A1A]">
-                    Nazim Transport (promote / demote this driver)
+                    Transport Department Head (promote / demote this driver)
                   </Label>
                 </div>
               )}
@@ -2153,7 +2378,7 @@ export default function UsersPage() {
                   Cancel
                 </Button>
                 <Button onClick={handleSaveDriver} disabled={dSaving} className="bg-[#2D5A45] hover:bg-[#234839] text-white h-11 px-6">
-                  {dSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</> : editingDriver ? 'Save Changes' : 'Add Driver'}
+                  {dSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</> : editingDriver ? 'Save Changes' : driverFormIsHead ? 'Add Department Head' : 'Add Driver'}
                 </Button>
               </div>
             </div>

@@ -1,12 +1,21 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import type { Designation } from '@/types';
+import type { Designation, DesignationTier } from '@/types';
+
+export interface AddDesignationInput {
+  name: string;
+  tier?: DesignationTier | null;
+  code?: string | null;
+  category?: string | null;
+  notes?: string | null;
+}
 
 interface DesignationsContextType {
   designations: Designation[];
-  activeDesignations: string[];
-  addDesignation: (name: string) => Promise<Designation | null>;
+  /** Full Designation objects for active designations, ordered by tier then code */
+  activeDesignations: Designation[];
+  addDesignation: (input: AddDesignationInput) => Promise<Designation | null>;
   updateDesignation: (id: string, updates: Partial<Designation>) => Promise<void>;
   deleteDesignation: (id: string) => Promise<void>;
   toggleDesignationStatus: (id: string) => Promise<void>;
@@ -15,11 +24,26 @@ interface DesignationsContextType {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToDesignation(row: any): Designation {
   return {
-    id: row.id,
-    name: row.name,
-    isActive: row.is_active ?? true,
+    id:        row.id,
+    name:      row.name,
+    tier:      row.tier ?? null,
+    code:      row.code ?? null,
+    category:  row.category ?? null,
+    notes:     row.notes ?? null,
+    isActive:  row.is_active ?? true,
     createdAt: row.created_at ?? new Date().toISOString(),
   };
+}
+
+const TIER_ORDER: Record<string, number> = {
+  '1(a)': 1, '1(b)': 2, '2': 3, '3': 4, '4': 5, '5': 6,
+};
+
+function tierSort(a: Designation, b: Designation): number {
+  const ta = a.tier ? (TIER_ORDER[a.tier] ?? 99) : 99;
+  const tb = b.tier ? (TIER_ORDER[b.tier] ?? 99) : 99;
+  if (ta !== tb) return ta - tb;
+  return (a.code ?? a.name).localeCompare(b.code ?? b.name);
 }
 
 const DesignationsContext = createContext<DesignationsContextType | undefined>(undefined);
@@ -38,15 +62,19 @@ export function DesignationsProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
-  const activeDesignations = designations
-    .filter(d => d.isActive)
-    .map(d => d.name)
-    .sort();
+  const activeDesignations = [...designations.filter(d => d.isActive)].sort(tierSort);
 
-  const addDesignation = useCallback(async (name: string): Promise<Designation | null> => {
+  const addDesignation = useCallback(async (input: AddDesignationInput): Promise<Designation | null> => {
     const { data, error } = await supabase
       .from('designations')
-      .insert({ name: name.trim(), is_active: true })
+      .insert({
+        name:      input.name.trim(),
+        tier:      input.tier   ?? null,
+        code:      input.code   ? input.code.trim()   : null,
+        category:  input.category ? input.category.trim() : null,
+        notes:     input.notes  ? input.notes.trim()  : null,
+        is_active: true,
+      })
       .select()
       .single();
 
@@ -60,8 +88,12 @@ export function DesignationsProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase
       .from('designations')
       .update({
-        ...(updates.name     !== undefined ? { name: updates.name }           : {}),
-        ...(updates.isActive !== undefined ? { is_active: updates.isActive }  : {}),
+        ...(updates.name      !== undefined ? { name:      updates.name }          : {}),
+        ...(updates.tier      !== undefined ? { tier:      updates.tier }          : {}),
+        ...(updates.code      !== undefined ? { code:      updates.code }          : {}),
+        ...(updates.category  !== undefined ? { category:  updates.category }      : {}),
+        ...(updates.notes     !== undefined ? { notes:     updates.notes }         : {}),
+        ...(updates.isActive  !== undefined ? { is_active: updates.isActive }      : {}),
         updated_at: new Date().toISOString(),
       })
       .eq('id', id);

@@ -26,6 +26,7 @@ import { DriverMessagesDialog } from '@/components/DriverMessagesDialog';
 import { AddMaintenanceDialog, ViewMaintenanceLogDialog } from '@/components/VehicleMaintenanceDialog';
 import { ROLE_LABELS } from '@/lib/constants';
 import { TopBar } from '@/components/TopBar';
+import { useTransportDepts } from '@/hooks/useTransportDepartments';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -145,7 +146,10 @@ export default function AdminDriversPage() {
   const [deptFilter, setDeptFilter]   = useState('');
   const [locFilter, setLocFilter]     = useState('');
   const [statFilter, setStatFilter]   = useState('');
+  const [tdFilter, setTdFilter]       = useState('');
   const [taskStatus, setTaskStatus]   = useState('');
+
+  const { transportDepts } = useTransportDepts();
 
   // drivers table sort
   const [driverSortCol, setDriverSortCol] = useState<string | null>(null);
@@ -189,7 +193,7 @@ export default function AdminDriversPage() {
     const today = new Date().toISOString().substring(0, 10);
     const [driversRes, tasksRes, maintRes] = await Promise.all([
       supabase.from('users')
-        .select('id,name,email,phone,location,department,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_head_driver,is_available')
+        .select('id,name,email,phone,location,department,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_head_driver,is_available,transport_department_id,transport_department_name')
         .eq('role', 'driver'),
       supabase.from('driver_tasks')
         .select('id,driver_id,driver_name,task_type,status,is_suggestion,scheduled_date,scheduled_time,started_at,guest_name,pickup_location,dropoff_location,passenger_count,location,department,notes')
@@ -481,10 +485,11 @@ export default function AdminDriversPage() {
   const filteredDrivers = useMemo(() => drivers.filter(d => {
     if (deptFilter && d.department !== deptFilter) return false;
     if (locFilter  && d.location   !== locFilter)  return false;
+    if (tdFilter   && (d as DriverRow & { transport_department_id?: string }).transport_department_id !== tdFilter) return false;
     if (statFilter === 'available' && !d.is_available) return false;
     if (statFilter === 'off_duty'  &&  d.is_available) return false;
     return true;
-  }), [drivers, deptFilter, locFilter, statFilter]);
+  }), [drivers, deptFilter, locFilter, tdFilter, statFilter]);
 
   const activeTasks     = tasks.filter(t => !t.is_suggestion && t.status !== 'cancelled');
   const suggestionTasks = tasks.filter(t =>  t.is_suggestion && t.status === 'suggested');
@@ -508,13 +513,12 @@ export default function AdminDriversPage() {
   }, [tasks]);
 
   const fleetByDept = useMemo(() => {
-    const map: Record<string, Record<string, DriverRow[]>> = {};
+    const map: Record<string, DriverRow[]> = {};
     for (const d of drivers) {
-      const dept = d.department ?? '(No Department)';
-      const loc  = d.location  ?? '(No Location)';
-      if (!map[dept]) map[dept] = {};
-      if (!map[dept][loc]) map[dept][loc] = [];
-      map[dept][loc].push(d);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tdName = (d as any).transport_department_name ?? '(No Transport Dept)';
+      if (!map[tdName]) map[tdName] = [];
+      map[tdName].push(d);
     }
     return map;
   }, [drivers]);
@@ -697,63 +701,55 @@ export default function AdminDriversPage() {
                   <p className="text-sm text-[#4A4A4A] text-center py-4">No drivers loaded.</p>
                 ) : (
                   <div className="space-y-5">
-                    {Object.entries(fleetByDept).map(([dept, locations]) => (
-                      <div key={dept}>
-                        <div className={`text-xs font-semibold uppercase tracking-wider px-2 py-1 rounded-md inline-block mb-2 ${deptColor(dept)}`}>
-                          {dept}
+                    {Object.entries(fleetByDept).map(([tdName, tdDrivers]) => (
+                      <div key={tdName}>
+                        <div className={`text-xs font-semibold uppercase tracking-wider px-2 py-1 rounded-md inline-block mb-2 ${deptColor(tdName)}`}>
+                          {tdName}
                         </div>
-                        <div className="pl-3 space-y-3">
-                          {Object.entries(locations).map(([loc, locDrivers]) => (
-                            <div key={loc}>
-                              <div className="text-xs font-medium text-[#4A4A4A] mb-1.5">{loc}</div>
-                              <div className="space-y-1.5">
-                                {locDrivers.map(d => {
-                                  const { text, dot } = activityLabel(d.id, d.is_available);
-                                  const badgeCls = dot === 'bg-green-500'
-                                    ? 'bg-green-50 text-green-700'
-                                    : dot === 'bg-blue-500'
-                                      ? 'bg-blue-50 text-blue-700'
-                                      : 'bg-amber-50 text-amber-700';
-                                  const activeTask = activeTaskMap[d.id];
-                                  const eta = activeTask?.started_at
-                                    ? calculateETA({ task_type: activeTask.task_type, pickup_location: activeTask.pickup_location, dropoff_location: activeTask.dropoff_location, started_at: activeTask.started_at })
-                                    : null;
-                                  const etaStr  = eta ? formatETA(eta) : null;
-                                  const etaOver = eta ? isETAOverdue(eta) : false;
-                                  // Map link for active tasks (pickup: airport is pickup_location; dropoff: airport is dropoff_location)
-                                  const mapAirport = activeTask
-                                    ? (activeTask.task_type === 'airport_pickup' ? activeTask.pickup_location : activeTask.dropoff_location)
-                                    : undefined;
-                                  const mapUrl = mapAirport ? getMapLink(mapAirport) : null;
-                                  return (
-                                    <div key={d.id} className="flex items-center gap-2 text-sm flex-wrap">
-                                      <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
-                                      <span className="font-medium text-[#1A1A1A] min-w-[120px]">{d.name}</span>
-                                      <span className="text-[#4A4A4A] text-xs">{d.vehicle_model ?? d.vehicle_type ?? '—'}</span>
-                                      {d.vehicle_registration && (
-                                        <span className="text-[#4A4A4A] text-xs font-mono bg-gray-100 px-1.5 rounded">
-                                          {d.vehicle_registration}
-                                        </span>
-                                      )}
-                                      <span className={`text-xs px-2 py-0.5 rounded-full ${badgeCls}`}>{text}</span>
-                                      {etaStr && (
-                                        <span className={`text-xs font-medium ${etaOver ? 'text-red-600' : 'text-blue-600'}`}>
-                                          {etaStr}
-                                        </span>
-                                      )}
-                                      {mapUrl && (
-                                        <a href={mapUrl} target="_blank" rel="noopener noreferrer"
-                                          className="flex items-center gap-0.5 text-xs text-[#2D5A45] hover:underline">
-                                          <MapPin className="w-3 h-3" />
-                                          <ExternalLink className="w-2.5 h-2.5 opacity-50" />
-                                        </a>
-                                      )}
-                                    </div>
-                                  );
-                                })}
+                        <div className="pl-3 space-y-1.5">
+                          {tdDrivers.map(d => {
+                            const { text, dot } = activityLabel(d.id, d.is_available);
+                            const badgeCls = dot === 'bg-green-500'
+                              ? 'bg-green-50 text-green-700'
+                              : dot === 'bg-blue-500'
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'bg-amber-50 text-amber-700';
+                            const activeTask = activeTaskMap[d.id];
+                            const eta = activeTask?.started_at
+                              ? calculateETA({ task_type: activeTask.task_type, pickup_location: activeTask.pickup_location, dropoff_location: activeTask.dropoff_location, started_at: activeTask.started_at })
+                              : null;
+                            const etaStr  = eta ? formatETA(eta) : null;
+                            const etaOver = eta ? isETAOverdue(eta) : false;
+                            const mapAirport = activeTask
+                              ? (activeTask.task_type === 'airport_pickup' ? activeTask.pickup_location : activeTask.dropoff_location)
+                              : undefined;
+                            const mapUrl = mapAirport ? getMapLink(mapAirport) : null;
+                            return (
+                              <div key={d.id} className="flex items-center gap-2 text-sm flex-wrap">
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+                                <span className="font-medium text-[#1A1A1A] min-w-[120px]">{d.name}</span>
+                                <span className="text-[#4A4A4A] text-xs">{d.vehicle_model ?? d.vehicle_type ?? '—'}</span>
+                                {d.vehicle_registration && (
+                                  <span className="text-[#4A4A4A] text-xs font-mono bg-gray-100 px-1.5 rounded">
+                                    {d.vehicle_registration}
+                                  </span>
+                                )}
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${badgeCls}`}>{text}</span>
+                                {etaStr && (
+                                  <span className={`text-xs font-medium ${etaOver ? 'text-red-600' : 'text-blue-600'}`}>
+                                    {etaStr}
+                                  </span>
+                                )}
+                                {mapUrl && (
+                                  <a href={mapUrl} target="_blank" rel="noopener noreferrer"
+                                    className="flex items-center gap-0.5 text-xs text-[#2D5A45] hover:underline">
+                                    <MapPin className="w-3 h-3" />
+                                    <ExternalLink className="w-2.5 h-2.5 opacity-50" />
+                                  </a>
+                                )}
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     ))}
@@ -764,11 +760,18 @@ export default function AdminDriversPage() {
           </div>
 
           {/* Filters */}
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-4 flex-wrap">
             <select value={deptFilter} onChange={e => setDeptFilter(e.target.value)}
               className="border border-[#E8E3DB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2D5A45] bg-white">
               <option value="">All Departments</option>
               {depts.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+            <select value={tdFilter} onChange={e => setTdFilter(e.target.value)}
+              className="border border-[#E8E3DB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2D5A45] bg-white">
+              <option value="">All Transport Teams</option>
+              {transportDepts.map(td => (
+                <option key={td.id} value={td.id}>{td.name}</option>
+              ))}
             </select>
             <select value={locFilter} onChange={e => setLocFilter(e.target.value)}
               className="border border-[#E8E3DB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2D5A45] bg-white">

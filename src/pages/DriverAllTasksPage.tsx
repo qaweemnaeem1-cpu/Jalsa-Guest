@@ -127,20 +127,20 @@ export default function DriverAllTasksPage() {
 
   // ── fetch ─────────────────────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
-    if (!user?.location) return;
+    if (!user?.transportDepartmentId) return;
     try {
       const [tasksRes, driversRes] = await Promise.all([
         supabase
           .from('driver_tasks')
           .select('*')
-          .eq('location', user.location)
+          .eq('transport_department_id', user.transportDepartmentId)
           .not('status', 'in', '("cancelled")')
           .order('scheduled_date').order('scheduled_time'),
         supabase
           .from('users')
           .select('id,name,vehicle_type,vehicle_model,vehicle_capacity,is_available')
           .eq('role', 'driver')
-          .eq('location', user.location)
+          .eq('transport_department_id', user.transportDepartmentId)
           .order('name'),
       ]);
 
@@ -154,27 +154,27 @@ export default function DriverAllTasksPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.location, today]);
+  }, [user?.transportDepartmentId, today]);
 
   useEffect(() => {
-    if (!user?.location || loadedRef.current) return;
+    if (!user?.transportDepartmentId || loadedRef.current) return;
     loadedRef.current = true;
     fetchAll();
-  }, [user?.location, fetchAll]);
+  }, [user?.transportDepartmentId, fetchAll]);
 
   // ── real-time ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!user?.location) return;
+    if (!user?.transportDepartmentId) return;
     const channel = supabase
       .channel('all-driver-tasks')
       .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'driver_tasks', filter: `location=eq.${user.location}` },
+        { event: '*', schema: 'public', table: 'driver_tasks', filter: `transport_department_id=eq.${user.transportDepartmentId}` },
         () => { fetchAll(); }
       )
       .subscribe();
     channelRef.current = channel;
     return () => { supabase.removeChannel(channel); };
-  }, [user?.location, fetchAll]);
+  }, [user?.transportDepartmentId, fetchAll]);
 
   // ── filters ────────────────────────────────────────────────────────────────────
   function applyFilters(tasks: AllTask[]) {
@@ -288,10 +288,10 @@ export default function DriverAllTasksPage() {
           <div>
             <h1 className="text-2xl font-bold text-[#1A1A1A] flex items-center gap-2">
               All Tasks
-              {user?.location && <span className="text-base font-normal text-[#4A4A4A]">— {user.location}</span>}
+              {user?.transportDepartmentName && <span className="text-base font-normal text-[#4A4A4A]">— {user.transportDepartmentName}</span>}
               <span className="text-sm font-bold bg-[#2D5A45] text-white px-2 py-0.5 rounded-full">{totalCount}</span>
             </h1>
-            <p className="text-sm text-[#4A4A4A] mt-0.5">Tasks for all drivers at your location</p>
+            <p className="text-sm text-[#4A4A4A] mt-0.5">Tasks for all drivers in your transport department</p>
           </div>
           <div className="flex items-center gap-2">
             <button

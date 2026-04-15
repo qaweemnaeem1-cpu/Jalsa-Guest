@@ -467,7 +467,7 @@ export default function DriverDashboardPage() {
           <h1 className="text-2xl font-bold text-[#1A1A1A]">Driver Dashboard</h1>
           <p className="text-sm text-[#4A4A4A] mt-1">
             {user?.name}
-            {user?.location   ? ` — ${user.location}`   : ''}
+            {user?.transportDepartmentName ? ` — ${user.transportDepartmentName}` : ''}
             {user?.department ? ` (${user.department})`  : ''}
           </p>
         </div>

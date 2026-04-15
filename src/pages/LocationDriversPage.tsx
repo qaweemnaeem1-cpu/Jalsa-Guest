@@ -3,7 +3,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Plus, Eye, Pencil, Trash2, Car, Users, CheckCircle2, FileText,
+  Plus, Eye, Car, Users, CheckCircle2, FileText,
   MessageCircle, Wrench, Printer, Clock, Settings, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -86,7 +86,6 @@ export default function LocationDriversPage() {
   const [editDriver, setEditDriver]     = useState<DriverRecord | null>(null);
   const [viewDriver, setViewDriver]     = useState<DriverRecord | null>(null);
   const [assignDriver, setAssignDriver] = useState<DriverRecord | null>(null);
-  const [deleteId, setDeleteId]         = useState<string | null>(null);
   const [maintViewDriver, setMaintViewDriver] = useState<DriverRecord | null>(null);
   const [maintAddDriver, setMaintAddDriver]   = useState<DriverRecord | null>(null);
 
@@ -172,14 +171,6 @@ export default function LocationDriversPage() {
   }, [fetchAll]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
-
-  const handleDelete = async (id: string) => {
-    const { error } = await supabase.from('users').delete().eq('id', id);
-    if (error) { toast.error('Failed to delete driver'); return; }
-    toast.success('Driver removed');
-    setDrivers(prev => prev.filter(d => d.id !== id));
-    setDeleteId(null);
-  };
 
   const handleSaved = (saved: DriverRecord) => {
     setDrivers(prev => {
@@ -499,10 +490,6 @@ export default function LocationDriversPage() {
               className="text-[#2D5A45] border-[#2D5A45] hover:bg-[#F5F0E8] gap-2">
               <FileText className="w-4 h-4" /> Daily Report
             </Button>
-            <Button onClick={() => { setEditDriver(null); setFormOpen(true); }}
-              className="bg-[#2D5A45] hover:bg-[#234839] text-white gap-2">
-              <Plus className="w-4 h-4" /> Add Driver
-            </Button>
           </div>
         </div>
 
@@ -579,10 +566,6 @@ export default function LocationDriversPage() {
                             className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors">
                             <Eye className="w-4 h-4" />
                           </button>
-                          <button onClick={() => { setEditDriver(d); setFormOpen(true); }} title="Edit"
-                            className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors">
-                            <Pencil className="w-4 h-4" />
-                          </button>
                           <button onClick={() => setMsgDriver(d)} title="Messages"
                             className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors">
                             <MessageCircle className="w-4 h-4" />
@@ -595,17 +578,6 @@ export default function LocationDriversPage() {
                             className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors">
                             <Wrench className="w-4 h-4" />
                           </button>
-                          {deleteId === d.id ? (
-                            <>
-                              <button onClick={() => handleDelete(d.id)} className="text-xs text-red-600 font-medium px-2 py-1 rounded-lg hover:bg-red-50">Confirm</button>
-                              <button onClick={() => setDeleteId(null)} className="text-xs text-[#4A4A4A] px-2 py-1 rounded-lg hover:bg-[#F5F0E8]">No</button>
-                            </>
-                          ) : (
-                            <button onClick={() => setDeleteId(d.id)} title="Remove Driver"
-                              className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-red-50 hover:text-red-600 transition-colors">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
                         </div>
                       </td>
                     </tr>

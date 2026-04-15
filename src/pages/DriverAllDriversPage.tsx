@@ -256,7 +256,7 @@ export default function DriverAllDriversPage() {
 
   // ── fetch drivers + today task counts ───────────────────────────────────────
   useEffect(() => {
-    if (!user?.location || loadedRef.current) return;
+    if (!user?.transportDepartmentId || loadedRef.current) return;
     loadedRef.current = true;
 
     (async () => {
@@ -265,7 +265,7 @@ export default function DriverAllDriversPage() {
           .from('users')
           .select('*')
           .eq('role', 'driver')
-          .eq('location', user.location)
+          .eq('transport_department_id', user.transportDepartmentId)
           .order('name');
 
         const rows = (driverData as DriverRow[]) ?? [];
@@ -295,7 +295,7 @@ export default function DriverAllDriversPage() {
         setLoading(false);
       }
     })();
-  }, [user?.location]);
+  }, [user?.transportDepartmentId]);
 
   const handleVehicleSaved = useCallback((id: string, updates: Partial<DriverRow>) => {
     setDrivers(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
@@ -317,10 +317,10 @@ export default function DriverAllDriversPage() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-[#1A1A1A] flex items-center gap-2">
             All Drivers
-            {user?.location && <span className="text-base font-normal text-[#4A4A4A]">— {user.location}</span>}
+            {user?.transportDepartmentName && <span className="text-base font-normal text-[#4A4A4A]">— {user.transportDepartmentName}</span>}
             <span className="text-sm font-bold bg-[#2D5A45] text-white px-2 py-0.5 rounded-full">{total}</span>
           </h1>
-          <p className="text-sm text-[#4A4A4A] mt-0.5">Drivers at your location</p>
+          <p className="text-sm text-[#4A4A4A] mt-0.5">Drivers in your transport department</p>
         </div>
 
         {/* Stats bar */}
@@ -344,7 +344,7 @@ export default function DriverAllDriversPage() {
               <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading drivers…
             </div>
           ) : drivers.length === 0 ? (
-            <div className="text-center py-16 text-sm text-[#4A4A4A]">No drivers found at this location.</div>
+            <div className="text-center py-16 text-sm text-[#4A4A4A]">No drivers found in this transport department.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

@@ -14,7 +14,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase';
 import { formatDesignation } from '@/lib/constants';
-import type { Guest } from '@/types';
+import type { Guest, TransportDepartment } from '@/types';
+import { fetchTransportDeptsForDept, getTransportDeptBadgeClass } from '@/hooks/useTransportDepartments';
+import { ChevronDown as ChevronDownIcon } from 'lucide-react';
+
+function getTransportDeptDotColor(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes('jalsa') || n.includes('salana')) return 'bg-green-500';
+  if (n.includes('reserve 1') || n.includes('reserve1')) return 'bg-blue-500';
+  if (n.includes('central')) return 'bg-teal-500';
+  if (n.includes('uk jamaat') || n.includes('jamaat')) return 'bg-purple-500';
+  return 'bg-gray-400';
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -194,6 +205,48 @@ export default function DeptPlacedPage() {
 
   const dept      = user?.department ?? '';
   const locations = departments[dept] ?? [];
+
+  const [transportDepts, setTransportDepts] = useState<TransportDepartment[]>([]);
+  const [savingTransport, setSavingTransport] = useState<Set<string>>(new Set());
+  const [openTransportDropdown, setOpenTransportDropdown] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!dept) return;
+    fetchTransportDeptsForDept(dept).then(setTransportDepts);
+  }, [dept]);
+
+  useEffect(() => {
+    if (!openTransportDropdown) return;
+    const handler = () => setOpenTransportDropdown(null);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [openTransportDropdown]);
+
+  const handleAssignTransport = useCallback(async (
+    guestId: string, guestName: string, tdId: string, td: TransportDepartment | null
+  ) => {
+    const tdName = td?.name ?? '';
+    if (td?.isSeasonal && td.activeFrom && td.activeTo) {
+      const today = new Date().toISOString().substring(0, 10);
+      if (today < td.activeFrom || today > td.activeTo) {
+        const from = new Date(td.activeFrom).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        const to   = new Date(td.activeTo).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        toast.warning(`${tdName} is not active yet (active ${from} — ${to})`, { duration: 5000 });
+      }
+    }
+    setSavingTransport(prev => new Set([...prev, guestId]));
+    await supabase.from('guests').update({
+      transport_department_id: tdId || null,
+      transport_department_name: tdName || null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', guestId);
+    updateGuest(guestId, {
+      transportDepartmentId: tdId || undefined,
+      transportDepartmentName: tdName || undefined,
+    });
+    setSavingTransport(prev => { const s = new Set(prev); s.delete(guestId); return s; });
+    if (tdName) toast.success(`${guestName} assigned to ${tdName}`);
+  }, [updateGuest]);
 
   const allRows = useMemo(() => buildRows(guests, dept), [guests, dept]);
 
@@ -632,6 +685,7 @@ export default function DeptPlacedPage() {
                       <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
                       <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Designation</th>
                       <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Location</th>
+                      {transportDepts.length > 0 && <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider whitespace-nowrap">Transport</th>}
                       <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Room</th>
                       <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Arrival</th>
                       <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Departure</th>
@@ -694,6 +748,70 @@ export default function DeptPlacedPage() {
                             {row.placedLocation}
                           </span>
                         </td>
+                        {transportDepts.length > 0 && (
+                          <td className="px-3 py-3">
+                            {row.memberId === null ? (() => {
+                              const guest = guests.find(g => g.id === row.guestId);
+                              const currentTdId = guest?.transportDepartmentId ?? '';
+                              const currentTd = transportDepts.find(t => t.id === currentTdId);
+                              const isSaving = savingTransport.has(row.guestId);
+                              return (
+                                <div className="relative">
+                                  <button
+                                    disabled={isSaving}
+                                    onClick={() => setOpenTransportDropdown(prev => prev === row.rowKey ? null : row.rowKey)}
+                                    className="flex items-center justify-between gap-1 border border-[#D4CFC7] rounded-md px-2 py-1.5 text-xs bg-white hover:border-[#2D5A45] min-w-[120px] max-w-[150px] transition-colors disabled:opacity-50"
+                                  >
+                                    {currentTd ? (
+                                      <span className="flex items-center gap-1.5 truncate">
+                                        <span className={`w-2 h-2 rounded-full ${getTransportDeptDotColor(currentTd.name)} shrink-0`} />
+                                        <span className="text-[#1A1A1A] truncate">{currentTd.name}</span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-400 truncate">Transport…</span>
+                                    )}
+                                    <ChevronDownIcon className="w-3 h-3 text-gray-400 shrink-0 ml-1" />
+                                  </button>
+                                  {openTransportDropdown === row.rowKey && (
+                                    <div className="absolute z-50 top-full mt-1 left-0 bg-white border border-[#E8E3DB] rounded-xl shadow-xl min-w-[170px] overflow-hidden">
+                                      <button
+                                        onClick={() => { handleAssignTransport(row.guestId, row.name, '', null); setOpenTransportDropdown(null); }}
+                                        className="flex items-center gap-2 w-full px-3 py-2 text-xs text-left text-gray-400 italic hover:bg-[#F5F0E8] border-b border-[#E8E3DB] transition-colors"
+                                      >
+                                        No transport
+                                      </button>
+                                      {transportDepts.map(td => {
+                                        const isSeasonal = td.isSeasonal && td.activeFrom && td.activeTo;
+                                        const today = new Date().toISOString().substring(0, 10);
+                                        const outsideSeason = isSeasonal && (today < td.activeFrom! || today > td.activeTo!);
+                                        return (
+                                          <button
+                                            key={td.id}
+                                            onClick={() => { handleAssignTransport(row.guestId, row.name, td.id, td); setOpenTransportDropdown(null); }}
+                                            className={`flex items-center gap-2 w-full px-3 py-2 text-xs text-left hover:bg-[#F5F0E8] transition-colors ${currentTdId === td.id ? 'bg-[#F5F0E8] font-medium' : ''}`}
+                                          >
+                                            <span className={`w-2 h-2 rounded-full ${getTransportDeptDotColor(td.name)} shrink-0`} />
+                                            <span className="text-[#1A1A1A] flex-1">{td.name}</span>
+                                            {outsideSeason && <span className="text-amber-500 text-xs shrink-0">⚠</span>}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })() : (() => {
+                              const guest = guests.find(g => g.id === row.guestId);
+                              const tdName = guest?.transportDepartmentName;
+                              return tdName
+                                ? <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${getTransportDeptBadgeClass(tdName)}`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${getTransportDeptDotColor(tdName)}`} />
+                                    {tdName}
+                                  </span>
+                                : <span className="text-gray-300 text-xs">—</span>;
+                            })()}
+                          </td>
+                        )}
                         <td className="px-4 py-3">
                           {row.roomAssignment ? (
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200">

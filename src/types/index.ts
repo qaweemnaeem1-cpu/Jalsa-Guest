@@ -17,6 +17,22 @@ export interface User {
   vehicleCapacity?: number;
   isHeadDriver?: boolean;
   isAvailable?: boolean;
+  // Transport department (for drivers and nazim transports)
+  transportDepartmentId?: string;
+  transportDepartmentName?: string;
+}
+
+// ── Transport Department system ────────────────────────────────────────────────
+export interface TransportDepartment {
+  id: string;
+  name: string;
+  description?: string;
+  isSeasonal: boolean;
+  activeFrom?: string;  // YYYY-MM-DD
+  activeTo?: string;    // YYYY-MM-DD
+  isActive: boolean;
+  createdAt: string;
+  serves: string[];     // accommodation dept names (from transport_department_mapping)
 }
 
 export type DriverTaskType     = 'airport_pickup' | 'airport_dropoff' | 'mulaqat_transport' | 'other';
@@ -192,6 +208,9 @@ export interface Guest {
   familyGroupId?: string | null;
   familyName?: string;
   relationship?: string; // 'Self' | 'Wife' | 'Son' | 'Daughter' | etc.
+  // Transport assignment (set by Department Head)
+  transportDepartmentId?: string;
+  transportDepartmentName?: string;
 }
 
 export function canTransitionStatus(from: GuestStatus, to: GuestStatus): boolean {
@@ -206,9 +225,15 @@ export function canTransitionStatus(from: GuestStatus, to: GuestStatus): boolean
   return transitions[from]?.includes(to) ?? false;
 }
 
+export type DesignationTier = '1(a)' | '1(b)' | '2' | '3' | '4' | '5';
+
 export interface Designation {
   id: string;
   name: string;
+  tier: DesignationTier | null;
+  code: string | null;
+  category: string | null;
+  notes: string | null;
   isActive: boolean;
   createdAt: string;
 }

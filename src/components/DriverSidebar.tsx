@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ClipboardList, CheckCircle, Car, Users, CalendarDays } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, CheckCircle, Car, Users, CalendarDays, UserCheck, MessageCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { useDriverUnreadCount } from '@/components/DriverMessagesDialog';
@@ -10,6 +10,8 @@ export function DriverSidebar() {
   const { user } = useAuth();
 
   const isHead = user?.isHeadDriver ?? false;
+  // Transport heads (isHead + transportDepartmentId) use the /transport/* routes
+  const isTransportHead = isHead && !!user?.transportDepartmentId;
   const unreadCount = useDriverUnreadCount(user?.id);
 
   const REGULAR_NAV = [
@@ -17,6 +19,7 @@ export function DriverSidebar() {
     { icon: ClipboardList,   label: 'My Tasks',        href: '/driver/tasks' },
     { icon: CheckCircle,     label: 'Completed Tasks', href: '/driver/completed' },
     { icon: Car,             label: 'My Vehicle',      href: '/driver/vehicle' },
+    { icon: MessageCircle,   label: 'Messages',        href: '/driver/messages' },
   ];
 
   const HEAD_NAV = [
@@ -27,9 +30,21 @@ export function DriverSidebar() {
     { icon: CalendarDays,    label: 'Schedule',        href: '/driver/schedule' },
     { icon: CheckCircle,     label: 'Completed Tasks', href: '/driver/completed' },
     { icon: Car,             label: 'Vehicles',        href: '/driver/vehicles' },
+    { icon: MessageCircle,   label: 'Messages',        href: '/driver/messages' },
   ];
 
-  const NAV = isHead ? HEAD_NAV : REGULAR_NAV;
+  const TRANSPORT_NAV = [
+    { icon: LayoutDashboard, label: 'Dashboard',        href: '/transport/dashboard' },
+    { icon: UserCheck,       label: 'Guest Assignments', href: '/transport/guests' },
+    { icon: Users,           label: 'My Drivers',        href: '/transport/drivers' },
+    { icon: ClipboardList,   label: 'Tasks',             href: '/transport/tasks' },
+    { icon: CalendarDays,    label: 'Schedule',          href: '/transport/schedule' },
+    { icon: Car,             label: 'Vehicles',          href: '/transport/vehicles' },
+    { icon: CheckCircle,     label: 'Completed Tasks',   href: '/transport/completed' },
+    { icon: MessageCircle,   label: 'Messages',          href: '/transport/messages' },
+  ];
+
+  const NAV = isTransportHead ? TRANSPORT_NAV : isHead ? HEAD_NAV : REGULAR_NAV;
 
   return (
     <aside className="w-64 bg-white border-r border-[#E8E3DB] min-h-screen fixed left-0 top-0 flex flex-col">
@@ -41,7 +56,7 @@ export function DriverSidebar() {
           </div>
           <div>
             <span className="font-semibold text-[#1A1A1A]">Jalsa Guest</span>
-            <p className="text-xs text-[#4A4A4A]">{isHead ? 'Nazim Transport View' : 'Driver View'}</p>
+            <p className="text-xs text-[#4A4A4A]">{isTransportHead ? 'Transport Department' : isHead ? 'Nazim Transport View' : 'Driver View'}</p>
           </div>
         </div>
       </div>
@@ -51,7 +66,9 @@ export function DriverSidebar() {
         <div className="px-4 py-2 border-b border-[#E8E3DB] bg-[#F5F0E8]">
           <p className="text-xs text-[#4A4A4A] truncate">
             <span className="font-medium text-[#1A1A1A]">{user.name}</span>
-            {user.location ? ` · ${user.location}` : ''}
+            {isTransportHead && user.transportDepartmentName
+              ? <> · <span className="text-[#2D5A45] font-medium">{user.transportDepartmentName}</span></>
+              : user.location ? ` · ${user.location}` : ''}
           </p>
         </div>
       )}
@@ -72,7 +89,7 @@ export function DriverSidebar() {
             >
               <item.icon className="w-5 h-5 shrink-0" />
               <span className="flex-1">{item.label}</span>
-              {isDashboard && unreadCount > 0 && (
+              {(isDashboard || item.href === '/driver/messages') && unreadCount > 0 && (
                 <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>

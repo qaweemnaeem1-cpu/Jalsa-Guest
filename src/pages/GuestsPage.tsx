@@ -55,7 +55,7 @@ import {
 import { ProfileDialog } from '@/components/ProfileDialog';
 import { useMemo, useRef, useEffect } from 'react';
 import { useRooms } from '@/hooks/useRooms';
-import { GUEST_STATUS_LABELS, ROLE_LABELS, formatDesignation } from '@/lib/constants';
+import { GUEST_STATUS_LABELS, ROLE_LABELS, formatDesignation, getTierBadgeLabel, getTierBadgeClass } from '@/lib/constants';
 import { DelegationCombobox } from '@/components/DelegationCombobox';
 import { MulaqatTypeSelect } from '@/components/MulaqatTypeSelect';
 import { useDelegations } from '@/hooks/useDelegations';
@@ -65,7 +65,8 @@ import { FamilyBadge, type FamilyMemberInfo } from '@/components/FamilyBadge';
 import { FamilyLinkDialog } from '@/components/FamilyLinkDialog';
 import { DepartmentSelect } from '@/components/DepartmentSelect';
 import { supabase } from '@/lib/supabase';
-import type { UserRole, Guest } from '@/types';
+import { useDesignations } from '@/hooks/useDesignations';
+import type { UserRole, Guest, Designation } from '@/types';
 import { SUPER_ADMIN_NAV, DESK_NAV, COORD_NAV } from '@/lib/navItems';
 
 const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> = {
@@ -87,6 +88,24 @@ const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> 
   'department-head': [],
   'location-manager': [],
 };
+
+// Designation cell with tier badge
+function DesignationCell({ designation, designations }: { designation?: string | string[] | null; designations: Designation[] }) {
+  if (!designation) return <span className="text-gray-300">—</span>;
+  const names = Array.isArray(designation) ? designation : [designation];
+  if (names.length === 0) return <span className="text-gray-300">—</span>;
+  const tierMap = new Map(designations.map(d => [d.name, d.tier]));
+  // Show first designation with tier badge, rest as count
+  const first = names[0];
+  const tier = tierMap.get(first);
+  const badge = getTierBadgeLabel(tier);
+  return (
+    <span className="flex items-center gap-1 flex-wrap">
+      <span className="text-sm text-[#1A1A1A]">{names.length > 1 ? `${first} +${names.length - 1}` : first}</span>
+      {badge && <span className={`text-[10px] font-bold px-1.5 py-px rounded-full shrink-0 ${getTierBadgeClass(tier)}`}>{badge}</span>}
+    </span>
+  );
+}
 
 // Format relative time
 const formatTimeAgo = (dateString: string) => {
@@ -257,6 +276,7 @@ export default function GuestsPage() {
   const { guests, updateGuest, deleteGuest, addRemark, getMyWaitingGuests, getMySubmittedGuests, getNeedsCorrectionCount } = useGuests();
   const { users } = useUsers();
   const { rooms, bedAssignments } = useRooms();
+  const { designations: allDesignations } = useDesignations();
   const { getDelegationCountry, changeDelegationCountry, setMulaqatType } = useDelegations();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -836,7 +856,9 @@ export default function GuestsPage() {
                             {user.role === 'desk-in-charge' && (
                               <td className="px-4 py-3">{getCoordinatorName(guest.submittedBy)}</td>
                             )}
-                            <td className="px-4 py-3">{formatDesignation(guest.designation)}</td>
+                            <td className="px-4 py-3">
+                              <DesignationCell designation={guest.designation} designations={allDesignations} />
+                            </td>
                             <td className="px-4 py-3">
                               <Badge variant="outline" className="capitalize">
                                 {guest.guestType}

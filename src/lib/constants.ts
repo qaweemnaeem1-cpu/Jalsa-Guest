@@ -171,6 +171,67 @@ export function formatDesignation(d?: string | string[] | null): string {
   return d || '—';
 }
 
+// ── Designation tier utilities ─────────────────────────────────────────────────
+
+export const TIER_ORDER = ['1(a)', '1(b)', '2', '3', '4', '5'] as const;
+
+export const TIER_SECTION_LABEL: Record<string, string> = {
+  '1(a)': 'TIER 1(a) — VIP EXTERNAL',
+  '1(b)': 'TIER 1(b) — VIP INTERNAL',
+  '2':    'TIER 2 — DISTINGUISHED GUESTS',
+  '3':    'TIER 3',
+  '4':    'TIER 4',
+  '5':    'TIER 5',
+};
+
+/** Short badge label shown next to designation name in tables. */
+export function getTierBadgeLabel(tier: string | null | undefined): string {
+  switch (tier) {
+    case '1(a)': return 'VIP';
+    case '1(b)': return 'VIP';
+    case '2':    return 'T2';
+    case '3':    return 'T3';
+    case '4':    return 'T4';
+    case '5':    return 'T5';
+    default:     return '';
+  }
+}
+
+/** Tailwind classes for tier badge (background + text). */
+export function getTierBadgeClass(tier: string | null | undefined): string {
+  switch (tier) {
+    case '1(a)': return 'bg-red-100 text-red-700';
+    case '1(b)': return 'bg-purple-100 text-purple-700';
+    case '2':    return 'bg-amber-100 text-amber-700';
+    case '3':    return 'bg-blue-100 text-blue-700';
+    case '4':    return 'bg-gray-100 text-gray-600';
+    case '5':    return 'bg-gray-50 text-gray-400';
+    default:     return 'bg-gray-100 text-gray-500';
+  }
+}
+
+/** Tailwind classes for category badge. */
+export function getCategoryBadgeClass(category: string | null | undefined): string {
+  switch (category) {
+    case 'GOV': return 'bg-red-50 text-red-600';
+    case 'MKZ': return 'bg-purple-50 text-purple-600';
+    case 'NTL': return 'bg-blue-50 text-blue-600';
+    case 'MIS': return 'bg-green-50 text-green-600';
+    case 'AUX': return 'bg-indigo-50 text-indigo-600';
+    case 'WZG': return 'bg-teal-50 text-teal-600';
+    case 'KHN': return 'bg-amber-50 text-amber-600';
+    case 'PRO': return 'bg-orange-50 text-orange-600';
+    case 'AHM': return 'bg-cyan-50 text-cyan-600';
+    case 'MED': return 'bg-pink-50 text-pink-600';
+    case 'REL': return 'bg-violet-50 text-violet-600';
+    case 'GEN': return 'bg-gray-50 text-gray-600';
+    default:    return 'bg-gray-50 text-gray-500';
+  }
+}
+
+export const DESIGNATION_CATEGORIES = ['GOV', 'MKZ', 'NTL', 'MIS', 'AUX', 'WZG', 'KHN', 'PRO', 'AHM', 'MED', 'REL', 'GEN'] as const;
+export type DesignationCategory = typeof DESIGNATION_CATEGORIES[number];
+
 export const VISA_STATUS_LABELS: Record<string, string> = {
   'not-required': 'Not Required',
   'pending': 'Pending',

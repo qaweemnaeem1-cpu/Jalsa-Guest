@@ -9,6 +9,7 @@ import { Search, Loader2, Plus, X, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
+import { useDesignations } from '@/hooks/useDesignations';
 import { supabase } from '@/lib/supabase';
 import type { DriverTaskType, DriverTaskPriority } from '@/types';
 import { getAutoPriority } from '@/lib/driverTaskUtils';
@@ -75,6 +76,7 @@ export function CreateTaskDialog({
 }: CreateTaskDialogProps) {
   const { user } = useAuth();
   const { guests } = useGuests();
+  const { designations } = useDesignations();
 
   const [taskType, setTaskType]         = useState<DriverTaskType>('airport_pickup');
   const [priority, setPriority]         = useState<DriverTaskPriority>('normal');
@@ -116,6 +118,15 @@ export function CreateTaskDialog({
   // Auto-fill from primary guest
   const selectedGuest = useMemo(() => guests.find(g => g.id === selectedGuestId), [guests, selectedGuestId]);
 
+  // Resolve designation tiers for the selected guest
+  const guestDesigTiers = useMemo(() => {
+    if (!selectedGuest) return [];
+    const names = selectedGuest.designation
+      ? (Array.isArray(selectedGuest.designation) ? selectedGuest.designation : [selectedGuest.designation])
+      : [];
+    return designations.filter(d => names.includes(d.name)).map(d => d.tier);
+  }, [selectedGuest, designations]);
+
   useEffect(() => {
     if (!selectedGuest) return;
     if (taskType === 'airport_pickup') {
@@ -127,7 +138,7 @@ export function CreateTaskDialog({
       setTerminal(selectedGuest.arrivalTerminal ?? '');
       setPickup([selectedGuest.arrivalAirport, selectedGuest.arrivalTerminal].filter(Boolean).join(' ') || '');
       setDropoff(locationName);
-      setPriority(getAutoPriority(selectedGuest.designation, d || undefined, t || undefined));
+      setPriority(getAutoPriority(selectedGuest.designation, d || undefined, t || undefined, guestDesigTiers));
     } else if (taskType === 'airport_dropoff') {
       const d = selectedGuest.departureTime?.substring(0, 10) ?? '';
       const t = selectedGuest.departureTime?.includes('T') ? selectedGuest.departureTime.substring(11, 16) : '';
@@ -137,9 +148,9 @@ export function CreateTaskDialog({
       setTerminal(selectedGuest.departureTerminal ?? '');
       setPickup(locationName);
       setDropoff([selectedGuest.departureAirport, selectedGuest.departureTerminal].filter(Boolean).join(' ') || '');
-      setPriority(getAutoPriority(selectedGuest.designation, d || undefined, t || undefined));
+      setPriority(getAutoPriority(selectedGuest.designation, d || undefined, t || undefined, guestDesigTiers));
     }
-  }, [selectedGuest, taskType, locationName]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedGuest, taskType, locationName, guestDesigTiers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (taskType === 'mulaqat_transport') { setPickup(locationName); setDropoff('Mulaqat Venue'); }

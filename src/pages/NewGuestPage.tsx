@@ -49,11 +49,15 @@ import {
   RELATIONSHIP_OPTIONS,
   ROLE_LABELS,
   VISA_STATUS_LABELS,
+  TIER_ORDER,
+  TIER_SECTION_LABEL,
+  getTierBadgeLabel,
+  getTierBadgeClass,
 } from '@/lib/constants';
 import { CountryCombobox } from '@/components/CountryCombobox';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
-import type { UserRole, FamilyMember, VisaDetails } from '@/types';
+import type { UserRole, FamilyMember, VisaDetails, Designation } from '@/types';
 import { SUPER_ADMIN_NAV, DESK_NAV, COORD_NAV } from '@/lib/navItems';
 
 const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> = {
@@ -79,7 +83,7 @@ const NAV_ITEMS: Record<UserRole, { icon: any; label: string; href: string }[]> 
 interface DesignationMultiSelectProps {
   value: string[];
   onChange: (v: string[]) => void;
-  options: string[];
+  options: Designation[];
   placeholder?: string;
 }
 
@@ -91,24 +95,29 @@ function DesignationMultiSelect({ value, onChange, options, placeholder = 'Selec
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-        setSearch('');
-      }
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setSearch(''); }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const toggle = (item: string) => {
-    if (value.includes(item)) {
-      onChange(value.filter(v => v !== item));
-    } else {
-      onChange([...value, item]);
-    }
-  };
+  const toggle = (name: string) =>
+    onChange(value.includes(name) ? value.filter(v => v !== name) : [...value, name]);
 
-  const filtered = options.filter(o => o.toLowerCase().includes(search.toLowerCase()));
+  const q = search.toLowerCase();
+  const filtered = options.filter(o => o.name.toLowerCase().includes(q));
+
+  // Group filtered options by tier (in order)
+  const tierGroups: Array<{ tier: string; label: string; items: Designation[] }> = [];
+  const ordered = [...TIER_ORDER, '__none__'] as string[];
+  for (const tier of ordered) {
+    const items = filtered.filter(o => (o.tier ?? '__none__') === tier);
+    if (items.length === 0) continue;
+    tierGroups.push({ tier, label: TIER_SECTION_LABEL[tier] ?? 'No Tier', items });
+  }
+
+  // For pills: look up tier from options
+  const tierMap = new Map(options.map(o => [o.name, o.tier]));
 
   return (
     <div ref={ref} className="relative">
@@ -126,14 +135,19 @@ function DesignationMultiSelect({ value, onChange, options, placeholder = 'Selec
         {value.length === 0 ? (
           <span className="text-gray-400 self-center">{placeholder}</span>
         ) : (
-          value.map(v => (
-            <span key={v} className="inline-flex items-center gap-1 bg-[#D6E4D9] text-[#2D5A45] text-xs font-medium px-2 py-0.5 rounded-full">
-              {v}
-              <button type="button" onClick={e => { e.stopPropagation(); toggle(v); }} className="hover:text-[#1A1A1A]">
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          ))
+          value.map(v => {
+            const tier = tierMap.get(v);
+            const label = getTierBadgeLabel(tier);
+            return (
+              <span key={v} className="inline-flex items-center gap-1 bg-[#D6E4D9] text-[#2D5A45] text-xs font-medium px-2 py-0.5 rounded-full">
+                {v}
+                {label && <span className={`text-[10px] font-bold px-1 py-px rounded ${getTierBadgeClass(tier)}`}>{label}</span>}
+                <button type="button" onClick={e => { e.stopPropagation(); toggle(v); }} className="hover:text-[#1A1A1A]">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            );
+          })
         )}
         <ChevronDown className={`w-4 h-4 text-gray-400 ml-auto self-center shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </div>
@@ -149,23 +163,35 @@ function DesignationMultiSelect({ value, onChange, options, placeholder = 'Selec
               className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-md outline-none focus:border-[#2D5A45]"
             />
           </div>
-          <div className="max-h-52 overflow-y-auto py-1">
-            {filtered.map(opt => (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => toggle(opt)}
-                className={`w-[calc(100%-8px)] mx-1 my-0.5 flex items-center gap-2.5 text-left px-3 py-2 text-sm rounded-md transition-colors ${value.includes(opt) ? 'bg-[#D6E4D9] text-[#2D5A45] font-medium' : 'text-gray-700 hover:bg-[#D6E4D9] hover:text-[#2D5A45]'}`}
-              >
-                <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${value.includes(opt) ? 'bg-[#2D5A45] border-[#2D5A45]' : 'border-gray-300'}`}>
-                  {value.includes(opt) && <span className="text-white text-[10px] font-bold">✓</span>}
-                </span>
-                {opt}
-              </button>
-            ))}
-            {filtered.length === 0 && (
+          <div className="max-h-64 overflow-y-auto py-1">
+            {tierGroups.length === 0 && (
               <p className="px-3 py-2 text-sm text-gray-400">No results</p>
             )}
+            {tierGroups.map(({ tier, label, items }) => (
+              <div key={tier}>
+                <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-gray-400 select-none">
+                  {label}
+                </div>
+                {items.map(opt => (
+                  <button
+                    key={opt.name}
+                    type="button"
+                    onClick={() => toggle(opt.name)}
+                    className={`w-[calc(100%-8px)] mx-1 my-0.5 flex items-center gap-2.5 text-left px-3 py-2 text-sm rounded-md transition-colors ${value.includes(opt.name) ? 'bg-[#D6E4D9] text-[#2D5A45] font-medium' : 'text-gray-700 hover:bg-[#D6E4D9] hover:text-[#2D5A45]'}`}
+                  >
+                    <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${value.includes(opt.name) ? 'bg-[#2D5A45] border-[#2D5A45]' : 'border-gray-300'}`}>
+                      {value.includes(opt.name) && <span className="text-white text-[10px] font-bold">✓</span>}
+                    </span>
+                    <span className="flex-1">{opt.name}</span>
+                    {opt.tier && (
+                      <span className={`text-[10px] font-bold px-1.5 py-px rounded shrink-0 ${getTierBadgeClass(opt.tier)}`}>
+                        {getTierBadgeLabel(opt.tier)}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -180,7 +206,7 @@ interface FamilyMemberFormProps {
   index: number;
   onUpdate: (index: number, updates: Partial<FamilyMember>) => void;
   onRemove: (index: number) => void;
-  designationOptions: string[];
+  designationOptions: Designation[];
 }
 
 function FamilyMemberForm({ member, index, onUpdate, onRemove, designationOptions }: FamilyMemberFormProps) {

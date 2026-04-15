@@ -27,13 +27,14 @@ import {
   CheckCircle, AlertCircle, Eye, Pencil, ChevronLeft, ChevronRight, Building2, User,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { ROLE_LABELS, GUEST_STATUS_LABELS, formatDesignation } from '@/lib/constants';
+import { ROLE_LABELS, GUEST_STATUS_LABELS, formatDesignation, getTierBadgeLabel, getTierBadgeClass } from '@/lib/constants';
 import { useDepartments } from '@/hooks/useDepartments';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
 import { sanitizeComment } from '@/hooks/useAuditTrail';
 import { FamilyStatusCell } from '@/components/FamilyStatusCell';
 import { buildDisplayGroups, statusDotColor, statusBadgeCls as familyStatusBadgeCls } from '@/lib/familyGroups';
+import { useDesignations } from '@/hooks/useDesignations';
 import type { Guest, GuestStatus, FamilyMemberStatus } from '@/types';
 import { DESK_NAV } from '@/lib/navItems';
 
@@ -46,6 +47,7 @@ export default function GuestsToReviewPage() {
   const { guests, updateGuest, updateFamilyMemberStatus, assignFamilyMemberDepartment } = useGuests();
   const { addEntry, addComment } = useAuditTrail();
   const { getDeptBadgeCls } = useDepartments();
+  const { designations: allDesignations } = useDesignations();
   const { getDelegationCountry, changeDelegationCountry, setMulaqatType } = useDelegations();
 
   const [search, setSearch] = useState('');
@@ -657,7 +659,15 @@ export default function GuestsToReviewPage() {
                                       <span className="text-sm text-[#4A4A4A]">{group.head.country}</span>
                                     </td>
                                     <td className="px-3 py-3">
-                                      <span className="text-sm text-[#4A4A4A]">{formatDesignation(group.head.designation)}</span>
+                                      <span className="flex items-center gap-1 flex-wrap">
+                                        <span className="text-sm text-[#4A4A4A]">{formatDesignation(group.head.designation)}</span>
+                                        {(() => {
+                                          const names = group.head.designation ? (Array.isArray(group.head.designation) ? group.head.designation : [group.head.designation]) : [];
+                                          const tier = allDesignations.find(d => names.includes(d.name))?.tier;
+                                          const lbl = getTierBadgeLabel(tier);
+                                          return lbl ? <span className={`text-[10px] font-bold px-1.5 py-px rounded-full shrink-0 ${getTierBadgeClass(tier)}`}>{lbl}</span> : null;
+                                        })()}
+                                      </span>
                                     </td>
                                     <td className="px-3 py-3">
                                       <Badge variant="outline" className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 border-indigo-200 whitespace-nowrap">
@@ -905,7 +915,15 @@ export default function GuestsToReviewPage() {
                                     <span className="text-sm text-[#4A4A4A]">{g.country}</span>
                                   </td>
                                   <td className="px-3 py-3">
-                                    <span className="text-sm text-[#4A4A4A]">{formatDesignation(g.designation)}</span>
+                                    <span className="flex items-center gap-1 flex-wrap">
+                                      <span className="text-sm text-[#4A4A4A]">{formatDesignation(g.designation)}</span>
+                                      {(() => {
+                                        const names = g.designation ? (Array.isArray(g.designation) ? g.designation : [g.designation]) : [];
+                                        const tier = allDesignations.find(d => names.includes(d.name))?.tier;
+                                        const lbl = getTierBadgeLabel(tier);
+                                        return lbl ? <span className={`text-[10px] font-bold px-1.5 py-px rounded-full shrink-0 ${getTierBadgeClass(tier)}`}>{lbl}</span> : null;
+                                      })()}
+                                    </span>
                                   </td>
 
                                   <td className="px-3 py-3">
