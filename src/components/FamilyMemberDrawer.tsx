@@ -1,9 +1,12 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { useDesignations } from '@/hooks/useDesignations';
 import { useDelegations } from '@/hooks/useDelegations';
 import { getVisibility } from '@/utils/guestFieldVisibility';
+import { supabase } from '@/lib/supabase';
+import { insertCorrectionMessage, insertRejectionMessage } from '@/lib/guestMessages';
+import type { GuestMessage } from '@/lib/guestMessages';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -67,7 +70,7 @@ export function FamilyMemberDrawer({
   onEditMember,
 }: FamilyMemberDrawerProps) {
   const { user } = useAuth();
-  const { updateGuest, addRemark } = useGuests();
+  const { updateGuest } = useGuests();
   const { activeDesignations } = useDesignations();
   const { setMulaqatType, changeDelegationCountry, getDelegationCountry } = useDelegations();
 
@@ -81,6 +84,9 @@ export function FamilyMemberDrawer({
 
   // ── Mulaqat dialog state ───────────────────────────────────────────────────
   const [mulaqat, setMulaqat] = useState<MulaqatState | null>(null);
+
+  // ── Latest correction messages per member ─────────────────────────────────
+  const [latestCorrections, setLatestCorrections] = useState<Map<string, GuestMessage>>(new Map());
 
   // ── Derived data ───────────────────────────────────────────────────────────
   const visibility = getVisibility(user);
@@ -105,6 +111,28 @@ export function FamilyMemberDrawer({
           return a.fullName.localeCompare(b.fullName);
         })
     : [];
+
+  const correctionIds = members.filter(m => m.status === 'Needs Correction').map(m => m.id);
+
+  useEffect(() => {
+    if (correctionIds.length === 0) { setLatestCorrections(new Map()); return; }
+    supabase
+      .from('guest_messages')
+      .select('*')
+      .in('guest_id', correctionIds)
+      .eq('is_system', false)
+      .eq('action_type', 'correction')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (!data) return;
+        const map = new Map<string, GuestMessage>();
+        data.forEach(row => {
+          if (!map.has(row.guest_id)) map.set(row.guest_id, row as GuestMessage);
+        });
+        setLatestCorrections(map);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [correctionIds.join(',')]);
 
   // Guard: no family data or role can't see family members
   if (!user || !visibility.familyMembers || members.length === 0) return null;
@@ -131,19 +159,14 @@ export function FamilyMemberDrawer({
   };
 
   const handleSubmitCorrection = async (member: Guest) => {
-    if (!actionText.trim()) { toast.error('Please enter a correction remark'); return; }
+    if (!actionText.trim()) { toast.error('Please enter a correction message'); return; }
     setSavingId(member.id);
     await updateGuest(member.id, {
       status: 'Needs Correction',
       reviewedBy: user.id,
       reviewedAt: new Date().toISOString(),
     });
-    addRemark(member.id, {
-      authorId: user.id,
-      authorName: user.name,
-      authorRole: user.role,
-      message: actionText.trim(),
-    });
+    insertCorrectionMessage(member.id, user, actionText.trim());
     setActiveAction(null);
     setActionText('');
     setSavingId(null);
@@ -159,6 +182,7 @@ export function FamilyMemberDrawer({
       reviewedBy: user.id,
       reviewedAt: new Date().toISOString(),
     });
+    insertRejectionMessage(member.id, user, actionText.trim());
     setActiveAction(null);
     setActionText('');
     setSavingId(null);
@@ -283,9 +307,7 @@ export function FamilyMemberDrawer({
       );
     }
     if (status === 'Needs Correction') {
-      const latest = member.remarks
-        ?.slice()
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+      const latest = latestCorrections.get(member.id);
       return (
         <tr className="bg-white">
           <td colSpan={20} className="px-10 pb-2 pt-0">
@@ -402,9 +424,7 @@ export function FamilyMemberDrawer({
               const isRejected = member.status === 'Rejected';
               const isActive = activeAction?.memberId === member.id;
               const isSaving = savingId === member.id;
-              const latestRemark = member.remarks
-                ?.slice()
-                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+              const latestCorrection = latestCorrections.get(member.id);
 
               return (
                 <Fragment key={member.id}>
@@ -605,11 +625,11 @@ export function FamilyMemberDrawer({
                   {isAdmin && !isAwaiting && !isActive && statusSummaryRow(member)}
 
                   {/* ── Coordinator: correction remark sub-row ── */}
-                  {isCoordinator && needsCorrection && latestRemark && (
+                  {isCoordinator && needsCorrection && latestCorrection && (
                     <tr className="bg-amber-50/30">
                       <td colSpan={20} className="px-10 pb-2 pt-0">
                         <p className="text-xs text-orange-600 italic">
-                          ⚠️ {latestRemark.message}
+                          ⚠️ {latestCorrection.message}
                         </p>
                       </td>
                     </tr>

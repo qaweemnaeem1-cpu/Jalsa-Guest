@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Send, Pencil, Trash2, X, Plane, Building2, BedDouble, ChevronDown, Star } from 'lucide-react';
+import { Send, Pencil, Trash2, X, Plane, Building2, BedDouble, ChevronDown, Star, MessageSquare, AlertTriangle } from 'lucide-react';
 import { AuditTimeline } from '@/components/AuditTimeline';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -24,6 +24,8 @@ import { getVisibility } from '@/utils/guestFieldVisibility';
 import { useDepartments } from '@/hooks/useDepartments';
 import { useRooms } from '@/hooks/useRooms';
 import { DepartmentSelect } from '@/components/DepartmentSelect';
+import { supabase } from '@/lib/supabase';
+import { insertCommentMessage, type GuestMessage } from '@/lib/guestMessages';
 import type { Guest, GuestStatus, UserRole, Designation } from '@/types';
 
 // ─── Security helper ──────────────────────────────────────────────────────────
@@ -285,26 +287,32 @@ export interface GuestViewModalProps {
   onDelete?: () => void;
   /** When true the modal opens in edit mode with form fields instead of read-only cards. */
   isEditMode?: boolean;
+  /** Which tab to open on. Defaults to 'personal'. Use 'messages' to jump to the thread. */
+  initialTab?: string;
 }
 
 export function GuestViewModal({
-  guest, open, onClose, onEdit, onDelete, isEditMode = false,
+  guest, open, onClose, onEdit, onDelete, isEditMode = false, initialTab,
 }: GuestViewModalProps) {
   const { user } = useAuth();
-  const { updateGuest, addRemark } = useGuests();
+  const { updateGuest } = useGuests();
   const { getEntriesForGuest, addEntry } = useAuditTrail();
   const { departments, getDeptBadgeCls, getLocPillCls } = useDepartments();
   const { rooms, bedAssignments, assignGuestToRoom } = useRooms();
   const { activeDesignations } = useDesignations();
   const { countries: assignableCountries } = useAssignableItems();
 
+  const [activeTab, setActiveTab] = useState(initialTab ?? 'personal');
   const [commentText, setCommentText] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const [roomInput, setRoomInput] = useState('');
   const [deptEditValue, setDeptEditValue] = useState('');
   const [locEditValue, setLocEditValue] = useState('');
   const [roomAssignId, setRoomAssignId] = useState('');
   const [bedAssignNum, setBedAssignNum] = useState<number | ''>('');
   const [editDesignations, setEditDesignations] = useState<string[]>([]);
+  const [messages, setMessages] = useState<GuestMessage[]>([]);
+  const [correctionBanner, setCorrectionBanner] = useState<GuestMessage | null>(null);
 
   const visibility = getVisibility(user);
 
@@ -330,6 +338,62 @@ export function GuestViewModal({
 
   /** Age shown in edit mode — auto-calculated from the DOB field, falls back to stored value. */
   const displayAge = calcAge(watch('dateOfBirth')) ?? guest?.age ?? '—';
+
+  // Reset active tab when modal opens or initialTab changes.
+  useEffect(() => {
+    if (open) setActiveTab(initialTab ?? 'personal');
+  }, [open, initialTab]);
+
+  // Fetch messages from guest_messages table + subscribe to real-time inserts.
+  useEffect(() => {
+    if (!open || !guest?.id) {
+      setMessages([]);
+      setCorrectionBanner(null);
+      return;
+    }
+    const guestId = guest.id;
+
+    supabase
+      .from('guest_messages')
+      .select('*')
+      .eq('guest_id', guestId)
+      .order('created_at', { ascending: true })
+      .then(({ data }) => setMessages((data as GuestMessage[]) ?? []));
+
+    if (guest.status === 'Needs Correction') {
+      supabase
+        .from('guest_messages')
+        .select('*')
+        .eq('guest_id', guestId)
+        .eq('action_type', 'correction')
+        .eq('is_system', false)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+        .then(({ data }) => setCorrectionBanner(data as GuestMessage | null));
+    } else {
+      setCorrectionBanner(null);
+    }
+
+    const channel = supabase
+      .channel(`guest-msgs-${guestId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'guest_messages', filter: `guest_id=eq.${guestId}` },
+        (payload) => setMessages(prev => [...prev, payload.new as GuestMessage]),
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, guest?.id, guest?.status]);
+
+  // Scroll to bottom of messages thread when tab becomes active or new message arrives.
+  useEffect(() => {
+    if (activeTab === 'messages') {
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    }
+  }, [activeTab, messages.length]);
 
   // Sync form values whenever the guest or open state changes.
   useEffect(() => {
@@ -441,13 +505,9 @@ export function GuestViewModal({
 
   const handleAddComment = () => {
     if (!guest || !user || !commentText.trim() || !canComment) return;
-    addRemark(guest.id, {
-      authorId:   user.id,
-      authorName: user.name,
-      authorRole: user.role,
-      message:    commentText.trim(),
-    });
+    const msg = commentText.trim();
     setCommentText('');
+    insertCommentMessage(guest.id, user, msg);
   };
 
   const handleSaveDept = () => {
@@ -649,15 +709,41 @@ export function GuestViewModal({
           </div>
         </DialogHeader>
 
+        {/* ── Correction banner (shown whenever status = Needs Correction + there is a correction message) ── */}
+        {correctionBanner && guest.status === 'Needs Correction' && (
+          <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 mx-6 mt-4">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-amber-800">⚠️ CORRECTION REQUESTED</p>
+                <p className="text-xs text-amber-600 mt-0.5">
+                  {correctionBanner.user_name} · {new Date(correctionBanner.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </p>
+                <p className="text-sm text-amber-900 italic mt-1">{correctionBanner.message}</p>
+              </div>
+              {canComment && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('messages')}
+                  className="text-xs text-amber-700 hover:text-amber-900 underline underline-offset-2 shrink-0 transition-colors"
+                >
+                  Reply
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ── Tabs ── */}
         {/* Compute which tabs to show */}
         {(() => {
-          const showFlight  = visibility.flightDetails;
-          const showDept    = visibility.department || visibility.location || visibility.roomBed || visibility.transportTeam || visibility.driverAssigned || visibility.checkInOut;
-          const showRemarks = canComment;
-          const showHistory = ['super-admin', 'desk-in-charge', 'coordinator', 'department-head', 'location-manager'].includes(user.role);
+          const showFlight   = visibility.flightDetails;
+          const showDept     = visibility.department || visibility.location || visibility.roomBed || visibility.transportTeam || visibility.driverAssigned || visibility.checkInOut;
+          const showMessages = canComment; // SA, DI, coordinator
+          const showHistory  = ['super-admin', 'department-head', 'location-manager'].includes(user.role);
+          const remarkCount  = messages.length;
           return (
-        <Tabs defaultValue="personal" className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="flex-shrink-0 border-b border-[#E8E3DB] px-6 bg-white">
             <TabsList className="h-auto p-0 bg-transparent gap-0 w-full justify-start rounded-none flex-wrap">
               <TabsTrigger value="personal" className={tabTriggerCls}>Personal Details</TabsTrigger>
@@ -667,20 +753,18 @@ export function GuestViewModal({
               {showDept && (
                 <TabsTrigger value="room" className={tabTriggerCls}>Department</TabsTrigger>
               )}
-              {showRemarks && (
-                <TabsTrigger value="remarks" className={tabTriggerCls}>
-                  Remarks
-                  {(guest.remarks?.length ?? 0) > 0 && (
+              {showMessages && (
+                <TabsTrigger value="messages" className={tabTriggerCls}>
+                  Messages
+                  {remarkCount > 0 && (
                     <span className="ml-1.5 bg-[#2D5A45] text-white text-[10px] rounded-full w-4 h-4 inline-flex items-center justify-center leading-none">
-                      {guest.remarks!.length}
+                      {remarkCount}
                     </span>
                   )}
                 </TabsTrigger>
               )}
               {showHistory && (
-                <TabsTrigger value="history" className={tabTriggerCls}>
-                  {isCoordinator || user?.role === 'desk-in-charge' ? 'Messages' : 'Audit Trail'}
-                </TabsTrigger>
+                <TabsTrigger value="history" className={tabTriggerCls}>Audit Trail</TabsTrigger>
               )}
             </TabsList>
           </div>
@@ -1221,61 +1305,96 @@ export function GuestViewModal({
               )}
             </TabsContent>
 
-            {/* ── Tab 4: Remarks & Comments ── */}
-            <TabsContent value="remarks" className="mt-0 px-8 py-6">
-              <div className="space-y-3">
-                {(!guest.remarks || guest.remarks.length === 0) ? (
-                  <div className="text-center py-10">
-                    <p className="text-sm text-[#4A4A4A]">No remarks yet.</p>
+            {/* ── Messages thread ── */}
+            <TabsContent value="messages" className="mt-0 px-0 py-0 flex flex-col">
+              {/* Message list */}
+              <div className="px-4 py-4 space-y-2">
+                {messages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 gap-2 text-center">
+                    <MessageSquare className="w-10 h-10 text-gray-300" />
+                    <p className="text-sm text-[#4A4A4A]">No messages yet.</p>
+                    <p className="text-xs text-[#4A4A4A]/60">Messages between coordinators, desk incharge and admins appear here.</p>
                   </div>
                 ) : (
-                  guest.remarks.map(remark => (
-                    <div
-                      key={remark.id}
-                      className={`rounded-xl p-4 ${getRemarkBubbleStyle(remark.authorRole)}`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
-                            {remark.authorName.charAt(0)}
-                          </div>
-                          <div>
-                            <span className="text-sm font-semibold text-[#1A1A1A]">{remark.authorName}</span>
-                            <span className="text-xs text-[#4A4A4A] ml-1.5">· {ROLE_LABELS[remark.authorRole]}</span>
+                  messages.map(msg => {
+                    const isOwn = msg.user_id === user?.id;
+                    const time  = formatTimeAgo(msg.created_at);
+
+                    if (msg.is_system) {
+                      // ── System event block ─────────────────────────────
+                      const cfg: Record<string, { icon: string; bg: string; border: string; text: string }> = {
+                        'correction': { icon: '⚠️', bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-800' },
+                        'approval':   { icon: '✅', bg: 'bg-green-50',  border: 'border-green-200',  text: 'text-green-800' },
+                        'rejection':  { icon: '❌', bg: 'bg-red-50',    border: 'border-red-200',    text: 'text-red-800' },
+                        'resubmit':   { icon: '🔄', bg: 'bg-blue-50',   border: 'border-blue-200',   text: 'text-blue-800' },
+                        'comment':    { icon: '💬', bg: 'bg-gray-50',   border: 'border-gray-200',   text: 'text-gray-700' },
+                      };
+                      const c = cfg[msg.action_type ?? 'comment'] ?? cfg['comment'];
+                      return (
+                        <div key={msg.id} className={`rounded-lg border p-3 ${c.bg} ${c.border}`}>
+                          <div className={`flex items-center gap-1.5 text-xs font-semibold ${c.text}`}>
+                            <span>{c.icon}</span>
+                            <span className="flex-1">{msg.message}</span>
+                            <span className="font-normal opacity-60 ml-auto whitespace-nowrap">{time}</span>
                           </div>
                         </div>
-                        <span className="text-xs text-[#4A4A4A]">{formatTimeAgo(remark.createdAt)}</span>
-                      </div>
-                      <p className="text-sm text-[#1A1A1A] pl-9">{remark.message}</p>
-                    </div>
-                  ))
-                )}
+                      );
+                    }
 
-                {canComment && (
-                  <div className="mt-4 pt-4 border-t border-[#E8E3DB]">
-                    <textarea
-                      value={commentText}
-                      onChange={(e) => setCommentText(e.target.value)}
-                      placeholder="Write a comment…"
-                      rows={3}
-                      className="w-full border border-[#E8E3DB] rounded-xl p-3 text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] outline-none resize-none"
-                    />
-                    <div className="flex justify-end mt-2">
-                      <Button
-                        onClick={handleAddComment}
-                        disabled={!commentText.trim()}
-                        className="bg-[#2D5A45] hover:bg-[#234839] text-white h-9 px-4"
-                      >
-                        <Send className="w-4 h-4 mr-2" />
-                        Post Comment
-                      </Button>
-                    </div>
-                  </div>
+                    // ── User chat bubble ───────────────────────────────────
+                    return isOwn ? (
+                      <div key={msg.id} className="flex justify-end">
+                        <div className="max-w-[75%]">
+                          <div className="bg-[#2D5A45] text-white rounded-2xl rounded-tr-sm px-4 py-2.5">
+                            <p className="text-sm leading-relaxed">{msg.message}</p>
+                          </div>
+                          <p className="text-[10px] text-right text-[#4A4A4A]/60 mt-1">{time}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div key={msg.id} className="flex gap-2">
+                        <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-xs font-semibold text-gray-600 shrink-0 mt-0.5">
+                          {msg.user_name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="max-w-[75%]">
+                          <p className="text-[11px] font-medium text-[#4A4A4A] mb-0.5">
+                            {msg.user_name}
+                            <span className="font-normal ml-1 text-[#4A4A4A]/60 capitalize">· {msg.user_role}</span>
+                          </p>
+                          <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-2.5 shadow-sm border border-[#E8E3DB]">
+                            <p className="text-sm text-[#1A1A1A] leading-relaxed">{msg.message}</p>
+                          </div>
+                          <p className="text-[10px] text-[#4A4A4A]/60 mt-1">{time}</p>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
+                <div ref={messagesEndRef} />
               </div>
+
+              {/* Input bar */}
+              {canComment && (
+                <div className="sticky bottom-0 border-t border-[#E8E3DB] px-4 py-3 bg-white flex gap-2 items-center">
+                  <input
+                    value={commentText}
+                    onChange={e => setCommentText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }}
+                    placeholder="Type a message..."
+                    className="flex-1 border border-[#D4CFC7] rounded-full px-4 py-2 text-sm bg-[#F5F0E8] focus:bg-white focus:border-[#2D5A45] focus:outline-none transition-colors"
+                  />
+                  <Button
+                    onClick={handleAddComment}
+                    disabled={!commentText.trim()}
+                    className="rounded-full w-9 h-9 p-0 bg-[#2D5A45] hover:bg-[#234839] disabled:opacity-40 shrink-0"
+                  >
+                    <Send className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
             </TabsContent>
 
-            {/* ── Tab 5: Audit Trail / Messages ── */}
+            {/* ── Audit Trail ── */}
             <TabsContent value="history" className="mt-0 px-8 py-6">
               {(() => {
                 const allEntries = getEntriesForGuest(guest.id);

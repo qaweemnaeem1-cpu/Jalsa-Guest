@@ -519,10 +519,11 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
       // Revert optimistic update by refetching
       fetchGuests();
     } else if (data) {
-      // Sync state with server's canonical response, preserving family members already in memory
+      // Sync state with server's canonical response, preserving in-memory fields that
+      // have their own dedicated persistence paths (familyMembers, remarks).
       setGuests(prev => prev.map(g =>
         g.id === id
-          ? { ...rowToGuest(data), familyMembers: g.familyMembers }
+          ? { ...rowToGuest(data), familyMembers: g.familyMembers, remarks: g.remarks }
           : g,
       ));
     }

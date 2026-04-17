@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { useAuditTrail } from '@/hooks/useAuditTrail';
+import { insertCorrectionMessage, insertApprovalMessage, insertRejectionMessage, insertResubmitMessage } from '@/lib/guestMessages';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -17,9 +18,10 @@ import {
 } from '@/components/ui/dialog';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { DepartmentSelect } from '@/components/DepartmentSelect';
+import { DelegationCombobox } from '@/components/DelegationCombobox';
 import { MulaqatTypeSelect } from '@/components/MulaqatTypeSelect';
 import { useDelegations } from '@/hooks/useDelegations';
-import { DelegationCombobox } from '@/components/DelegationCombobox';
+
 import { toast } from 'sonner';
 import {
   LayoutDashboard, ClipboardList, CheckSquare, MessageSquare, XCircle,
@@ -34,6 +36,7 @@ import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
 import { sanitizeComment } from '@/hooks/useAuditTrail';
 import { FamilyStatusCell } from '@/components/FamilyStatusCell';
 import { buildDisplayGroups, statusDotColor, statusBadgeCls as familyStatusBadgeCls } from '@/lib/familyGroups';
+
 import { useDesignations } from '@/hooks/useDesignations';
 import type { Guest, GuestStatus, FamilyMemberStatus } from '@/types';
 import { DESK_NAV } from '@/lib/navItems';
@@ -214,6 +217,7 @@ export default function GuestsToReviewPage() {
       reviewedBy: user.id,
       reviewedAt: new Date().toISOString(),
     });
+    insertApprovalMessage(approveGuest.id, user, approveGuest.assignedDepartment);
     makeAuditEntry(approveGuest, approveGuest.status, 'Approved');
     toast.success(`${approveGuest.fullName} approved`);
     setApproveGuestId(null);
@@ -237,6 +241,7 @@ export default function GuestsToReviewPage() {
         comment: safe,
         createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
       });
+      insertCorrectionMessage(guest.id, user, safe);
     }
     toast.success(`Correction requested for ${guest.fullName}`);
     setCorrectionDialog({ open: false, guest: null, reason: '' });
@@ -252,6 +257,7 @@ export default function GuestsToReviewPage() {
       reviewedBy: user.id,
       reviewedAt: new Date().toISOString(),
     });
+    insertRejectionMessage(guest.id, user, safe || 'Rejected');
     makeAuditEntry(guest, guest.status, 'Rejected');
     if (safe) {
       addComment({
@@ -290,6 +296,7 @@ export default function GuestsToReviewPage() {
         reviewedBy: user.id,
         reviewedAt: new Date().toISOString(),
       });
+      insertApprovalMessage(g.id, user, g.assignedDepartment ?? undefined);
       makeAuditEntry(g, g.status, 'Approved');
     } else {
       updateFamilyMemberStatus(g.id, memberId, 'Approved');
@@ -333,6 +340,7 @@ export default function GuestsToReviewPage() {
         comment: memberId ? `[${memberName}] ${safe}` : safe,
         createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
       });
+      insertCorrectionMessage(memberId ? g.id : guestId, user, safe);
     }
     toast.success(`Correction requested for ${memberName}`);
     setMemberCorrectionDialog(null);
@@ -368,6 +376,7 @@ export default function GuestsToReviewPage() {
         comment: memberId ? `[${memberName}] ${safe}` : safe,
         createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
       });
+      insertRejectionMessage(memberId ? g.id : guestId, user, safe);
     }
     toast.success(`${memberName} rejected`);
     setMemberRejectDialog(null);
@@ -413,6 +422,7 @@ export default function GuestsToReviewPage() {
     const now = new Date().toISOString();
     members.forEach(m => {
       updateGuest(m.id, { status: 'Approved', reviewedBy: user.id, reviewedAt: now });
+      insertApprovalMessage(m.id, user, m.assignedDepartment ?? undefined);
       makeAuditEntry(m, m.status, 'Approved');
     });
     toast.success(`Approved ${members.length} family members`);
@@ -432,6 +442,7 @@ export default function GuestsToReviewPage() {
           comment: safe,
           createdBy: { id: user.id, name: user.name, role: 'desk-in-charge' },
         });
+        insertCorrectionMessage(m.id, user, safe);
       }
     });
     toast.success(`Correction requested for ${members.length} family members`);
@@ -445,6 +456,7 @@ export default function GuestsToReviewPage() {
     const now = new Date().toISOString();
     members.forEach(m => {
       updateGuest(m.id, { status: 'Rejected', rejectionReason: safe || null, reviewedBy: user.id, reviewedAt: now });
+      insertRejectionMessage(m.id, user, safe || '');
       makeAuditEntry(m, m.status, 'Rejected');
       if (safe) {
         addComment({
@@ -749,6 +761,7 @@ export default function GuestsToReviewPage() {
                                                 <th className="px-2 py-2 text-left">Status</th>
                                                 <th className="px-2 py-2 text-left">Department</th>
                                                 <th className="px-2 py-2 text-left">Mulaqat</th>
+                                                <th className="px-2 py-2 text-left">Delegation</th>
                                                 <th className="px-2 py-2 text-left">Actions</th>
                                               </tr>
                                             </thead>
@@ -788,9 +801,42 @@ export default function GuestsToReviewPage() {
                                                         />
                                                       )}
                                                     </td>
-                                                    <td className="px-2 py-2 text-xs text-gray-500">{m.mulaqatType ?? 'No'}</td>
+                                                    <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
+                                                      <MulaqatTypeSelect
+                                                        value={m.mulaqatType ?? 'No'}
+                                                        onValueChange={v => setMulaqatType(m, v)}
+                                                      />
+                                                    </td>
+                                                    <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
+                                                      {(m.mulaqatType === 'Delegation' || m.mulaqatType === 'Both') ? (
+                                                        <DelegationCombobox
+                                                          compact
+                                                          hideClear
+                                                          value={getDelegationCountry(m.delegationId) ?? m.country}
+                                                          onChange={v => changeDelegationCountry(m, v)}
+                                                        />
+                                                      ) : m.mulaqatType === 'Daftari' ? (
+                                                        <span className="text-xs text-blue-600">Daftari</span>
+                                                      ) : (
+                                                        <span className="text-[#4A4A4A]/40 text-xs">—</span>
+                                                      )}
+                                                    </td>
                                                     <td className="px-2 py-2">
                                                       <div className="flex items-center gap-1">
+                                                        <button
+                                                          onClick={() => setViewGuestId(m.id)}
+                                                          title="View"
+                                                          className="p-1 rounded text-blue-500 hover:bg-blue-50 transition-colors"
+                                                        >
+                                                          <Eye className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        <button
+                                                          onClick={() => setEditGuestId(m.id)}
+                                                          title="Edit"
+                                                          className="p-1 rounded text-green-600 hover:bg-green-50 transition-colors"
+                                                        >
+                                                          <Pencil className="w-3.5 h-3.5" />
+                                                        </button>
                                                         <button
                                                           onClick={() => setApproveGuestId(m.id)}
                                                           disabled={mApproved}

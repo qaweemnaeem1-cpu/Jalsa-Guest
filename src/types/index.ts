@@ -127,6 +127,13 @@ export interface FamilyMember {
   departureTime?: string;
 }
 
+export type RemarkType =
+  | 'manual'
+  | 'system-correction'
+  | 'system-approved'
+  | 'system-rejected'
+  | 'system-resubmit';
+
 export interface GuestRemark {
   id: string;
   authorId: string;
@@ -134,6 +141,7 @@ export interface GuestRemark {
   authorRole: UserRole;
   message: string;
   createdAt: string;
+  type?: RemarkType;
 }
 
 export type GuestStatus =

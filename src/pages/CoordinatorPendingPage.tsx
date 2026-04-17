@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -14,7 +14,10 @@ import {
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { getRoleDisplayLabel, ProfileDialog } from '@/components/ProfileDialog';
 import { COORD_NAV } from '@/lib/navItems';
+import { supabase } from '@/lib/supabase';
+import { insertResubmitMessage } from '@/lib/guestMessages';
 import type { Guest } from '@/types';
+import type { GuestMessage } from '@/lib/guestMessages';
 
 function getInitials(name: string) {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -46,8 +49,55 @@ export default function CoordinatorPendingPage() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [editGuestId, setEditGuestId] = useState<string | null>(null);
+  const [threadGuestId, setThreadGuestId] = useState<string | null>(null);
   const [resubmitGuestId, setResubmitGuestId] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  // Maps guestId → latest correction message (non-system)
+  const [latestCorrections, setLatestCorrections] = useState<Map<string, GuestMessage>>(new Map());
+  // Maps guestId → total thread message count
+  const [threadCounts, setThreadCounts] = useState<Map<string, number>>(new Map());
+
+  // Fetch latest correction + thread counts for all "Needs Correction" guests.
+  useEffect(() => {
+    if (!user) return;
+    const correctionIds = guests
+      .filter(g => g.submittedBy === user.id && g.status === 'Needs Correction')
+      .map(g => g.id);
+    if (correctionIds.length === 0) {
+      setLatestCorrections(new Map());
+      setThreadCounts(new Map());
+      return;
+    }
+
+    // Fetch all correction messages and all messages for count in one query each
+    supabase
+      .from('guest_messages')
+      .select('*')
+      .in('guest_id', correctionIds)
+      .eq('action_type', 'correction')
+      .eq('is_system', false)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        const map = new Map<string, GuestMessage>();
+        (data ?? []).forEach(msg => {
+          if (!map.has(msg.guest_id)) map.set(msg.guest_id, msg as GuestMessage);
+        });
+        setLatestCorrections(map);
+      });
+
+    supabase
+      .from('guest_messages')
+      .select('guest_id, id')
+      .in('guest_id', correctionIds)
+      .then(({ data }) => {
+        const counts = new Map<string, number>();
+        (data ?? []).forEach(row => {
+          counts.set(row.guest_id, (counts.get(row.guest_id) ?? 0) + 1);
+        });
+        setThreadCounts(counts);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, guests]);
 
   if (!user) return null;
 
@@ -76,7 +126,8 @@ export default function CoordinatorPendingPage() {
   const awaitingAll = myGuests.filter(g => g.status === 'Awaiting Review');
   const correctionAll = myGuests.filter(g => g.status === 'Needs Correction');
   const awaitingReview = deduplicateToGroups(awaitingAll);
-  const needsCorrection = deduplicateToGroups(correctionAll);
+  // Each individual member needing correction gets their own card — do NOT group
+  const needsCorrection = correctionAll;
   const rejectedCount = new Set(myGuests.filter(g => g.status === 'Rejected').map(g => g.familyGroupId ?? g.id)).size;
   const pendingCount = awaitingReview.length + needsCorrection.length;
 
@@ -97,20 +148,15 @@ export default function CoordinatorPendingPage() {
 
   const handleResubmit = async () => {
     if (!resubmitGuest) return;
-    const members = getFamilyMembers(resubmitGuest);
     const now = new Date().toISOString();
-    for (const m of members) {
-      updateGuest(m.id, {
-        status: 'Awaiting Review',
-        resubmitCount: (m.resubmitCount ?? 0) + 1,
-        resubmittedAt: now,
-      });
-    }
+    updateGuest(resubmitGuest.id, {
+      status: 'Awaiting Review',
+      resubmitCount: (resubmitGuest.resubmitCount ?? 0) + 1,
+      resubmittedAt: now,
+    });
+    insertResubmitMessage(resubmitGuest.id, user);
     setResubmitGuestId(null);
-    const label = resubmitGuest.familyGroupId
-      ? `${resubmitGuest.familyName ?? 'Family'} (${members.length} members)`
-      : resubmitGuest.fullName;
-    toast.success(`${label} re-submitted for review`);
+    toast.success(`${resubmitGuest.fullName} re-submitted for review`);
   };
 
   return (
@@ -314,25 +360,21 @@ export default function CoordinatorPendingPage() {
                   </div>
                 ) : (
                   needsCorrection.map(g => {
-                    const members = getFamilyMembers(g);
-                    const isGroup = !!g.familyGroupId;
-                    const isExpanded = expandedGroups.has(g.familyGroupId ?? g.id);
-                    const displayName = isGroup ? (g.familyName ?? g.fullName) : g.fullName;
-                    const latestRemark = g.remarks?.sort(
-                      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-                    )[0];
+                    const isPartOfFamily = !!g.familyGroupId;
+                    const latestCorrection = latestCorrections.get(g.id);
+                    const threadCount = threadCounts.get(g.id) ?? 0;
                     return (
                       <div key={g.id} className="border-b border-[#E8E3DB] last:border-b-0">
                         <div className="flex items-start gap-4 px-5 py-4">
                           <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center text-orange-700 font-bold text-sm shrink-0 mt-0.5">
-                            {isGroup ? <Users className="w-5 h-5" /> : getInitials(g.fullName)}
+                            {getInitials(g.fullName)}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-semibold text-[#1A1A1A]">{displayName}</span>
-                              {isGroup && (
+                              <span className="font-semibold text-[#1A1A1A]">{g.fullName}</span>
+                              {isPartOfFamily && (
                                 <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200 text-[10px]">
-                                  Family · {members.length} members
+                                  {g.relationship ?? 'Family member'}
                                 </Badge>
                               )}
                               <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-[10px]">
@@ -340,19 +382,23 @@ export default function CoordinatorPendingPage() {
                               </Badge>
                             </div>
                             <p className="text-xs text-[#4A4A4A] mt-0.5 font-mono">{g.referenceNumber}</p>
-                            {latestRemark && (
-                              <p className="text-xs text-[#4A4A4A]/70 mt-1 truncate max-w-md">
-                                {latestRemark.message.slice(0, 80)}{latestRemark.message.length > 80 ? '…' : ''}
-                              </p>
+                            {latestCorrection ? (
+                              <div className="mt-2 bg-orange-50 border border-orange-200 rounded-md px-3 py-2">
+                                <p className="text-[11px] font-semibold text-orange-700 mb-0.5">{latestCorrection.user_name}</p>
+                                <p className="text-xs text-orange-900">{latestCorrection.message}</p>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-[#4A4A4A]/50 mt-1 italic">No message provided</p>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 shrink-0 mt-0.5">
-                            {isGroup && (
-                              <button type="button" onClick={() => toggleGroup(g.familyGroupId!)}
-                                className="p-1 rounded hover:bg-[#F5F0E8] text-[#4A4A4A] transition-colors">
-                                {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                              </button>
-                            )}
+                          <div className="flex items-center gap-2 shrink-0 mt-0.5 flex-wrap justify-end">
+                            <button
+                              type="button"
+                              onClick={() => setThreadGuestId(g.id)}
+                              className="text-xs text-[#2D5A45] underline underline-offset-2 hover:text-[#234839] transition-colors whitespace-nowrap"
+                            >
+                              View Full Thread{threadCount > 0 ? ` (${threadCount})` : ''}
+                            </button>
                             <Button size="sm" variant="outline"
                               onClick={() => setEditGuestId(g.id)}
                               className="border-[#2D5A45] text-[#2D5A45] hover:bg-[#E8F5EE] gap-1.5">
@@ -365,19 +411,6 @@ export default function CoordinatorPendingPage() {
                             </Button>
                           </div>
                         </div>
-                        {isGroup && isExpanded && (
-                          <div className="bg-gray-50/50 border-l-4 border-orange-400 ml-5 mr-5 mb-3 rounded-lg overflow-hidden">
-                            {members.map((m, i) => (
-                              <div key={m.id} className={`flex items-center gap-3 px-4 py-2.5 text-sm ${i > 0 ? 'border-t border-[#E8E3DB]' : ''}`}>
-                                <span className="text-[#4A4A4A] w-4 shrink-0">{i + 1}.</span>
-                                {m.isHeadOfFamily && <span className="text-amber-500">⭐</span>}
-                                <span className="font-medium text-[#1A1A1A] flex-1">{m.fullName}</span>
-                                <span className="text-xs text-[#4A4A4A] capitalize">{m.relationship ?? '—'}</span>
-                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusBadgeCls(m.status)}`}>{m.status}</Badge>
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     );
                   })
@@ -407,6 +440,14 @@ export default function CoordinatorPendingPage() {
         isEditMode={true}
       />
 
+      {/* Full thread modal */}
+      <GuestViewModal
+        guest={guests.find(g => g.id === threadGuestId) ?? null}
+        open={!!threadGuestId}
+        onClose={() => setThreadGuestId(null)}
+        initialTab="messages"
+      />
+
       {/* Re-submit confirmation dialog */}
       <Dialog open={!!resubmitGuestId} onOpenChange={open => { if (!open) setResubmitGuestId(null); }}>
         <DialogContent className="max-w-md">
@@ -415,11 +456,7 @@ export default function CoordinatorPendingPage() {
           </DialogHeader>
           <p className="text-sm text-[#4A4A4A]">
             Are you sure you want to re-submit{' '}
-            <span className="font-semibold">
-              {resubmitGuest?.familyGroupId
-                ? `${resubmitGuest.familyName ?? 'Family'} (${getFamilyMembers(resubmitGuest).length} members)`
-                : resubmitGuest?.fullName}
-            </span>{' '}
+            <span className="font-semibold">{resubmitGuest?.fullName}</span>{' '}
             for review? This will change their status back to "Awaiting Review".
           </p>
           <DialogFooter className="mt-4 gap-2">

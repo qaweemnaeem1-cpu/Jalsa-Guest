@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { Pencil, Trash2, Send, ChevronDown, X as XIcon } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
+import { insertCommentMessage } from '@/lib/guestMessages';
 import { useDesignations } from '@/hooks/useDesignations';
 import { GUEST_STATUS_LABELS, ROLE_LABELS, VISA_STATUS_LABELS, formatDesignation, TIER_ORDER, TIER_SECTION_LABEL, getTierBadgeLabel, getTierBadgeClass } from '@/lib/constants';
 import { CountryCombobox } from '@/components/CountryCombobox';
@@ -213,7 +214,7 @@ export interface GuestProfilePanelProps {
 
 export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelProps) {
   const { user } = useAuth();
-  const { updateGuest, deleteGuest, addRemark } = useGuests();
+  const { updateGuest, deleteGuest } = useGuests();
   const { activeDesignations } = useDesignations();
 
   const [isEditMode, setIsEditMode] = useState(false);
@@ -380,12 +381,7 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
       toast.error('You do not have permission to add comments');
       return;
     }
-    addRemark(guest.id, {
-      authorId: user.id,
-      authorName: user.name,
-      authorRole: user.role,
-      message: commentText.trim(),
-    });
+    insertCommentMessage(guest.id, user, commentText.trim());
     setCommentText('');
   };
 
@@ -498,14 +494,6 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
                 </TabsTrigger>
                 <TabsTrigger value="room" className={tabTriggerCls}>
                   Department
-                </TabsTrigger>
-                <TabsTrigger value="remarks" className={tabTriggerCls}>
-                  Remarks
-                  {(guest.remarks?.length ?? 0) > 0 && (
-                    <span className="ml-1.5 bg-[#2D5A45] text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center leading-none">
-                      {guest.remarks!.length}
-                    </span>
-                  )}
                 </TabsTrigger>
                 <TabsTrigger value="history" className={tabTriggerCls}>
                   Audit Trail
@@ -901,61 +889,6 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
                 )}
               </TabsContent>
 
-              {/* ── Tab 4: Remarks & Comments ── */}
-              <TabsContent value="remarks" className="mt-0 p-6">
-                <div className="space-y-3">
-                  {(!guest.remarks || guest.remarks.length === 0) ? (
-                    <div className="text-center py-8">
-                      <p className="text-sm text-[#4A4A4A]">No remarks yet.</p>
-                    </div>
-                  ) : (
-                    guest.remarks.map(remark => (
-                      <div
-                        key={remark.id}
-                        className={`rounded-r-lg p-3 ${getRemarkBubbleStyle(remark.authorRole)}`}
-                      >
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <div className="w-7 h-7 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0">
-                            {remark.authorName.charAt(0)}
-                          </div>
-                          <div className="min-w-0">
-                            <span className="text-sm font-medium text-[#1A1A1A]">
-                              {remark.authorName}
-                            </span>
-                            <span className="text-xs text-[#4A4A4A] ml-1">
-                              · {ROLE_LABELS[remark.authorRole]}
-                            </span>
-                          </div>
-                          <span className="text-xs text-[#4A4A4A] ml-auto flex-shrink-0">
-                            {formatTimeAgo(remark.createdAt)}
-                          </span>
-                        </div>
-                        <p className="text-sm text-[#1A1A1A] pl-9">{remark.message}</p>
-                      </div>
-                    ))
-                  )}
-
-                  {canComment && (
-                    <div className="mt-4 pt-4 border-t border-[#E8E3DB]">
-                      <textarea
-                        value={commentText}
-                        onChange={(e) => setCommentText(e.target.value)}
-                        placeholder="Write a comment…"
-                        rows={3}
-                        className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:ring-1 focus:ring-[#2D5A45] outline-none resize-none"
-                      />
-                      <Button
-                        onClick={handleAddComment}
-                        disabled={!commentText.trim()}
-                        className="mt-2 bg-[#2D5A45] hover:bg-[#234839] text-white h-9 px-4"
-                      >
-                        <Send className="w-4 h-4 mr-2" />
-                        Post Comment
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
 
               {/* ── Tab 5: Status History ── */}
               <TabsContent value="history" className="mt-0 p-6">
