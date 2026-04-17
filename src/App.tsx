@@ -17,7 +17,6 @@ import { Toaster, toast } from 'sonner';
 import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 import { SessionWarningDialog } from '@/components/SessionWarningDialog';
 
-import LandingPage from '@/pages/LandingPage';
 import LoginPage from '@/pages/LoginPage';
 import DashboardPage from '@/pages/DashboardPage';
 import GuestsPage from '@/pages/GuestsPage';
@@ -160,7 +159,7 @@ function AppRoutes() {
     <>
       <SessionManager />
       <Routes>
-      <Route path="/" element={<LandingPage />} />
+      <Route path="/" element={<LoginPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/dashboard"
