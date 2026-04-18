@@ -2,9 +2,9 @@
  * /transport/guests — Guest Assignments for Transport Department Head.
  * Shows all guests assigned to this transport department with driver assignment.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Search, Loader2, ChevronDown, Phone, AlertTriangle, Plane,
+  Search, Loader2, ChevronDown, ChevronRight, Phone, AlertTriangle, Plane, Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
@@ -54,6 +54,9 @@ interface GuestRow {
   accommodation_department?: string;
   transport_department_id?: string;
   reference_number?: string;
+  family_group_id?: string | null;
+  relationship?: string | null;
+  is_head_of_family?: boolean | null;
 }
 
 interface DriverRow extends DriverInfo {
@@ -324,6 +327,38 @@ export default function TransportGuestsPage() {
     return rows;
   }, [guests, tasks, statusFilter, accomFilter, search]);
 
+  // Sort family members adjacent, then build group meta
+  const sortedFiltered = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      const keyA = a.family_group_id ?? a.id;
+      const keyB = b.family_group_id ?? b.id;
+      if (keyA !== keyB) return keyA.localeCompare(keyB);
+      // Head first within group
+      if (a.is_head_of_family && !b.is_head_of_family) return -1;
+      if (!a.is_head_of_family && b.is_head_of_family) return 1;
+      return a.full_name.localeCompare(b.full_name);
+    });
+  }, [filtered]);
+
+  const groupMeta = useMemo(() => {
+    const counts = new Map<string, number>();
+    const firstId = new Map<string, string>();
+    const lastNames = new Map<string, string>();
+    for (const g of sortedFiltered) {
+      if (!g.family_group_id) continue;
+      const prev = counts.get(g.family_group_id) ?? 0;
+      counts.set(g.family_group_id, prev + 1);
+      if (prev === 0) {
+        firstId.set(g.family_group_id, g.id);
+        const ln = g.full_name.split(' ').pop() ?? g.full_name;
+        lastNames.set(g.family_group_id, ln);
+      }
+    }
+    return { counts, firstId, lastNames };
+  }, [sortedFiltered]);
+
+  const [expandedFamilyIds, setExpandedFamilyIds] = useState<Set<string>>(new Set());
+
   const getPickupTask = (guestId: string) =>
     tasks.find(t => t.guest_id === guestId && t.task_type === 'airport_pickup');
 
@@ -458,14 +493,44 @@ export default function TransportGuestsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E8E3DB]">
-                    {filtered.map(g => {
+                    {sortedFiltered.map(g => {
+                      const familyKey = g.family_group_id ?? null;
+                      const groupCount = familyKey ? (groupMeta.counts.get(familyKey) ?? 0) : 0;
+                      const isFirstInGroup = !!familyKey && groupMeta.firstId.get(familyKey) === g.id;
+                      const lastName = groupMeta.lastNames.get(familyKey ?? '') ?? '';
                       const pickupTask  = getPickupTask(g.id);
                       const dropoffTask = getDropoffTask(g.id);
                       const desigs = desigArray(g.designation);
                       const tier = (g as { tier?: string }).tier;
+                      const relationship = g.is_head_of_family ? 'Head' : (g.relationship || 'Family');
 
                       return (
-                        <tr key={g.id} className="hover:bg-[#F5F0E8]/50 transition-colors">
+                      <Fragment key={g.id}>
+                        {isFirstInGroup && groupCount > 1 && (
+                          <tr
+                            className="bg-[#F0F7F4] border-b border-[#D4E9DC] cursor-pointer hover:bg-[#E8F5EE] select-none"
+                            onClick={() => setExpandedFamilyIds(prev => {
+                              const next = new Set(prev);
+                              next.has(familyKey!) ? next.delete(familyKey!) : next.add(familyKey!);
+                              return next;
+                            })}
+                          >
+                            <td colSpan={10} className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <ChevronRight className={`w-3.5 h-3.5 text-[#2D5A45] transition-transform duration-200 shrink-0 ${expandedFamilyIds.has(familyKey!) ? 'rotate-90' : ''}`} />
+                                <Users className="w-3.5 h-3.5 text-[#2D5A45] shrink-0" />
+                                <span className="text-xs text-[#2D5A45] font-semibold">
+                                  {lastName} Family · {groupCount} members
+                                </span>
+                                <span className="text-xs text-[#4A4A4A]">
+                                  {expandedFamilyIds.has(familyKey!) ? '— click to collapse' : '— click to expand'}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        {(!familyKey || groupCount <= 1 || expandedFamilyIds.has(familyKey)) && (
+                        <tr className={`hover:bg-[#F5F0E8]/50 transition-colors ${familyKey && groupCount > 1 ? 'border-l-4 border-[#2D5A45]/20' : ''}`}>
                           {/* Name + photo */}
                           <td className="px-3 py-3 whitespace-nowrap">
                             <div className="flex items-center gap-2">
@@ -478,7 +543,14 @@ export default function TransportGuestsPage() {
                                 </div>
                               )}
                               <div>
-                                <p className="font-medium text-[#1A1A1A] whitespace-nowrap">{g.full_name}</p>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <p className="font-medium text-[#1A1A1A] whitespace-nowrap">{g.full_name}</p>
+                                  {familyKey && groupCount > 1 && (
+                                    <span className="text-[10px] text-[#4A4A4A] bg-[#F0F7F4] border border-[#D4E9DC] rounded px-1 py-0.5">
+                                      {relationship}
+                                    </span>
+                                  )}
+                                </div>
                                 {g.contact_number && (
                                   <a href={`tel:${g.contact_number}`}
                                     className="flex items-center gap-1 text-[10px] text-[#2D5A45] hover:underline">
@@ -574,6 +646,8 @@ export default function TransportGuestsPage() {
                             </div>
                           </td>
                         </tr>
+                        )}
+                      </Fragment>
                       );
                     })}
                   </tbody>

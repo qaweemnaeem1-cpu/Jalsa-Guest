@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle, Eye, Search, MoveRight, ArrowRightLeft, Car, ClipboardList, AlertCircle } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { CheckCircle, ChevronRight, Eye, Search, MoveRight, ArrowRightLeft, Car, ClipboardList, AlertCircle, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -7,8 +7,6 @@ import { useRooms } from '@/hooks/useRooms';
 import { useAuditTrail2 } from '@/hooks/useAuditTrail2';
 import { LocationSidebar } from '@/components/LocationSidebar';
 import { LocationUserMenu } from '@/components/LocationUserMenu';
-import { FamilyBadge, type FamilyMemberInfo } from '@/components/FamilyBadge';
-import { FamilyLinkDialog } from '@/components/FamilyLinkDialog';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -34,7 +32,7 @@ interface AccommodatedRow {
   isFamily: boolean;
   familyLastName: string;
   familyGroupId: string | null;
-  familyAllMembers: FamilyMemberInfo[];
+  relationship: string;
   roomId: string;
   roomName: string;
   blockName: string;
@@ -49,26 +47,6 @@ interface AccommodatedRow {
   departureTerminal?: string;
 }
 
-function buildFamilyMemberList(g: Guest, allGuests?: Guest[]): FamilyMemberInfo[] {
-  if (g.familyGroupId && allGuests) {
-    return allGuests
-      .filter(x => x.familyGroupId === g.familyGroupId)
-      .map(x => ({
-        name: x.fullName,
-        relationship: x.isHeadOfFamily ? 'Head' : (x.relationship ?? '—'),
-        status: x.status,
-        assignedDepartment: x.assignedDepartment,
-        placedLocation: x.placedLocation,
-      }));
-  }
-  return [
-    { name: g.fullName, relationship: 'Head', status: g.status, assignedDepartment: g.assignedDepartment, placedLocation: g.placedLocation },
-    ...(g.familyMembers ?? []).map(m => ({
-      name: m.name, relationship: m.relationship, status: m.status ?? g.status,
-      assignedDepartment: m.assignedDepartment, placedLocation: m.placedLocation,
-    })),
-  ];
-}
 
 // ── Checklist items ───────────────────────────────────────────────────────────
 
@@ -155,7 +133,10 @@ export default function LocationAccommodatedPage() {
         const g = guestById.get(bed.guestId);
         const isFamily = !!(g && (g.familyGroupId || (g.guestType === 'family' && (g.familyMembers?.length ?? 0) > 0)));
         const lastName = g ? ((g.familyName ?? g.fullName).replace(' Family', '').split(' ').pop() ?? g.fullName) : '';
-        const familyAllMembers = g && isFamily ? buildFamilyMemberList(g, guests) : [];
+        const member = bed.familyMemberId ? (g?.familyMembers ?? []).find(m => m.id === bed.familyMemberId) : null;
+        const relationship = g?.familyGroupId
+          ? (g.isHeadOfFamily ? 'Head' : (g.relationship ?? '—'))
+          : (member ? member.relationship : (isFamily ? 'Head' : 'Individual'));
         rows.push({
           rowKey: bed.familyMemberId ? `${bed.guestId}-${bed.familyMemberId}` : bed.guestId,
           guestId: bed.guestId,
@@ -166,7 +147,7 @@ export default function LocationAccommodatedPage() {
           isFamily,
           familyLastName: lastName,
           familyGroupId: g?.familyGroupId ?? null,
-          familyAllMembers,
+          relationship,
           roomId: room.id,
           roomName: room.name,
           blockName: block?.name ?? '—',
@@ -197,6 +178,20 @@ export default function LocationAccommodatedPage() {
     );
     return rows;
   }, [allRows, filterRoom, filterBlock, search]);
+
+  const groupMeta = useMemo(() => {
+    const counts = new Map<string, number>();
+    const firstRowKey = new Map<string, string>();
+    for (const r of filteredRows) {
+      if (!r.isFamily) continue;
+      const key = r.familyGroupId ?? r.guestId;
+      const prev = counts.get(key) ?? 0;
+      counts.set(key, prev + 1);
+      if (prev === 0) firstRowKey.set(key, r.rowKey);
+    }
+    return { counts, firstRowKey };
+  }, [filteredRows]);
+  const [expandedFamilyIds, setExpandedFamilyIds] = useState<Set<string>>(new Set());
 
   const viewGuest = useMemo(() => guests.find(g => g.id === viewGuestId) ?? null, [guests, viewGuestId]);
 
@@ -588,7 +583,6 @@ export default function LocationAccommodatedPage() {
                       <th className="px-3 py-3 w-9"></th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Family</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Room</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Bed</th>
@@ -602,6 +596,9 @@ export default function LocationAccommodatedPage() {
                   </thead>
                   <tbody className="divide-y divide-[#E8E3DB]">
                     {filteredRows.map(row => {
+                      const familyKey = row.familyGroupId ?? row.guestId;
+                      const groupCount = groupMeta.counts.get(familyKey) ?? 0;
+                      const isFirstInGroup = row.isFamily && groupMeta.firstRowKey.get(familyKey) === row.rowKey;
                       const ciData     = checkInOut[row.guestId];
                       const checkedIn  = ciData?.checkedInAt;
                       const checkedOut = ciData?.checkedOutAt;
@@ -610,7 +607,32 @@ export default function LocationAccommodatedPage() {
                       const depStatus  = getDepartureStatus(row);
 
                       return (
-                        <tr key={row.rowKey} className={`hover:bg-[#F9F8F6] ${selectedRows.has(row.rowKey) ? 'bg-[#F0F7F4]' : ''}`}>
+                      <Fragment key={row.rowKey}>
+                        {isFirstInGroup && groupCount > 1 && (
+                          <tr
+                            className="bg-[#F0F7F4] border-b border-[#D4E9DC] cursor-pointer hover:bg-[#E8F5EE] select-none"
+                            onClick={() => setExpandedFamilyIds(prev => {
+                              const next = new Set(prev);
+                              next.has(familyKey) ? next.delete(familyKey) : next.add(familyKey);
+                              return next;
+                            })}
+                          >
+                            <td colSpan={14} className="px-4 py-2">
+                              <div className="flex items-center gap-2">
+                                <ChevronRight className={`w-3.5 h-3.5 text-[#2D5A45] transition-transform duration-200 shrink-0 ${expandedFamilyIds.has(familyKey) ? 'rotate-90' : ''}`} />
+                                <Users className="w-3.5 h-3.5 text-[#2D5A45] shrink-0" />
+                                <span className="text-xs text-[#2D5A45] font-semibold">
+                                  {row.familyLastName} Family · {groupCount} members
+                                </span>
+                                <span className="text-xs text-[#4A4A4A]">
+                                  {expandedFamilyIds.has(familyKey) ? '— click to collapse' : '— click to expand'}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        {(!row.isFamily || groupCount <= 1 || expandedFamilyIds.has(familyKey)) && (
+                        <tr className={`hover:bg-[#F9F8F6] ${selectedRows.has(row.rowKey) ? 'bg-[#F0F7F4]' : ''} ${row.isFamily && groupCount > 1 ? 'border-l-4 border-[#2D5A45]/20' : ''}`}>
                           {/* Checkbox */}
                           <td className="px-3 py-3 w-9" onClick={e => e.stopPropagation()}>
                             <input
@@ -634,15 +656,12 @@ export default function LocationAccommodatedPage() {
                                 {row.name.charAt(0)}
                               </div>
                               <span className="font-medium text-[#1A1A1A]">{row.name}</span>
-                              {row.isFamily && (
-                                <FamilyBadge lastName={row.familyLastName} members={row.familyAllMembers} currentDept={loc} />
+                              {row.isFamily && groupCount > 1 && (
+                                <span className="text-xs text-[#4A4A4A] bg-[#F0F7F4] border border-[#D4E9DC] rounded px-1.5 py-0.5">
+                                  {row.relationship || 'Family'}
+                                </span>
                               )}
                             </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            {row.isFamily && row.familyGroupId ? (
-                              <FamilyLinkDialog familyGroupId={row.familyGroupId} familyName={row.familyLastName} />
-                            ) : <span className="text-gray-300 text-xs">—</span>}
                           </td>
                           <td className="px-4 py-3 text-xs text-[#4A4A4A]">{row.country}</td>
                           <td className="px-4 py-3">
@@ -764,6 +783,8 @@ export default function LocationAccommodatedPage() {
                             </div>
                           </td>
                         </tr>
+                        )}
+                      </Fragment>
                       );
                     })}
                   </tbody>

@@ -135,6 +135,8 @@ function rowToGuest(row: any): Guest {
     familyGroupId: row.family_group_id ?? null,
     familyName: row.family_name ?? undefined,
     relationship: row.relationship ?? undefined,
+    transportDepartmentId: row.transport_department_id ?? undefined,
+    transportDepartmentName: row.transport_department_name ?? undefined,
   };
 }
 
@@ -199,6 +201,8 @@ function updatesToDbRow(updates: Partial<Guest>): Record<string, any> {
     familyGroupId:      'family_group_id',
     familyName:         'family_name',
     relationship:       'relationship',
+    transportDepartmentId:   'transport_department_id',
+    transportDepartmentName: 'transport_department_name',
   };
 
   // Fields that must never be sent to the DB (no matching column)

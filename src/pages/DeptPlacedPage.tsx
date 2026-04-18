@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowRightLeft, CheckCircle, Eye, Search } from 'lucide-react';
+import { ArrowRightLeft, CheckCircle, ChevronRight, Eye, Search, Users } from 'lucide-react';
+import { Fragment } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -8,8 +9,6 @@ import { DeptUserMenu } from '@/components/DeptUserMenu';
 import { useDepartments } from '@/hooks/useDepartments';
 import { useAuditTrail2 } from '@/hooks/useAuditTrail2';
 import { GuestViewModal } from '@/components/GuestViewModal';
-import { FamilyBadge, type FamilyMemberInfo } from '@/components/FamilyBadge';
-import { FamilyLinkDialog } from '@/components/FamilyLinkDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase';
@@ -17,6 +16,9 @@ import DesignationDisplay from '@/components/DesignationDisplay';
 import type { Guest, TransportDepartment } from '@/types';
 import { fetchTransportDeptsForDept, getTransportDeptBadgeClass } from '@/hooks/useTransportDepartments';
 import { ChevronDown as ChevronDownIcon } from 'lucide-react';
+
+const shortenRef = (ref: string) =>
+  !ref ? '—' : ref.length <= 10 ? ref : ref.slice(0, 2) + '...' + ref.slice(-5);
 
 function getTransportDeptDotColor(name: string): string {
   const n = name.toLowerCase();
@@ -40,7 +42,6 @@ interface PlacedRow {
   isFamily: boolean;
   familyLastName: string;
   familyGroupId: string | null;
-  familyAllMembers: FamilyMemberInfo[];
   placedLocation: string;
   placedAt?: string;
   arrivalTime?: string;
@@ -62,29 +63,6 @@ type RoomOption = {
 
 // ── Build helpers ─────────────────────────────────────────────────────────────
 
-function buildFamilyMemberListFromGroup(allGuests: Guest[], familyGroupId: string): FamilyMemberInfo[] {
-  return allGuests
-    .filter(g => g.familyGroupId === familyGroupId)
-    .map(g => ({
-      name: g.fullName,
-      relationship: g.isHeadOfFamily ? 'Head' : (g.relationship ?? '—'),
-      status: g.status,
-      assignedDepartment: g.assignedDepartment,
-      placedLocation: g.placedLocation,
-    }));
-}
-
-function buildFamilyMemberList(g: Guest): FamilyMemberInfo[] {
-  return [
-    { name: g.fullName, relationship: 'Head', status: g.status, assignedDepartment: g.assignedDepartment, placedLocation: g.placedLocation },
-    ...(g.familyMembers ?? []).map(m => ({
-      name: m.name, relationship: m.relationship,
-      status: m.status ?? g.status,
-      assignedDepartment: m.assignedDepartment, placedLocation: m.placedLocation,
-    })),
-  ];
-}
-
 function buildRows(guests: Guest[], dept: string): PlacedRow[] {
   const rows: PlacedRow[] = [];
   for (const g of guests) {
@@ -97,7 +75,6 @@ function buildRows(guests: Guest[], dept: string): PlacedRow[] {
           relationship: g.isHeadOfFamily ? 'Head' : (g.relationship ?? '—'),
           isFamily: true, familyLastName: lastName,
           familyGroupId: g.familyGroupId,
-          familyAllMembers: buildFamilyMemberListFromGroup(guests, g.familyGroupId),
           placedLocation: g.placedLocation, placedAt: g.placedAt,
           arrivalTime: g.arrivalTime, arrivalAirport: g.arrivalAirport,
           departureTime: g.departureTime, departureAirport: g.departureAirport,
@@ -108,13 +85,12 @@ function buildRows(guests: Guest[], dept: string): PlacedRow[] {
     }
     const isFamily = g.guestType === 'family' && (g.familyMembers?.length ?? 0) > 0;
     const lastName = g.fullName.split(' ').pop() ?? g.fullName;
-    const familyAllMembers = isFamily ? buildFamilyMemberList(g) : [];
     if (g.assignedDepartment === dept && g.placedLocation) {
       rows.push({
         rowKey: g.id, guestId: g.id, memberId: null,
         name: g.fullName, country: g.country, referenceNumber: g.referenceNumber,
         relationship: isFamily ? 'Head' : 'Individual',
-        isFamily, familyLastName: lastName, familyGroupId: null, familyAllMembers,
+        isFamily, familyLastName: lastName, familyGroupId: null,
         placedLocation: g.placedLocation, placedAt: g.placedAt,
         arrivalTime: g.arrivalTime, arrivalAirport: g.arrivalAirport,
         departureTime: g.departureTime, departureAirport: g.departureAirport,
@@ -128,7 +104,7 @@ function buildRows(guests: Guest[], dept: string): PlacedRow[] {
             rowKey: `${g.id}-${m.id}`, guestId: g.id, memberId: m.id,
             name: m.name, country: g.country, referenceNumber: g.referenceNumber,
             relationship: m.relationship,
-            isFamily: true, familyLastName: lastName, familyGroupId: null, familyAllMembers,
+            isFamily: true, familyLastName: lastName, familyGroupId: null,
             placedLocation: m.placedLocation, placedAt: m.placedAt,
             arrivalTime: g.arrivalTime, arrivalAirport: g.arrivalAirport,
             departureTime: g.departureTime, departureAirport: g.departureAirport,
@@ -235,12 +211,7 @@ export default function DeptPlacedPage() {
       }
     }
     setSavingTransport(prev => new Set([...prev, guestId]));
-    await supabase.from('guests').update({
-      transport_department_id: tdId || null,
-      transport_department_name: tdName || null,
-      updated_at: new Date().toISOString(),
-    }).eq('id', guestId);
-    updateGuest(guestId, {
+    await updateGuest(guestId, {
       transportDepartmentId: tdId || undefined,
       transportDepartmentName: tdName || undefined,
     });
@@ -265,6 +236,21 @@ export default function DeptPlacedPage() {
     () => guests.find(g => g.id === viewGuestId) ?? null,
     [guests, viewGuestId],
   );
+
+  const groupMeta = useMemo(() => {
+    const counts = new Map<string, number>();
+    const firstRowKey = new Map<string, string>();
+    for (const r of filteredRows) {
+      if (!r.isFamily) continue;
+      const key = r.familyGroupId ?? r.guestId;
+      const prev = counts.get(key) ?? 0;
+      counts.set(key, prev + 1);
+      if (prev === 0) firstRowKey.set(key, r.rowKey);
+    }
+    return { counts, firstRowKey };
+  }, [filteredRows]);
+
+  const [expandedFamilyIds, setExpandedFamilyIds] = useState<Set<string>>(new Set());
 
   const guestCountByLocation = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -681,7 +667,6 @@ export default function DeptPlacedPage() {
                       </th>
                       <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
                       <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
-                      <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Family</th>
                       <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
                       <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Designation</th>
                       <th className="text-left px-4 py-3 text-sm font-semibold text-[#4A4A4A] uppercase tracking-wider">Location</th>
@@ -694,10 +679,38 @@ export default function DeptPlacedPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E8E3DB]">
-                    {filteredRows.map(row => (
+                    {filteredRows.map(row => {
+                      const familyKey = row.familyGroupId ?? row.guestId;
+                      const groupCount = groupMeta.counts.get(familyKey) ?? 0;
+                      const isFirstInGroup = row.isFamily && groupMeta.firstRowKey.get(familyKey) === row.rowKey;
+                      return (
+                      <Fragment key={row.rowKey}>
+                        {isFirstInGroup && groupCount > 1 && (
+                          <tr
+                            className="bg-[#F0F7F4] border-b border-[#D4E9DC] cursor-pointer hover:bg-[#E8F5EE] select-none"
+                            onClick={() => setExpandedFamilyIds(prev => {
+                              const next = new Set(prev);
+                              next.has(familyKey) ? next.delete(familyKey) : next.add(familyKey);
+                              return next;
+                            })}
+                          >
+                            <td colSpan={transportDepts.length > 0 ? 13 : 12} className="px-4 py-2">
+                              <div className="flex items-center gap-2">
+                                <ChevronRight className={`w-3.5 h-3.5 text-[#2D5A45] transition-transform duration-200 shrink-0 ${expandedFamilyIds.has(familyKey) ? 'rotate-90' : ''}`} />
+                                <Users className="w-3.5 h-3.5 text-[#2D5A45] shrink-0" />
+                                <span className="text-xs text-[#2D5A45] font-semibold">
+                                  {row.familyLastName} Family · {groupCount} members
+                                </span>
+                                <span className="text-xs text-[#4A4A4A]">
+                                  {expandedFamilyIds.has(familyKey) ? '— click to collapse' : '— click to expand'}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        {(!row.isFamily || groupCount <= 1 || expandedFamilyIds.has(familyKey)) && (
                       <tr
-                        key={row.rowKey}
-                        className={`hover:bg-[#F9F8F6] ${selectedRows.has(row.rowKey) ? 'bg-[#F0F7F4]' : ''}`}
+                        className={`hover:bg-[#F9F8F6] ${selectedRows.has(row.rowKey) ? 'bg-[#F0F7F4]' : ''} ${row.isFamily && groupCount > 1 ? 'border-l-4 border-[#2D5A45]/20' : ''}`}
                       >
                         {/* Checkbox cell */}
                         <td className="px-3 py-3 w-9" onClick={e => e.stopPropagation()}>
@@ -716,30 +729,16 @@ export default function DeptPlacedPage() {
                           />
                         </td>
 
-                        <td className="px-4 py-3 font-mono text-sm text-[#4A4A4A]">{row.referenceNumber}</td>
+                        <td className="px-4 py-3 font-mono text-sm text-[#4A4A4A]" title={row.referenceNumber}>{shortenRef(row.referenceNumber)}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2.5 flex-wrap">
-                            <div className="w-9 h-9 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-base font-medium shrink-0">
-                              {row.name.charAt(0)}
-                            </div>
                             <span className="font-medium text-base text-[#1A1A1A]">{row.name}</span>
-                            {row.isFamily && (
-                              <FamilyBadge
-                                lastName={row.familyLastName}
-                                members={row.familyAllMembers}
-                                currentDept={dept}
-                              />
+                            {row.isFamily && groupCount > 1 && (
+                              <span className="text-xs text-[#4A4A4A] bg-[#F0F7F4] border border-[#D4E9DC] rounded px-1.5 py-0.5">
+                                {row.relationship || 'Family'}
+                              </span>
                             )}
                           </div>
-                        </td>
-                        {/* Family */}
-                        <td className="px-4 py-3">
-                          {row.isFamily && row.familyGroupId ? (
-                            <FamilyLinkDialog
-                              familyGroupId={row.familyGroupId}
-                              familyName={row.familyLastName}
-                            />
-                          ) : <span className="text-gray-300 text-sm">—</span>}
                         </td>
                         <td className="px-4 py-3 text-sm text-[#4A4A4A]">{row.country}</td>
                         <td className="px-4 py-3 text-sm text-[#4A4A4A]"><DesignationDisplay designation={row.designation} /></td>
@@ -868,7 +867,10 @@ export default function DeptPlacedPage() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                        )}
+                      </Fragment>
+                    );
+                  })}
                   </tbody>
                 </table>
               </div>
@@ -1019,9 +1021,6 @@ export default function DeptPlacedPage() {
                 <div className="bg-[#F9F8F6] rounded-xl border border-[#E8E3DB] p-5 space-y-3">
                   {[{ row: a, newRoom: b.roomAssignment }, { row: b, newRoom: a.roomAssignment }].map(({ row, newRoom }) => (
                     <div key={row.rowKey} className="flex items-center gap-3">
-                      <div className="w-7 h-7 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0">
-                        {row.name.charAt(0)}
-                      </div>
                       <span className="text-sm font-medium text-[#1A1A1A] w-32 truncate">{row.name}</span>
                       <span className="text-sm font-mono bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded shrink-0">
                         {row.roomAssignment}

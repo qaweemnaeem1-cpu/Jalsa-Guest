@@ -14,6 +14,9 @@ import { GuestViewModal } from '@/components/GuestViewModal';
 import { supabase } from '@/lib/supabase';
 import type { Guest } from '@/types';
 
+const shortenRef = (ref: string) =>
+  !ref ? '—' : ref.length <= 10 ? ref : ref.slice(0, 2) + '...' + ref.slice(-5);
+
 interface LocationOccupancy {
   locationName: string;
   totalBeds: number;
@@ -213,6 +216,20 @@ export default function DeptDashboardPage() {
 
   useEffect(() => { fetchOccupancy(); fetchDriverSummary(); }, [fetchOccupancy, fetchDriverSummary]);
 
+  // Real-time: re-fetch occupancy when rooms or bed assignments change
+  useEffect(() => {
+    const channel = supabase
+      .channel('dept-dashboard-occupancy-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => {
+        fetchOccupancy();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bed_assignments' }, () => {
+        fetchOccupancy();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchOccupancy]);
+
   const quickActions = [
     { label: 'View Incoming Guests', href: '/dept/incoming',  icon: Inbox },
     { label: 'Manage Locations',     href: '/dept/locations', icon: MapPin },
@@ -346,7 +363,7 @@ export default function DeptDashboardPage() {
                         <div className="flex items-baseline gap-2 flex-wrap">
                           <span className="text-sm font-medium text-[#1A1A1A]">{g.fullName}</span>
                           <span className="text-sm text-gray-500">{g.country}</span>
-                          <span className="text-xs text-gray-400 font-mono">{g.referenceNumber}</span>
+                          <span className="text-xs text-gray-400 font-mono" title={g.referenceNumber}>{shortenRef(g.referenceNumber)}</span>
                         </div>
                         <div className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
                           <MapPin className="w-3 h-3 shrink-0" />
@@ -685,12 +702,7 @@ export default function DeptDashboardPage() {
                         {recentActivity.map(g => (
                           <tr key={g.id} className="hover:bg-[#F9F8F6]">
                             <td className="px-4 py-3">
-                              <div className="flex items-center gap-2.5">
-                                <div className="w-7 h-7 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-xs font-medium shrink-0">
-                                  {g.fullName.charAt(0)}
-                                </div>
-                                <span className="font-medium text-[#1A1A1A] text-sm">{g.fullName}</span>
-                              </div>
+                              <span className="font-medium text-[#1A1A1A] text-sm">{g.fullName}</span>
                             </td>
                             <td className="px-4 py-3 text-[#4A4A4A] text-sm">{g.country}</td>
                             <td className="px-4 py-3">

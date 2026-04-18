@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Inbox, Eye, Check, Search, AlertTriangle } from 'lucide-react';
+import { Fragment, useMemo, useState } from 'react';
+import { ChevronRight, Inbox, Eye, Check, Search, AlertTriangle, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -7,8 +7,6 @@ import { useRooms } from '@/hooks/useRooms';
 import { useAuditTrail2 } from '@/hooks/useAuditTrail2';
 import { LocationSidebar } from '@/components/LocationSidebar';
 import { LocationUserMenu } from '@/components/LocationUserMenu';
-import { FamilyBadge, type FamilyMemberInfo } from '@/components/FamilyBadge';
-import { FamilyLinkDialog } from '@/components/FamilyLinkDialog';
 import { GuestViewModal } from '@/components/GuestViewModal';
 import { Input } from '@/components/ui/input';
 import {
@@ -31,7 +29,6 @@ interface PersonRow {
   isFamily: boolean;
   familyLastName: string;
   familyGroupId: string | null;
-  familyAllMembers: FamilyMemberInfo[];
   placedAt?: string;
   designation: string | string[];
   guestType: string;
@@ -43,27 +40,6 @@ interface PersonRow {
   departureAirport?: string;
 }
 
-function buildFamilyMemberListFromGroup(allGuests: Guest[], familyGroupId: string): FamilyMemberInfo[] {
-  return allGuests
-    .filter(g => g.familyGroupId === familyGroupId)
-    .map(g => ({
-      name: g.fullName,
-      relationship: g.isHeadOfFamily ? 'Head' : (g.relationship ?? '—'),
-      status: g.status,
-      assignedDepartment: g.assignedDepartment,
-      placedLocation: g.placedLocation,
-    }));
-}
-
-function buildFamilyMemberList(g: Guest): FamilyMemberInfo[] {
-  return [
-    { name: g.fullName, relationship: 'Head', status: g.status, assignedDepartment: g.assignedDepartment, placedLocation: g.placedLocation },
-    ...(g.familyMembers ?? []).map(m => ({
-      name: m.name, relationship: m.relationship, status: m.status ?? g.status,
-      assignedDepartment: m.assignedDepartment, placedLocation: m.placedLocation,
-    })),
-  ];
-}
 
 function buildLocationRows(guests: Guest[], loc: string): PersonRow[] {
   const rows: PersonRow[] = [];
@@ -78,7 +54,6 @@ function buildLocationRows(guests: Guest[], loc: string): PersonRow[] {
           relationship: g.isHeadOfFamily ? 'Head' : (g.relationship ?? '—'),
           isFamily: true, familyLastName: lastName,
           familyGroupId: g.familyGroupId,
-          familyAllMembers: buildFamilyMemberListFromGroup(guests, g.familyGroupId),
           placedAt: g.placedAt,
           designation: g.designation, guestType: g.guestType,
           arrivalTime: g.arrivalTime, arrivalFlightNumber: g.arrivalFlightNumber, arrivalAirport: g.arrivalAirport,
@@ -91,14 +66,13 @@ function buildLocationRows(guests: Guest[], loc: string): PersonRow[] {
     // Old model
     const isFamily = g.guestType === 'family' && (g.familyMembers?.length ?? 0) > 0;
     const lastName = g.fullName.split(' ').pop() ?? g.fullName;
-    const familyAllMembers = isFamily ? buildFamilyMemberList(g) : [];
 
     if (g.placedLocation === loc) {
       rows.push({
         rowKey: g.id, guestId: g.id, memberId: null,
         name: g.fullName, country: g.country, referenceNumber: g.referenceNumber,
         relationship: isFamily ? 'Head' : 'Individual',
-        isFamily, familyLastName: lastName, familyGroupId: null, familyAllMembers, placedAt: g.placedAt,
+        isFamily, familyLastName: lastName, familyGroupId: null, placedAt: g.placedAt,
         designation: g.designation, guestType: g.guestType,
         arrivalTime: g.arrivalTime, arrivalFlightNumber: g.arrivalFlightNumber, arrivalAirport: g.arrivalAirport,
         departureTime: g.departureTime, departureFlightNumber: g.departureFlightNumber, departureAirport: g.departureAirport,
@@ -111,7 +85,7 @@ function buildLocationRows(guests: Guest[], loc: string): PersonRow[] {
             rowKey: `${g.id}-${m.id}`, guestId: g.id, memberId: m.id,
             name: m.name, country: g.country, referenceNumber: g.referenceNumber,
             relationship: m.relationship,
-            isFamily: true, familyLastName: lastName, familyGroupId: null, familyAllMembers, placedAt: m.placedAt,
+            isFamily: true, familyLastName: lastName, familyGroupId: null, placedAt: m.placedAt,
             designation: m.designation ?? g.designation, guestType: g.guestType,
             arrivalTime: g.arrivalTime, arrivalFlightNumber: g.arrivalFlightNumber, arrivalAirport: g.arrivalAirport,
             departureTime: g.departureTime, departureFlightNumber: g.departureFlightNumber, departureAirport: g.departureAirport,
@@ -175,6 +149,20 @@ export default function LocationIncomingPage() {
       r.referenceNumber.toLowerCase().includes(q),
     );
   }, [allRows, search]);
+
+  const groupMeta = useMemo(() => {
+    const counts = new Map<string, number>();
+    const firstRowKey = new Map<string, string>();
+    for (const r of filteredRows) {
+      if (!r.isFamily) continue;
+      const key = r.familyGroupId ?? r.guestId;
+      const prev = counts.get(key) ?? 0;
+      counts.set(key, prev + 1);
+      if (prev === 0) firstRowKey.set(key, r.rowKey);
+    }
+    return { counts, firstRowKey };
+  }, [filteredRows]);
+  const [expandedFamilyIds, setExpandedFamilyIds] = useState<Set<string>>(new Set());
 
   const viewGuest = useMemo(() => guests.find(g => g.id === viewGuestId) ?? null, [guests, viewGuestId]);
 
@@ -277,7 +265,6 @@ export default function LocationIncomingPage() {
                     <tr className="border-b border-[#E8E3DB] bg-[#F9F8F6]">
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Reference</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Name</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Family</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Country</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Designation</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Arrival</th>
@@ -289,9 +276,37 @@ export default function LocationIncomingPage() {
                   </thead>
                   <tbody className="divide-y divide-[#E8E3DB]">
                     {filteredRows.map(row => {
+                      const familyKey = row.familyGroupId ?? row.guestId;
+                      const groupCount = groupMeta.counts.get(familyKey) ?? 0;
+                      const isFirstInGroup = row.isFamily && groupMeta.firstRowKey.get(familyKey) === row.rowKey;
                       const sel = selectedRoom[row.rowKey] ?? '';
                       return (
-                        <tr key={row.rowKey} className="hover:bg-[#F9F8F6]">
+                      <Fragment key={row.rowKey}>
+                        {isFirstInGroup && groupCount > 1 && (
+                          <tr
+                            className="bg-[#F0F7F4] border-b border-[#D4E9DC] cursor-pointer hover:bg-[#E8F5EE] select-none"
+                            onClick={() => setExpandedFamilyIds(prev => {
+                              const next = new Set(prev);
+                              next.has(familyKey) ? next.delete(familyKey) : next.add(familyKey);
+                              return next;
+                            })}
+                          >
+                            <td colSpan={9} className="px-4 py-2">
+                              <div className="flex items-center gap-2">
+                                <ChevronRight className={`w-3.5 h-3.5 text-[#2D5A45] transition-transform duration-200 shrink-0 ${expandedFamilyIds.has(familyKey) ? 'rotate-90' : ''}`} />
+                                <Users className="w-3.5 h-3.5 text-[#2D5A45] shrink-0" />
+                                <span className="text-xs text-[#2D5A45] font-semibold">
+                                  {row.familyLastName} Family · {groupCount} members
+                                </span>
+                                <span className="text-xs text-[#4A4A4A]">
+                                  {expandedFamilyIds.has(familyKey) ? '— click to collapse' : '— click to expand'}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        {(!row.isFamily || groupCount <= 1 || expandedFamilyIds.has(familyKey)) && (
+                        <tr className={`hover:bg-[#F9F8F6] ${row.isFamily && groupCount > 1 ? 'border-l-4 border-[#2D5A45]/20' : ''}`}>
                           <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">{row.referenceNumber}</td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2.5 flex-wrap">
@@ -299,19 +314,12 @@ export default function LocationIncomingPage() {
                                 {row.name.charAt(0)}
                               </div>
                               <span className="font-medium text-[#1A1A1A]">{row.name}</span>
-                              {row.isFamily && (
-                                <FamilyBadge lastName={row.familyLastName} members={row.familyAllMembers} currentDept={loc} />
+                              {row.isFamily && groupCount > 1 && (
+                                <span className="text-xs text-[#4A4A4A] bg-[#F0F7F4] border border-[#D4E9DC] rounded px-1.5 py-0.5">
+                                  {row.relationship || 'Family'}
+                                </span>
                               )}
                             </div>
-                          </td>
-                          {/* Family */}
-                          <td className="px-4 py-3">
-                            {row.isFamily && row.familyGroupId ? (
-                              <FamilyLinkDialog
-                                familyGroupId={row.familyGroupId}
-                                familyName={row.familyLastName}
-                              />
-                            ) : <span className="text-gray-300 text-xs">—</span>}
                           </td>
                           <td className="px-4 py-3 text-xs text-[#4A4A4A]">{row.country}</td>
                           {/* Designation */}
@@ -406,6 +414,8 @@ export default function LocationIncomingPage() {
                             </div>
                           </td>
                         </tr>
+                        )}
+                      </Fragment>
                       );
                     })}
                   </tbody>
