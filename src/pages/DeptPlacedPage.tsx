@@ -46,8 +46,12 @@ interface PlacedRow {
   placedLocation: string;
   placedAt?: string;
   arrivalTime?: string;
+  arrival_date?: string;
+  arrival_time?: string;
   arrivalAirport?: string;
   departureTime?: string;
+  departure_date?: string;
+  departure_time?: string;
   departureAirport?: string;
   designation: string | string[];
   roomAssignment?: string;
@@ -77,8 +81,8 @@ function buildRows(guests: Guest[], dept: string): PlacedRow[] {
           isFamily: true, familyLastName: lastName,
           familyGroupId: g.familyGroupId,
           placedLocation: g.placedLocation, placedAt: g.placedAt,
-          arrivalTime: g.arrivalTime, arrivalAirport: g.arrivalAirport,
-          departureTime: g.departureTime, departureAirport: g.departureAirport,
+          arrival_date: g.arrival_date, arrival_time: g.arrival_time, arrivalAirport: g.arrivalAirport,
+          departure_date: g.departure_date, departure_time: g.departure_time, departureAirport: g.departureAirport,
           designation: g.designation, roomAssignment: g.roomAssignment,
         });
       }
@@ -93,8 +97,8 @@ function buildRows(guests: Guest[], dept: string): PlacedRow[] {
         relationship: isFamily ? 'Head' : 'Individual',
         isFamily, familyLastName: lastName, familyGroupId: null,
         placedLocation: g.placedLocation, placedAt: g.placedAt,
-        arrivalTime: g.arrivalTime, arrivalAirport: g.arrivalAirport,
-        departureTime: g.departureTime, departureAirport: g.departureAirport,
+        arrival_date: g.arrival_date, arrival_time: g.arrival_time, arrivalAirport: g.arrivalAirport,
+        departure_date: g.departure_date, departure_time: g.departure_time, departureAirport: g.departureAirport,
         designation: g.designation, roomAssignment: g.roomAssignment,
       });
     }
@@ -107,8 +111,8 @@ function buildRows(guests: Guest[], dept: string): PlacedRow[] {
             relationship: m.relationship,
             isFamily: true, familyLastName: lastName, familyGroupId: null,
             placedLocation: m.placedLocation, placedAt: m.placedAt,
-            arrivalTime: g.arrivalTime, arrivalAirport: g.arrivalAirport,
-            departureTime: g.departureTime, departureAirport: g.departureAirport,
+            arrival_date: g.arrival_date, arrival_time: g.arrival_time, arrivalAirport: g.arrivalAirport,
+            departure_date: g.departure_date, departure_time: g.departure_time, departureAirport: g.departureAirport,
             designation: g.designation, roomAssignment: g.roomAssignment,
           });
         }
@@ -822,20 +826,20 @@ export default function DeptPlacedPage() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          {row.arrivalTime ? (
+                          {(row.arrival_date || row.arrival_time) ? (
                             <div>
                               <div className="text-sm text-[#1A1A1A]">
-                                {formatDate(row.arrivalTime)}
+                                {formatDate(row.arrival_date)}
                               </div>
                               {row.arrivalAirport && <div className="text-xs text-gray-400">{row.arrivalAirport}</div>}
                             </div>
                           ) : <span className="text-gray-400 text-sm">—</span>}
                         </td>
                         <td className="px-4 py-3">
-                          {row.departureTime ? (
+                          {(row.departure_date || row.departure_time) ? (
                             <div>
                               <div className="text-sm text-[#1A1A1A]">
-                                {formatDate(row.departureTime)}
+                                {formatDate(row.departure_date)}
                               </div>
                               {row.departureAirport && <div className="text-xs text-gray-400">{row.departureAirport}</div>}
                             </div>

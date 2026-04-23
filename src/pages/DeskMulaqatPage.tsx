@@ -95,16 +95,13 @@ interface DaftariScheduleRow {
 
 const fmt = (d: string | null | undefined): string => d ? formatDateWithWeekday(d) : '';
 
-function fmtDep(d: string | null | undefined): string {
-  if (!d) return '—';
-  // d may be "YYYY-MM-DDTHH:MM" (recombined) or just "YYYY-MM-DD"
-  const datePart = formatDate(d);
+function fmtDep(dateStr: string | null | undefined, timeStr?: string | null): string {
+  if (!dateStr) return '—';
+  const datePart = formatDate(dateStr);
   if (datePart === '—') return '—';
-  const s = String(d);
-  if (!s.includes('T')) return datePart;
-  const timePart = s.split('T')[1]?.slice(0, 5) ?? '';
-  if (!timePart || timePart === '00:00') return datePart;
-  return `${datePart}, ${timePart}`;
+  const t = (timeStr ?? '').slice(0, 5);
+  if (!t || t === '00:00') return datePart;
+  return `${datePart}, ${t}`;
 }
 
 function fmtFlight(flightNum: string | undefined, airport: string | undefined): string | null {
@@ -1155,7 +1152,7 @@ export default function DeskMulaqatPage() {
                                                           </td>
                                                           <td className="px-4 py-2.5 text-xs text-[#4A4A4A]">{formatDesignation(g.designation)}</td>
                                                           <td className="px-4 py-2.5 text-xs whitespace-nowrap">
-                                                            <div className="text-[#4A4A4A]">{fmtDep(g.departureTime)}</div>
+                                                            <div className="text-[#4A4A4A]">{fmtDep(g?.departure_date, g?.departure_time)}</div>
                                                             {fmtFlight(g.departureFlightNumber, g.departureAirport) && (
                                                               <div className="text-xs text-gray-400 mt-0.5">{fmtFlight(g.departureFlightNumber, g.departureAirport)}</div>
                                                             )}
@@ -1469,7 +1466,7 @@ export default function DeskMulaqatPage() {
                                     </td>
                                     <td className="px-4 py-3 text-sm text-[#4A4A4A]">{formatDesignation(g.designation)}</td>
                                     <td className="px-4 py-3 whitespace-nowrap">
-                                      <div className="text-sm text-[#4A4A4A]">{fmtDep(g.departureTime)}</div>
+                                      <div className="text-sm text-[#4A4A4A]">{fmtDep(g?.departure_date, g?.departure_time)}</div>
                                       {fmtFlight(g.departureFlightNumber, g.departureAirport) && (
                                         <div className="text-xs text-gray-400 mt-0.5">{fmtFlight(g.departureFlightNumber, g.departureAirport)}</div>
                                       )}

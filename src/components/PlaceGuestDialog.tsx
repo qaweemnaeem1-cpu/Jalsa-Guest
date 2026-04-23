@@ -41,10 +41,12 @@ export interface PlaceGuestDialogProps {
   mode: 'place' | 'change';
   guestName: string;
   guestCountry: string;
-  arrivalTime?: string;
+  arrival_date?: string;
+  arrival_time?: string;
   arrivalAirport?: string;
   arrivalFlightNumber?: string;
-  departureTime?: string;
+  departure_date?: string;
+  departure_time?: string;
   departureAirport?: string;
   /** Department locations to show in the picker */
   locations: string[];
@@ -60,18 +62,18 @@ export interface PlaceGuestDialogProps {
   ) => Promise<void>;
 }
 
-function formatDT(dt?: string) {
-  if (!dt) return null;
-  const date = formatDate(dt);
-  const time = formatTime(dt);
+function formatDT(dateStr?: string, timeStr?: string) {
+  if (!dateStr && !timeStr) return null;
+  const date = formatDate(dateStr);
+  const time = formatTime(timeStr);
   return { date: date === '—' ? '' : date, time: time === '—' ? '' : time };
 }
 
 export function PlaceGuestDialog({
   open, onClose, mode,
   guestName, guestCountry,
-  arrivalTime, arrivalAirport, arrivalFlightNumber,
-  departureTime, departureAirport,
+  arrival_date, arrival_time, arrivalAirport, arrivalFlightNumber,
+  departure_date, departure_time, departureAirport,
   locations, guestCountByLocation,
   initialLocation,
   saving,
@@ -143,8 +145,8 @@ export function PlaceGuestDialog({
   const selectedRoom = rooms.find(r => r.id === selectedRoomId);
 
   // Date mismatch detection
-  const guestArrivalDate = arrivalTime?.substring(0, 10);
-  const guestDepartureDate = departureTime?.substring(0, 10);
+  const guestArrivalDate = arrival_date;
+  const guestDepartureDate = departure_date;
   const dateMismatch = selectedRoom
     ? (selectedRoom.available_from && guestArrivalDate && guestArrivalDate < selectedRoom.available_from) ||
       (selectedRoom.available_to && guestDepartureDate && guestDepartureDate > selectedRoom.available_to)
@@ -163,8 +165,8 @@ export function PlaceGuestDialog({
     );
   }
 
-  const arrival = formatDT(arrivalTime);
-  const departure = formatDT(departureTime);
+  const arrival = formatDT(arrival_date, arrival_time);
+  const departure = formatDT(departure_date, departure_time);
 
   return (
     <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>

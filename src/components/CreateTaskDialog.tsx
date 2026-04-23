@@ -130,8 +130,8 @@ export function CreateTaskDialog({
   useEffect(() => {
     if (!selectedGuest) return;
     if (taskType === 'airport_pickup') {
-      const d = selectedGuest.arrivalTime?.substring(0, 10) ?? '';
-      const t = selectedGuest.arrivalTime?.includes('T') ? selectedGuest.arrivalTime.substring(11, 16) : '';
+      const d = selectedGuest.arrival_date ?? '';
+      const t = selectedGuest.arrival_time ?? '';
       setDate(d); setTime(t);
       setFlight(selectedGuest.arrivalFlightNumber ?? '');
       setAirport(selectedGuest.arrivalAirport ?? '');
@@ -140,8 +140,8 @@ export function CreateTaskDialog({
       setDropoff(locationName);
       setPriority(getAutoPriority(selectedGuest.designation, d || undefined, t || undefined, guestDesigTiers));
     } else if (taskType === 'airport_dropoff') {
-      const d = selectedGuest.departureTime?.substring(0, 10) ?? '';
-      const t = selectedGuest.departureTime?.includes('T') ? selectedGuest.departureTime.substring(11, 16) : '';
+      const d = selectedGuest.departure_date ?? '';
+      const t = selectedGuest.departure_time ?? '';
       setDate(d); setTime(t);
       setFlight(selectedGuest.departureFlightNumber ?? '');
       setAirport(selectedGuest.departureAirport ?? '');

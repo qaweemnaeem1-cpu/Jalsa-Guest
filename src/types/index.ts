@@ -120,11 +120,17 @@ export interface FamilyMember {
   arrivalFlightNumber?: string;
   arrivalAirport?: string;
   arrivalTerminal?: string;
-  arrivalTime?: string;
+  /** Raw DB column — DATE "2026-07-22" */
+  arrival_date?: string;
+  /** Raw DB column — TIME "17:45" */
+  arrival_time?: string;
   departureFlightNumber?: string;
   departureAirport?: string;
   departureTerminal?: string;
-  departureTime?: string;
+  /** Raw DB column — DATE "2026-07-28" */
+  departure_date?: string;
+  /** Raw DB column — TIME "10:00" */
+  departure_time?: string;
 }
 
 export type RemarkType =
@@ -193,11 +199,17 @@ export interface Guest {
   arrivalFlightNumber?: string;
   arrivalAirport?: string;
   arrivalTerminal?: string;
-  arrivalTime?: string;
+  /** Raw DB column — DATE "2026-07-22" */
+  arrival_date?: string;
+  /** Raw DB column — TIME "17:45" (normalised to HH:MM) */
+  arrival_time?: string;
   departureFlightNumber?: string;
   departureAirport?: string;
   departureTerminal?: string;
-  departureTime?: string;
+  /** Raw DB column — DATE "2026-07-28" */
+  departure_date?: string;
+  /** Raw DB column — TIME "10:00" */
+  departure_time?: string;
   specialNeeds?: string;
   dietaryRequirements?: string;
   wheelchairRequired: boolean;

@@ -260,7 +260,7 @@ export function FamilyMemberDrawer({
           <Plane className="w-3 h-3" /> Same
         </span>
       );
-    const date = member.arrivalTime?.slice(0, 10) ?? '';
+    const date = member.arrival_date ?? '';
     const term = member.arrivalTerminal ?? '';
     return (
       <span className="text-orange-600 text-xs flex items-center gap-1 flex-wrap">

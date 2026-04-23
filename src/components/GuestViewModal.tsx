@@ -10,12 +10,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Send, Pencil, Trash2, X, Plane, Building2, BedDouble, ChevronDown, Star, MessageSquare, AlertTriangle } from 'lucide-react';
+import { Send, Pencil, Trash2, X, Plane, Building2, BedDouble, ChevronDown, Star, MessageSquare, AlertTriangle, User as UserIcon } from 'lucide-react';
 import { AuditTimeline } from '@/components/AuditTimeline';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { useAuditTrail } from '@/hooks/useAuditTrail';
 import { useDesignations } from '@/hooks/useDesignations';
+import { useDelegations } from '@/hooks/useDelegations';
 import { useAssignableItems } from '@/hooks/useAssignableItems';
 import {
   GUEST_STATUS_LABELS, ROLE_LABELS, VISA_STATUS_LABELS,
@@ -82,11 +83,13 @@ const editSchema = z.object({
   arrivalFlightNumber: z.string().optional(),
   arrivalAirport: z.string().optional(),
   arrivalTerminal: z.string().optional(),
-  arrivalTime: z.string().optional(),
+  arrival_date: z.string().optional(),
+  arrival_time: z.string().optional(),
   departureFlightNumber: z.string().optional(),
   departureAirport: z.string().optional(),
   departureTerminal: z.string().optional(),
-  departureTime: z.string().optional(),
+  departure_date: z.string().optional(),
+  departure_time: z.string().optional(),
 });
 
 type EditFormData = z.infer<typeof editSchema>;
@@ -302,6 +305,7 @@ export function GuestViewModal({
   const { rooms, bedAssignments, assignGuestToRoom } = useRooms();
   const { activeDesignations } = useDesignations();
   const { countries: assignableCountries } = useAssignableItems();
+  const { getDelegationCountry } = useDelegations();
 
   const [activeTab, setActiveTab] = useState(initialTab ?? 'personal');
   const [commentText, setCommentText] = useState('');
@@ -314,6 +318,18 @@ export function GuestViewModal({
   const [editDesignations, setEditDesignations] = useState<string[]>([]);
   const [messages, setMessages] = useState<GuestMessage[]>([]);
   const [correctionBanner, setCorrectionBanner] = useState<GuestMessage | null>(null);
+
+  // Mulaqat info: mirrors the `mulaqat_type` / `delegation_id` / `daftari_slot_id` fields
+  // of the current guest row + joined daftari slot details. Live-updates via Supabase
+  // postgres_changes while the popup is open.
+  interface MulaqatInfo {
+    type: 'No' | 'Delegation' | 'Daftari' | 'Both';
+    delegationCountry?: string;
+    day?: string;
+    slot?: string;
+    language?: string;
+  }
+  const [mulaqatInfo, setMulaqatInfo] = useState<MulaqatInfo | null>(null);
 
   const visibility = getVisibility(user);
 
@@ -389,6 +405,65 @@ export function GuestViewModal({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, guest?.id, guest?.status]);
 
+  // Mulaqat info: initial load + live update via postgres_changes on guests row.
+  useEffect(() => {
+    if (!open || !guest?.id) { setMulaqatInfo(null); return; }
+    const guestId = guest.id;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const buildInfo = async (row: any): Promise<MulaqatInfo | null> => {
+      const type = (row?.mulaqat_type as MulaqatInfo['type']) ?? 'No';
+      if (!type || type === 'No') return null;
+      const info: MulaqatInfo = { type };
+      if ((type === 'Delegation' || type === 'Both') && row?.delegation_id) {
+        info.delegationCountry = getDelegationCountry(row.delegation_id) ?? undefined;
+      }
+      if ((type === 'Daftari' || type === 'Both') && row?.daftari_slot_id) {
+        const { data: slot } = await supabase
+          .from('daftari_slots')
+          .select('name, language, day_id')
+          .eq('id', row.daftari_slot_id)
+          .maybeSingle();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const s = slot as any;
+        if (s) {
+          info.slot = s.name ?? undefined;
+          info.language = s.language ?? undefined;
+          if (s.day_id) {
+            const { data: day } = await supabase
+              .from('daftari_days')
+              .select('date, label')
+              .eq('id', s.day_id)
+              .maybeSingle();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const d = day as any;
+            if (d) info.day = d.label ? `${d.date} — ${d.label}` : d.date;
+          }
+        }
+      }
+      return info;
+    };
+
+    supabase
+      .from('guests')
+      .select('mulaqat_type, delegation_id, daftari_slot_id')
+      .eq('id', guestId)
+      .maybeSingle()
+      .then(async ({ data }) => setMulaqatInfo(await buildInfo(data)));
+
+    const channel = supabase
+      .channel(`guest-mulaqat-${guestId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'guests', filter: `id=eq.${guestId}` },
+        async (payload) => setMulaqatInfo(await buildInfo(payload.new)),
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, guest?.id]);
+
   // Scroll to bottom of messages thread when tab becomes active or new message arrives.
   useEffect(() => {
     if (activeTab === 'messages') {
@@ -420,11 +495,13 @@ export function GuestViewModal({
         arrivalFlightNumber:  guest.arrivalFlightNumber ?? '',
         arrivalAirport:       guest.arrivalAirport ?? '',
         arrivalTerminal:      guest.arrivalTerminal ?? '',
-        arrivalTime:          guest.arrivalTime ?? '',
+        arrival_date:         guest.arrival_date ?? '',
+        arrival_time:         guest.arrival_time ?? '',
         departureFlightNumber: guest.departureFlightNumber ?? '',
         departureAirport:     guest.departureAirport ?? '',
         departureTerminal:    guest.departureTerminal ?? '',
-        departureTime:        guest.departureTime ?? '',
+        departure_date:       guest.departure_date ?? '',
+        departure_time:       guest.departure_time ?? '',
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -457,11 +534,13 @@ export function GuestViewModal({
       arrivalFlightNumber:   stripHtml(data.arrivalFlightNumber) || undefined,
       arrivalAirport:        stripHtml(data.arrivalAirport) || undefined,
       arrivalTerminal:       stripHtml(data.arrivalTerminal) || undefined,
-      arrivalTime:           stripHtml(data.arrivalTime) || undefined,
+      arrival_date:          stripHtml(data.arrival_date) || undefined,
+      arrival_time:          stripHtml(data.arrival_time) || undefined,
       departureFlightNumber: stripHtml(data.departureFlightNumber) || undefined,
       departureAirport:      stripHtml(data.departureAirport) || undefined,
       departureTerminal:     stripHtml(data.departureTerminal) || undefined,
-      departureTime:         stripHtml(data.departureTime) || undefined,
+      departure_date:        stripHtml(data.departure_date) || undefined,
+      departure_time:        stripHtml(data.departure_time) || undefined,
     };
   };
 
@@ -1058,6 +1137,93 @@ export function GuestViewModal({
                   )}
                 </>
               )}
+
+              {/* ── Mulaqat info (read-only, visible to all roles) ── */}
+              <div className="mt-6 pt-6 border-t border-gray-100">
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Mulaqat</h4>
+                {mulaqatInfo ? (
+                  <>
+                    {(mulaqatInfo.type === 'Delegation' || mulaqatInfo.type === 'Both') && (
+                      <div className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-2 mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="bg-green-100 text-green-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                            Delegation
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          {mulaqatInfo.delegationCountry && (
+                            <div>
+                              <span className="text-gray-500">Country:</span>
+                              <span className="ml-2 font-medium text-gray-800">{mulaqatInfo.delegationCountry}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {(mulaqatInfo.type === 'Daftari' || mulaqatInfo.type === 'Both') && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                            Daftari
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          {mulaqatInfo.day && (
+                            <div>
+                              <span className="text-gray-500">Day:</span>
+                              <span className="ml-2 font-medium text-gray-800">{mulaqatInfo.day}</span>
+                            </div>
+                          )}
+                          {mulaqatInfo.slot && (
+                            <div>
+                              <span className="text-gray-500">Slot:</span>
+                              <span className="ml-2 font-medium text-gray-800">{mulaqatInfo.slot}</span>
+                            </div>
+                          )}
+                          {mulaqatInfo.language && (
+                            <div>
+                              <span className="text-gray-500">Language:</span>
+                              <span className="ml-2 font-medium text-gray-800">{mulaqatInfo.language}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {isEditMode && (
+                      <p className="text-xs text-gray-400 italic mt-2">Mulaqat can be assigned from the Guests table</p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-400 italic">No Mulaqat assigned</p>
+                    {isEditMode && (
+                      <p className="text-xs text-gray-400 italic mt-2">Mulaqat can be assigned from the Guests table</p>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* ── Guest Photo (visible to all roles) ── */}
+              <div className="mt-6 pt-6 border-t border-gray-100">
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4 text-center">Photo</h4>
+                <div className="flex flex-col items-center">
+                  {guest.photoUrl ? (
+                    <img
+                      src={guest.photoUrl}
+                      alt={guest.fullName}
+                      className="w-32 h-32 rounded-2xl object-cover border-2 border-gray-200 shadow-md"
+                    />
+                  ) : (
+                    <div className="w-32 h-32 rounded-2xl bg-gray-100 border-2 border-gray-200 flex flex-col items-center justify-center">
+                      <UserIcon className="w-12 h-12 text-gray-300" />
+                      <span className="text-xs text-gray-400 mt-1">No photo</span>
+                    </div>
+                  )}
+                  <p className="text-sm text-gray-500 mt-2">
+                    {guest.fullName}{guest.country ? ` · ${guest.country}` : ''}
+                  </p>
+                </div>
+              </div>
             </TabsContent>
 
             {/* ── Tab 2: Flight & Travel ── */}
@@ -1080,8 +1246,11 @@ export function GuestViewModal({
                       <EditField label="Terminal" error={errors.arrivalTerminal?.message}>
                         <Input {...register('arrivalTerminal')} placeholder="e.g. T2" />
                       </EditField>
-                      <EditField label="Date & Time" error={errors.arrivalTime?.message}>
-                        <Input type="datetime-local" {...register('arrivalTime')} />
+                      <EditField label="Arrival Date" error={errors.arrival_date?.message}>
+                        <Input type="date" {...register('arrival_date')} />
+                      </EditField>
+                      <EditField label="Arrival Time" error={errors.arrival_time?.message}>
+                        <Input type="time" {...register('arrival_time')} />
                       </EditField>
                     </div>
                   ) : (
@@ -1091,7 +1260,10 @@ export function GuestViewModal({
                       <PlainField label="Terminal" value={guest.arrivalTerminal} />
                       <PlainField
                         label="Date & Time"
-                        value={formatDateTime(guest.arrivalTime) === '—' ? undefined : formatDateTime(guest.arrivalTime)}
+                        value={(() => {
+                          const s = formatDateTime(guest.arrival_date, guest.arrival_time);
+                          return s === '—' ? undefined : s;
+                        })()}
                       />
                     </div>
                   )}
@@ -1114,8 +1286,11 @@ export function GuestViewModal({
                       <EditField label="Terminal" error={errors.departureTerminal?.message}>
                         <Input {...register('departureTerminal')} placeholder="e.g. T2" />
                       </EditField>
-                      <EditField label="Date & Time" error={errors.departureTime?.message}>
-                        <Input type="datetime-local" {...register('departureTime')} />
+                      <EditField label="Departure Date" error={errors.departure_date?.message}>
+                        <Input type="date" {...register('departure_date')} />
+                      </EditField>
+                      <EditField label="Departure Time" error={errors.departure_time?.message}>
+                        <Input type="time" {...register('departure_time')} />
                       </EditField>
                     </div>
                   ) : (
@@ -1125,7 +1300,10 @@ export function GuestViewModal({
                       <PlainField label="Terminal" value={guest.departureTerminal} />
                       <PlainField
                         label="Date & Time"
-                        value={formatDateTime(guest.departureTime) === '—' ? undefined : formatDateTime(guest.departureTime)}
+                        value={(() => {
+                          const s = formatDateTime(guest.departure_date, guest.departure_time);
+                          return s === '—' ? undefined : s;
+                        })()}
                       />
                     </div>
                   )}

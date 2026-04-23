@@ -216,11 +216,13 @@ interface FamilyMemberFormProps {
     arrivalFlightNumber: string;
     arrivalAirport: string;
     arrivalTerminal: string;
-    arrivalTime: string;
+    arrival_date: string;
+    arrival_time: string;
     departureFlightNumber: string;
     departureAirport: string;
     departureTerminal: string;
-    departureTime: string;
+    departure_date: string;
+    departure_time: string;
   };
   errors?: string[];
 }
@@ -265,6 +267,7 @@ function FamilyMemberForm({
   const sameFlightEnabled = member.sameFlight !== false;
 
   const fmtDateTime = (dt?: string) => formatDateTime(dt);
+  const fmtDateTimePair = (d?: string, t?: string) => formatDateTime(d, t);
 
   const getAirportName = (code: string) => AIRPORTS.find(a => a.code === code)?.name ?? code;
 
@@ -674,22 +677,22 @@ function FamilyMemberForm({
                     <CheckSquare className="w-4 h-4" />
                     Same flight as {mainGuestName || 'Head Guest'}
                   </div>
-                  {(mainGuestFlight.arrivalFlightNumber || mainGuestFlight.arrivalTime) ? (
+                  {(mainGuestFlight.arrivalFlightNumber || mainGuestFlight.arrival_date || mainGuestFlight.arrival_time) ? (
                     <>
                       <div className="flex flex-wrap items-center gap-1.5 text-green-800">
                         <Plane className="w-3.5 h-3.5 shrink-0" />
                         <span className="font-medium">Arrival:</span>
-                        <span>{fmtDateTime(mainGuestFlight.arrivalTime)}</span>
+                        <span>{fmtDateTimePair(mainGuestFlight.arrival_date, mainGuestFlight.arrival_time)}</span>
                         {mainGuestFlight.arrivalFlightNumber && <span>· Flight {mainGuestFlight.arrivalFlightNumber}</span>}
                         {mainGuestFlight.arrivalAirport && (
                           <span>· {getAirportName(mainGuestFlight.arrivalAirport)}{mainGuestFlight.arrivalTerminal ? ` T${mainGuestFlight.arrivalTerminal}` : ''}</span>
                         )}
                       </div>
-                      {(mainGuestFlight.departureFlightNumber || mainGuestFlight.departureTime) && (
+                      {(mainGuestFlight.departureFlightNumber || mainGuestFlight.departure_date || mainGuestFlight.departure_time) && (
                         <div className="flex flex-wrap items-center gap-1.5 text-green-800">
                           <Plane className="w-3.5 h-3.5 shrink-0 rotate-180" />
                           <span className="font-medium">Departure:</span>
-                          <span>{fmtDateTime(mainGuestFlight.departureTime)}</span>
+                          <span>{fmtDateTimePair(mainGuestFlight.departure_date, mainGuestFlight.departure_time)}</span>
                           {mainGuestFlight.departureFlightNumber && <span>· Flight {mainGuestFlight.departureFlightNumber}</span>}
                           {mainGuestFlight.departureAirport && (
                             <span>· {getAirportName(mainGuestFlight.departureAirport)}{mainGuestFlight.departureTerminal ? ` T${mainGuestFlight.departureTerminal}` : ''}</span>
@@ -749,11 +752,20 @@ function FamilyMemberForm({
                     </div>
 
                     <div className="space-y-1">
-                      <Label className="text-[#1A1A1A] text-sm font-medium">Scheduled Arrival *</Label>
+                      <Label className="text-[#1A1A1A] text-sm font-medium">Arrival Date *</Label>
                       <Input
-                        type="datetime-local"
-                        value={member.arrivalTime ?? ''}
-                        onChange={e => onUpdate(index, { arrivalTime: e.target.value })}
+                        type="date"
+                        value={member.arrival_date ?? ''}
+                        onChange={e => onUpdate(index, { arrival_date: e.target.value })}
+                        className={`border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11 ${errors.includes('Arrival time required') ? 'border-red-400' : ''}`}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[#1A1A1A] text-sm font-medium">Arrival Time *</Label>
+                      <Input
+                        type="time"
+                        value={member.arrival_time ?? ''}
+                        onChange={e => onUpdate(index, { arrival_time: e.target.value })}
                         className={`border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11 ${errors.includes('Arrival time required') ? 'border-red-400' : ''}`}
                       />
                       {errors.includes('Arrival time required') && <p className="text-xs text-red-500">Arrival time is required</p>}
@@ -797,11 +809,20 @@ function FamilyMemberForm({
                     </div>
 
                     <div className="space-y-1">
-                      <Label className="text-[#1A1A1A] text-sm font-medium">Scheduled Departure</Label>
+                      <Label className="text-[#1A1A1A] text-sm font-medium">Departure Date</Label>
                       <Input
-                        type="datetime-local"
-                        value={member.departureTime ?? ''}
-                        onChange={e => onUpdate(index, { departureTime: e.target.value })}
+                        type="date"
+                        value={member.departure_date ?? ''}
+                        onChange={e => onUpdate(index, { departure_date: e.target.value })}
+                        className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[#1A1A1A] text-sm font-medium">Departure Time</Label>
+                      <Input
+                        type="time"
+                        value={member.departure_time ?? ''}
+                        onChange={e => onUpdate(index, { departure_time: e.target.value })}
                         className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11"
                       />
                     </div>
@@ -859,11 +880,13 @@ export default function NewGuestPage() {
     arrivalFlightNumber: '',
     arrivalAirport: '',
     arrivalTerminal: '',
-    arrivalTime: '',
+    arrival_date: '',
+    arrival_time: '',
     departureFlightNumber: '',
     departureAirport: '',
     departureTerminal: '',
-    departureTime: '',
+    departure_date: '',
+    departure_time: '',
     specialNeeds: '',
     dietaryRequirements: '',
     wheelchairRequired: false,
@@ -1035,7 +1058,7 @@ export default function NewGuestPage() {
         if (!member.passportNumber?.trim()) errs.push('Passport number required');
         if (member.sameFlight === false) {
           if (!member.arrivalFlightNumber?.trim()) errs.push('Arrival flight number required');
-          if (!member.arrivalTime) errs.push('Arrival time required');
+          if (!member.arrival_date || !member.arrival_time) errs.push('Arrival time required');
         }
         if (errs.length > 0) { errorMap[idx] = errs; hasValidationErrors = true; }
       }
@@ -1101,12 +1124,12 @@ export default function NewGuestPage() {
           flight_number:     toNull(formData.arrivalFlightNumber),
           arrival_airport:   toNull(formData.arrivalAirport),
           arrival_terminal:  toNull(formData.arrivalTerminal),
-          arrival_date:      cleanDate(formData.arrivalTime),
-          arrival_time:      cleanTime(formData.arrivalTime),
+          arrival_date:      cleanDate(formData.arrival_date),
+          arrival_time:      cleanTime(formData.arrival_time),
           departure_airport:  toNull(formData.departureAirport),
           departure_terminal: toNull(formData.departureTerminal),
-          departure_date:    cleanDate(formData.departureTime),
-          departure_time:    cleanTime(formData.departureTime),
+          departure_date:    cleanDate(formData.departure_date),
+          departure_time:    cleanTime(formData.departure_time),
           special_needs:     toNull(formData.specialNeeds),
           dietary_requirements: toNull(formData.dietaryRequirements),
           wheelchair_required: toBool(formData.wheelchairRequired),
@@ -1159,12 +1182,12 @@ export default function NewGuestPage() {
             flight_number:        useSameFlight ? toNull(formData.arrivalFlightNumber)  : toNull(m.arrivalFlightNumber),
             arrival_airport:      useSameFlight ? toNull(formData.arrivalAirport)       : toNull(m.arrivalAirport),
             arrival_terminal:     useSameFlight ? toNull(formData.arrivalTerminal)      : toNull(m.arrivalTerminal),
-            arrival_date:         cleanDate(useSameFlight ? formData.arrivalTime : m.arrivalTime),
-            arrival_time:         cleanTime(useSameFlight ? formData.arrivalTime : m.arrivalTime),
+            arrival_date:         cleanDate(useSameFlight ? formData.arrival_date : m.arrival_date),
+            arrival_time:         cleanTime(useSameFlight ? formData.arrival_time : m.arrival_time),
             departure_airport:    useSameFlight ? toNull(formData.departureAirport)     : toNull(m.departureAirport),
             departure_terminal:   useSameFlight ? toNull(formData.departureTerminal)    : toNull(m.departureTerminal),
-            departure_date:       cleanDate(useSameFlight ? formData.departureTime : m.departureTime),
-            departure_time:       cleanTime(useSameFlight ? formData.departureTime : m.departureTime),
+            departure_date:       cleanDate(useSameFlight ? formData.departure_date : m.departure_date),
+            departure_time:       cleanTime(useSameFlight ? formData.departure_time : m.departure_time),
           });
         }
 
@@ -1200,11 +1223,13 @@ export default function NewGuestPage() {
           arrivalFlightNumber: formData.arrivalFlightNumber,
           arrivalAirport: formData.arrivalAirport,
           arrivalTerminal: formData.arrivalTerminal,
-          arrivalTime: formData.arrivalTime,
+          arrival_date: formData.arrival_date,
+          arrival_time: formData.arrival_time,
           departureFlightNumber: formData.departureFlightNumber,
           departureAirport: formData.departureAirport,
           departureTerminal: formData.departureTerminal,
-          departureTime: formData.departureTime,
+          departure_date: formData.departure_date,
+          departure_time: formData.departure_time,
           specialNeeds: formData.specialNeeds,
           dietaryRequirements: formData.dietaryRequirements,
           wheelchairRequired: formData.wheelchairRequired,
@@ -1595,11 +1620,13 @@ export default function NewGuestPage() {
                               arrivalFlightNumber: formData.arrivalFlightNumber,
                               arrivalAirport: formData.arrivalAirport,
                               arrivalTerminal: formData.arrivalTerminal,
-                              arrivalTime: formData.arrivalTime,
+                              arrival_date: formData.arrival_date,
+                              arrival_time: formData.arrival_time,
                               departureFlightNumber: formData.departureFlightNumber,
                               departureAirport: formData.departureAirport,
                               departureTerminal: formData.departureTerminal,
-                              departureTime: formData.departureTime,
+                              departure_date: formData.departure_date,
+                              departure_time: formData.departure_time,
                             }}
                             errors={familyMemberErrors[index] ?? []}
                           />
@@ -1866,11 +1893,21 @@ export default function NewGuestPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-[#1A1A1A] font-medium">Scheduled Arrival Time</Label>
+                      <Label className="text-[#1A1A1A] font-medium">Arrival Date</Label>
                       <Input
-                        type="datetime-local"
-                        value={formData.arrivalTime}
-                        onChange={(e) => handleInputChange('arrivalTime', e.target.value)}
+                        type="date"
+                        value={formData.arrival_date}
+                        onChange={(e) => handleInputChange('arrival_date', e.target.value)}
+                        className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-[#1A1A1A] font-medium">Arrival Time</Label>
+                      <Input
+                        type="time"
+                        value={formData.arrival_time}
+                        onChange={(e) => handleInputChange('arrival_time', e.target.value)}
                         className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11"
                       />
                     </div>
@@ -1931,11 +1968,21 @@ export default function NewGuestPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-[#1A1A1A] font-medium">Scheduled Departure Time</Label>
+                      <Label className="text-[#1A1A1A] font-medium">Departure Date</Label>
                       <Input
-                        type="datetime-local"
-                        value={formData.departureTime}
-                        onChange={(e) => handleInputChange('departureTime', e.target.value)}
+                        type="date"
+                        value={formData.departure_date}
+                        onChange={(e) => handleInputChange('departure_date', e.target.value)}
+                        className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-[#1A1A1A] font-medium">Departure Time</Label>
+                      <Input
+                        type="time"
+                        value={formData.departure_time}
+                        onChange={(e) => handleInputChange('departure_time', e.target.value)}
                         className="border-[#D4CFC7] focus:border-[#2D5A45] focus:ring-[#2D5A45] h-11"
                       />
                     </div>

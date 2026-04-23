@@ -129,8 +129,8 @@ export default function DashboardPage() {
   const arrivalsTodayCount = useMemo(() => {
     const today = getTodayString();
     return guests.filter(g => {
-      if (!g.arrivalTime) return false;
-      return g.arrivalTime.startsWith(today);
+      if (!g.arrival_date) return false;
+      return (g.arrival_date === today);
     }).length;
   }, [guests]);
 

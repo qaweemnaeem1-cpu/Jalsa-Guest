@@ -1,5 +1,6 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { formatDateShort, formatTime } from '@/utils/dateHelpers';
+import { supabase } from '@/lib/supabase';
 import { ChevronRight, Inbox, Eye, Check, Search, AlertTriangle, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
@@ -16,6 +17,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import DesignationDisplay from '@/components/DesignationDisplay';
 import type { Guest, Room, BedAssignment } from '@/types';
+
+const shortenRef = (ref: string) =>
+  !ref ? '—' : ref.length <= 10 ? ref : ref.slice(0, 2) + '....' + ref.slice(-5);
 
 // ── Row model ─────────────────────────────────────────────────────────────────
 
@@ -34,9 +38,13 @@ interface PersonRow {
   designation: string | string[];
   guestType: string;
   arrivalTime?: string;
+  arrival_date?: string;
+  arrival_time?: string;
   arrivalFlightNumber?: string;
   arrivalAirport?: string;
   departureTime?: string;
+  departure_date?: string;
+  departure_time?: string;
   departureFlightNumber?: string;
   departureAirport?: string;
 }
@@ -57,8 +65,10 @@ function buildLocationRows(guests: Guest[], loc: string): PersonRow[] {
           familyGroupId: g.familyGroupId,
           placedAt: g.placedAt,
           designation: g.designation, guestType: g.guestType,
-          arrivalTime: g.arrivalTime, arrivalFlightNumber: g.arrivalFlightNumber, arrivalAirport: g.arrivalAirport,
-          departureTime: g.departureTime, departureFlightNumber: g.departureFlightNumber, departureAirport: g.departureAirport,
+          arrival_date: g.arrival_date, arrival_time: g.arrival_time,
+          arrivalFlightNumber: g.arrivalFlightNumber, arrivalAirport: g.arrivalAirport,
+          departure_date: g.departure_date, departure_time: g.departure_time,
+          departureFlightNumber: g.departureFlightNumber, departureAirport: g.departureAirport,
         });
       }
       continue;
@@ -75,8 +85,10 @@ function buildLocationRows(guests: Guest[], loc: string): PersonRow[] {
         relationship: isFamily ? 'Head' : 'Individual',
         isFamily, familyLastName: lastName, familyGroupId: null, placedAt: g.placedAt,
         designation: g.designation, guestType: g.guestType,
-        arrivalTime: g.arrivalTime, arrivalFlightNumber: g.arrivalFlightNumber, arrivalAirport: g.arrivalAirport,
-        departureTime: g.departureTime, departureFlightNumber: g.departureFlightNumber, departureAirport: g.departureAirport,
+        arrival_date: g.arrival_date, arrival_time: g.arrival_time,
+        arrivalFlightNumber: g.arrivalFlightNumber, arrivalAirport: g.arrivalAirport,
+        departure_date: g.departure_date, departure_time: g.departure_time,
+        departureFlightNumber: g.departureFlightNumber, departureAirport: g.departureAirport,
       });
     }
     if (isFamily) {
@@ -88,8 +100,10 @@ function buildLocationRows(guests: Guest[], loc: string): PersonRow[] {
             relationship: m.relationship,
             isFamily: true, familyLastName: lastName, familyGroupId: null, placedAt: m.placedAt,
             designation: m.designation ?? g.designation, guestType: g.guestType,
-            arrivalTime: g.arrivalTime, arrivalFlightNumber: g.arrivalFlightNumber, arrivalAirport: g.arrivalAirport,
-            departureTime: g.departureTime, departureFlightNumber: g.departureFlightNumber, departureAirport: g.departureAirport,
+            arrival_date: g.arrival_date, arrival_time: g.arrival_time,
+            arrivalFlightNumber: g.arrivalFlightNumber, arrivalAirport: g.arrivalAirport,
+            departure_date: g.departure_date, departure_time: g.departure_time,
+            departureFlightNumber: g.departureFlightNumber, departureAirport: g.departureAirport,
           });
         }
       }
@@ -131,6 +145,31 @@ export default function LocationIncomingPage() {
   const [search, setSearch] = useState('');
 
   const loc = user?.location ?? '';
+
+  // Diagnostic: log guest date/time fields (remove after bug confirmed fixed)
+  useEffect(() => {
+    const sample = guests.filter(g => g.placedLocation === loc).slice(0, 5);
+    if (sample.length === 0) return;
+    console.log('[LocIncoming] Guest (from hook):',
+      sample.map(g => ({
+        name: g.fullName,
+        arrival_date: g.arrival_date,
+        arrival_time: g.arrival_time,
+        departure_date: g.departure_date,
+        departure_time: g.departure_time,
+      })),
+    );
+    // Direct raw query to see exactly what columns/values exist in Supabase
+    const ids = sample.map(g => g.id);
+    supabase
+      .from('guests')
+      .select('id, full_name, arrival_date, arrival_time, departure_date, departure_time')
+      .in('id', ids)
+      .then(({ data, error }) => {
+        if (error) console.warn('[LocIncoming] Raw fetch error:', error.message);
+        else console.log('[LocIncoming] Raw DB rows:', data);
+      });
+  }, [guests, loc]);
 
   const locationRooms = useMemo(() => rooms.filter(r => r.locationId === loc && r.isActive), [rooms, loc]);
   const roomGroups = useMemo(() => getRoomsByLocation(loc), [getRoomsByLocation, loc]);
@@ -308,12 +347,9 @@ export default function LocationIncomingPage() {
                         )}
                         {(!row.isFamily || groupCount <= 1 || expandedFamilyIds.has(familyKey)) && (
                         <tr className={`hover:bg-[#F9F8F6] ${row.isFamily && groupCount > 1 ? 'border-l-4 border-[#2D5A45]/20' : ''}`}>
-                          <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">{row.referenceNumber}</td>
+                          <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]" title={row.referenceNumber}>{shortenRef(row.referenceNumber)}</td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2.5 flex-wrap">
-                              <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium shrink-0">
-                                {row.name.charAt(0)}
-                              </div>
                               <span className="font-medium text-[#1A1A1A]">{row.name}</span>
                               {row.isFamily && groupCount > 1 && (
                                 <span className="text-xs text-[#4A4A4A] bg-[#F0F7F4] border border-[#D4E9DC] rounded px-1.5 py-0.5">
@@ -327,11 +363,11 @@ export default function LocationIncomingPage() {
                           <td className="px-4 py-3 text-xs text-[#4A4A4A]"><DesignationDisplay designation={row.designation} /></td>
                           {/* Arrival */}
                           <td className="px-4 py-3 whitespace-nowrap">
-                            {row.arrivalTime ? (
+                            {(row.arrival_date || row.arrival_time) ? (
                               <div>
                                 <div className="text-xs text-[#1A1A1A]">
-                                  {formatDateShort(row.arrivalTime)}
-                                  {' '}{formatTime(row.arrivalTime)}
+                                  {formatDateShort(row.arrival_date)}
+                                  {' · '}{formatTime(row.arrival_time)}
                                 </div>
                                 {(row.arrivalFlightNumber || row.arrivalAirport) && (
                                   <div className="text-xs text-gray-400">
@@ -343,11 +379,11 @@ export default function LocationIncomingPage() {
                           </td>
                           {/* Departure */}
                           <td className="px-4 py-3 whitespace-nowrap">
-                            {row.departureTime ? (
+                            {(row.departure_date || row.departure_time) ? (
                               <div>
                                 <div className="text-xs text-[#1A1A1A]">
-                                  {formatDateShort(row.departureTime)}
-                                  {' '}{formatTime(row.departureTime)}
+                                  {formatDateShort(row.departure_date)}
+                                  {' · '}{formatTime(row.departure_time)}
                                 </div>
                                 {(row.departureFlightNumber || row.departureAirport) && (
                                   <div className="text-xs text-gray-400">

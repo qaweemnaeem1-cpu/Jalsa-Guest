@@ -2,7 +2,7 @@
  * /transport/dashboard — Transport Department Head dashboard.
  * Shows alerts, stats, today's arrivals/departures, driver status, and workload balance.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle, CheckCircle2, Loader2, Users, UserCheck,
   ClipboardList, Car, ChevronDown, ArrowRight,
@@ -13,8 +13,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { TransportSidebar } from '@/components/TransportSidebar';
 import { TopBar } from '@/components/TopBar';
 import { supabase } from '@/lib/supabase';
-import type { DriverTask } from '@/types';
+import type { DriverTask, Guest } from '@/types';
 import { formatDateShort, formatTime } from '@/utils/dateHelpers';
+import { GuestCalendarWidget } from '@/components/shared/GuestCalendarWidget';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -30,9 +31,12 @@ interface GuestRow {
   full_name: string;
   country?: string;
   designation?: string;
+  arrival_date?: string;
   arrival_time?: string;
+  departure_date?: string;
   departure_time?: string;
   arrival_flight_number?: string;
+  flight_number?: string;
   departure_flight_number?: string;
   arrival_airport?: string;
   departure_airport?: string;
@@ -303,6 +307,28 @@ export default function TransportDashboardPage() {
   const completedToday = tasks.filter(t => t.status === 'completed').length;
   const unassignedTasks = tasks.filter(t => !t.driver_id && t.status === 'suggested').length;
 
+  // Adapter: map raw DB rows to the Guest shape the shared calendar widget expects
+  const calendarGuests = useMemo<Guest[]>(() => guests.map(g => ({
+    id: g.id,
+    fullName: g.full_name,
+    arrival_date: g.arrival_date,
+    arrival_time: g.arrival_time,
+    arrivalFlightNumber: g.arrival_flight_number ?? g.flight_number,
+    arrivalAirport: g.arrival_airport,
+    arrivalTerminal: g.arrival_terminal,
+    departure_date: g.departure_date,
+    departure_time: g.departure_time,
+    departureFlightNumber: g.departure_flight_number,
+    departureAirport: g.departure_airport,
+    departureTerminal: g.departure_terminal,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any)), [guests]);
+  const driverNameByGuestId = useMemo(() => {
+    const map: Record<string, string | undefined> = {};
+    for (const g of guests) map[g.id] = g.driver_name;
+    return map;
+  }, [guests]);
+
   const noDriverArrivals   = todayArrivals.filter(g => {
     const assigned = assignedDrivers[g.id];
     if (assigned) return false;
@@ -433,6 +459,34 @@ export default function TransportDashboardPage() {
               </div>
             ))}
           </div>
+
+          {/* Calendar widget (shared) */}
+          <GuestCalendarWidget
+            guests={calendarGuests}
+            title={`📅 ${user?.transportDepartmentName ?? 'Transport'} — Upcoming Schedule`}
+            renderGuestLine={(g, type) => {
+              const time     = type === 'arrival' ? g.arrival_time     : g.departure_time;
+              const flight   = type === 'arrival' ? g.arrivalFlightNumber : g.departureFlightNumber;
+              const airport  = type === 'arrival' ? g.arrivalAirport   : g.departureAirport;
+              const terminal = type === 'arrival' ? g.arrivalTerminal  : g.departureTerminal;
+              const dotCls   = type === 'arrival' ? 'bg-green-500' : 'bg-yellow-500';
+              const meta = [flight, airport, terminal ? `T${terminal}` : ''].filter(Boolean).join(' · ');
+              const driverName = driverNameByGuestId[g.id];
+              return (
+                <>
+                  <span className={`w-2 h-2 rounded-full ${dotCls} shrink-0`} />
+                  <span className="text-gray-500">{formatTime(time)}</span>
+                  <span className="font-medium text-gray-800">{g.fullName}</span>
+                  {meta && <span className="text-gray-400 text-xs">{meta}</span>}
+                  {driverName ? (
+                    <span className="text-xs text-[#2D5A45]">🚐 {driverName}</span>
+                  ) : (
+                    <span className="text-red-600 text-[11px] font-medium">⚠️ No driver</span>
+                  )}
+                </>
+              );
+            }}
+          />
 
           {/* Arrivals & Departures */}
           <div className="grid grid-cols-2 gap-4">

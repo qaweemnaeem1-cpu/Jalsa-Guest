@@ -21,6 +21,9 @@ import {
 import { supabase } from '@/lib/supabase';
 import type { Guest } from '@/types';
 
+const shortenRef = (ref: string) =>
+  !ref ? '—' : ref.length <= 10 ? ref : ref.slice(0, 2) + '....' + ref.slice(-5);
+
 // ── Row model ─────────────────────────────────────────────────────────────────
 
 interface AccommodatedRow {
@@ -40,9 +43,11 @@ interface AccommodatedRow {
   blockId: string;
   bedNumber: number;
   assignedAt?: string;
-  arrivalTime?: string;
+  arrival_date?: string;
+  arrival_time?: string;
   arrivalFlightNumber?: string;
-  departureTime?: string;
+  departure_date?: string;
+  departure_time?: string;
   departureFlightNumber?: string;
   departureAirport?: string;
   departureTerminal?: string;
@@ -155,9 +160,11 @@ export default function LocationAccommodatedPage() {
           blockId: block?.id ?? '',
           bedNumber: bed.bedNumber,
           assignedAt: bed.assignedAt,
-          arrivalTime: g?.arrivalTime,
+          arrival_date: g?.arrival_date,
+          arrival_time: g?.arrival_time,
           arrivalFlightNumber: g?.arrivalFlightNumber,
-          departureTime: g?.departureTime,
+          departure_date: g?.departure_date,
+          departure_time: g?.departure_time,
           departureFlightNumber: g?.departureFlightNumber,
           departureAirport: g?.departureAirport,
           departureTerminal: g?.departureTerminal,
@@ -256,12 +263,8 @@ export default function LocationAccommodatedPage() {
   // Auto-set pickup time when assign dialog opens
   useEffect(() => {
     if (!assignDriverGuest) { setAssignDriverId(''); return; }
-    if (assignDriverGuest.departureTime) {
-      // Extract HH:MM safely — departureTime may be "YYYY-MM-DDTHH:MM" or "HH:MM"
-      const rawTime = assignDriverGuest.departureTime.includes('T')
-        ? assignDriverGuest.departureTime.split('T')[1].slice(0, 5)
-        : assignDriverGuest.departureTime.slice(0, 5);
-      const [hh, mm] = rawTime.split(':').map(Number);
+    if (assignDriverGuest.departure_time) {
+      const [hh, mm] = assignDriverGuest.departure_time.split(':').map(Number);
       const totalMins = hh * 60 + mm - 60;
       const pickup = `${String(Math.floor(((totalMins % 1440) + 1440) % 1440 / 60)).padStart(2, '0')}:${String(((totalMins % 60) + 60) % 60).padStart(2, '0')}`;
       setAssignPickupTime(pickup);
@@ -272,8 +275,7 @@ export default function LocationAccommodatedPage() {
     if (!assignDriverGuest || !assignDriverId || !user) return;
     setAssignSaving(true);
     const driver = driversAtLoc.find(d => d.id === assignDriverId);
-    const depTime = assignDriverGuest.departureTime;
-    const depDate = depTime ? depTime.split('T')[0] : todayStr;
+    const depDate = assignDriverGuest.departure_date ?? todayStr;
     const dropoffLoc = [
       assignDriverGuest.departureAirport,
       assignDriverGuest.departureTerminal ? `Terminal ${assignDriverGuest.departureTerminal}` : null,
@@ -305,10 +307,9 @@ export default function LocationAccommodatedPage() {
   // ── Departure status helpers ──────────────────────────────────────────────────
 
   function getDepartureStatus(row: AccommodatedRow): 'today' | 'tomorrow' | 'none' {
-    if (!row.departureTime) return 'none';
-    const depDate = row.departureTime.split('T')[0];
-    if (depDate === todayStr)    return 'today';
-    if (depDate === tomorrowStr) return 'tomorrow';
+    if (!row.departure_date) return 'none';
+    if (row.departure_date === todayStr)    return 'today';
+    if (row.departure_date === tomorrowStr) return 'tomorrow';
     return 'none';
   }
 
@@ -655,12 +656,9 @@ export default function LocationAccommodatedPage() {
                               className="w-4 h-4 rounded border-[#D4CFC7] accent-[#2D5A45] cursor-pointer"
                             />
                           </td>
-                          <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]">{row.referenceNumber}</td>
+                          <td className="px-4 py-3 font-mono text-xs text-[#4A4A4A]" title={row.referenceNumber}>{shortenRef(row.referenceNumber)}</td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2.5 flex-wrap">
-                              <div className="w-8 h-8 bg-[#2D5A45] rounded-full flex items-center justify-center text-white text-sm font-medium shrink-0">
-                                {row.name.charAt(0)}
-                              </div>
                               <span className="font-medium text-[#1A1A1A]">{row.name}</span>
                               {row.isFamily && groupCount > 1 && (
                                 <span className="text-xs text-[#4A4A4A] bg-[#F0F7F4] border border-[#D4E9DC] rounded px-1.5 py-0.5">
@@ -678,11 +676,11 @@ export default function LocationAccommodatedPage() {
                           <td className="px-4 py-3 text-xs text-[#4A4A4A]">Bed {row.bedNumber}</td>
                           {/* Arrival */}
                           <td className="px-4 py-3 whitespace-nowrap">
-                            {row.arrivalTime ? (
+                            {(row.arrival_date || row.arrival_time) ? (
                               <div>
                                 <div className="text-xs text-[#1A1A1A]">
-                                  {formatDateShort(row.arrivalTime)}
-                                  {' '}{formatTime(row.arrivalTime)}
+                                  {formatDateShort(row.arrival_date)}
+                                  {' · '}{formatTime(row.arrival_time)}
                                 </div>
                                 {row.arrivalFlightNumber && (
                                   <div className="text-xs text-gray-400">{row.arrivalFlightNumber}</div>
@@ -695,11 +693,11 @@ export default function LocationAccommodatedPage() {
                           </td>
                           {/* Departure */}
                           <td className="px-4 py-3 whitespace-nowrap">
-                            {row.departureTime ? (
+                            {(row.departure_date || row.departure_time) ? (
                               <div>
                                 <div className="text-xs text-[#1A1A1A]">
-                                  {formatDateShort(row.departureTime)}
-                                  {' '}{formatTime(row.departureTime)}
+                                  {formatDateShort(row.departure_date)}
+                                  {' · '}{formatTime(row.departure_time)}
                                 </div>
                                 {row.departureFlightNumber && (
                                   <div className="text-xs text-gray-400">{row.departureFlightNumber}</div>
@@ -714,7 +712,7 @@ export default function LocationAccommodatedPage() {
                                 <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
                                 {dropoff.driverName}
                               </span>
-                            ) : row.departureTime ? (
+                            ) : row.departure_date ? (
                               <div className="flex flex-col gap-1">
                                 <span className="flex items-center gap-1 text-xs text-amber-600">
                                   <AlertCircle className="w-3 h-3" /> No driver
@@ -893,12 +891,12 @@ export default function LocationAccommodatedPage() {
             <div className="space-y-4 py-1">
               <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
                 <div><span className="text-gray-500">Guest:</span> <span className="font-medium text-[#1A1A1A]">{assignDriverGuest.name}</span></div>
-                {assignDriverGuest.departureTime && (
+                {(assignDriverGuest.departure_date || assignDriverGuest.departure_time) && (
                   <div>
                     <span className="text-gray-500">Departure:</span>{' '}
                     <span className="text-[#1A1A1A]">
-                      {formatDate(assignDriverGuest.departureTime)},{' '}
-                      {formatTime(assignDriverGuest.departureTime)}
+                      {formatDate(assignDriverGuest.departure_date)},{' '}
+                      {formatTime(assignDriverGuest.departure_time)}
                     </span>
                   </div>
                 )}
@@ -966,12 +964,12 @@ export default function LocationAccommodatedPage() {
           {checklistGuest && (
             <div className="space-y-4 py-1">
               {/* Guest departure info */}
-              {checklistGuest.departureTime && (
+              {(checklistGuest.departure_date || checklistGuest.departure_time) && (
                 <div className="text-sm text-[#4A4A4A]">
                   Departing:{' '}
                   <span className="font-medium text-[#1A1A1A]">
-                    {formatDate(checklistGuest.departureTime)},{' '}
-                    {formatTime(checklistGuest.departureTime)}
+                    {formatDate(checklistGuest.departure_date)},{' '}
+                    {formatTime(checklistGuest.departure_time)}
                   </span>
                   {checklistGuest.departureFlightNumber && (
                     <span className="font-mono ml-2">· {checklistGuest.departureFlightNumber}</span>

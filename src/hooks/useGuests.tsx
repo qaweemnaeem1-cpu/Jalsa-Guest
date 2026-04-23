@@ -45,6 +45,26 @@ const GuestsContext = createContext<GuestsContextType | undefined>(undefined);
 
 // ── DB ↔ TypeScript mappers ────────────────────────────────────────────────────
 
+/** Normalise a DATE column — returns "YYYY-MM-DD" or undefined.
+ *  Handles DATE ("2026-07-22"), TIMESTAMPTZ ("2026-07-22T00:00:00+00:00"), null. */
+function normaliseDateCol(v: unknown): string | undefined {
+  if (!v) return undefined;
+  const s = String(v);
+  return s.includes('T') ? s.split('T')[0] : s;
+}
+
+/** Normalise a TIME column — returns "HH:MM" or undefined.
+ *  Handles TIME ("17:45:00"), TIMESTAMPTZ ("...T17:45:00+00:00"), null. */
+function normaliseTimeCol(v: unknown): string | undefined {
+  if (!v) return undefined;
+  const s = String(v);
+  if (s.includes('T')) {
+    const part = s.split('T')[1] ?? '';
+    return part.slice(0, 5) || undefined;
+  }
+  return s.includes(':') && !s.includes('-') ? s.slice(0, 5) : undefined;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToFamilyMember(row: any): FamilyMember {
   return {
@@ -61,6 +81,16 @@ function rowToFamilyMember(row: any): FamilyMember {
     placedAt: row.placed_at ?? undefined,
     rejectionReason: row.rejection_reason ?? undefined,
     remarks: row.remarks ?? undefined,
+    arrivalFlightNumber: row.arrival_flight_number ?? row.flight_number ?? undefined,
+    arrivalAirport: row.arrival_airport ?? undefined,
+    arrivalTerminal: row.arrival_terminal ?? undefined,
+    arrival_date: normaliseDateCol(row.arrival_date),
+    arrival_time: normaliseTimeCol(row.arrival_time),
+    departureFlightNumber: row.departure_flight_number ?? undefined,
+    departureAirport: row.departure_airport ?? undefined,
+    departureTerminal: row.departure_terminal ?? undefined,
+    departure_date: normaliseDateCol(row.departure_date),
+    departure_time: normaliseTimeCol(row.departure_time),
   };
 }
 
@@ -89,15 +119,14 @@ function rowToGuest(row: any): Guest {
     arrivalFlightNumber: row.flight_number ?? row.arrival_flight_number ?? undefined,
     arrivalAirport: row.arrival_airport ?? undefined,
     arrivalTerminal: row.arrival_terminal ?? undefined,
-    arrivalTime: row.arrival_date && row.arrival_time
-      ? `${row.arrival_date}T${String(row.arrival_time).slice(0, 5)}`
-      : (row.arrival_date ?? row.arrival_time ?? undefined),
+    // Raw DB columns — kept separate, normalised to DATE string / HH:MM string
+    arrival_date: normaliseDateCol(row.arrival_date),
+    arrival_time: normaliseTimeCol(row.arrival_time),
     departureFlightNumber: row.flight_number ?? row.departure_flight_number ?? undefined,
     departureAirport: row.departure_airport ?? undefined,
     departureTerminal: row.departure_terminal ?? undefined,
-    departureTime: row.departure_date && row.departure_time
-      ? `${row.departure_date}T${String(row.departure_time).slice(0, 5)}`
-      : (row.departure_date ?? row.departure_time ?? undefined),
+    departure_date: normaliseDateCol(row.departure_date),
+    departure_time: normaliseTimeCol(row.departure_time),
     specialNeeds: row.special_needs ?? undefined,
     dietaryRequirements: row.dietary_requirements ?? undefined,
     wheelchairRequired: row.wheelchair_required ?? false,
@@ -176,9 +205,12 @@ function updatesToDbRow(updates: Partial<Guest>): Record<string, any> {
     arrivalFlightNumber: 'flight_number',     // DB has single flight_number column
     arrivalAirport:     'arrival_airport',
     arrivalTerminal:    'arrival_terminal',
-    // arrivalTime / departureTime handled specially below (split into date+time)
+    arrival_date:       'arrival_date',
+    arrival_time:       'arrival_time',
     departureAirport:   'departure_airport',
     departureTerminal:  'departure_terminal',
+    departure_date:     'departure_date',
+    departure_time:     'departure_time',
     specialNeeds:       'special_needs',
     dietaryRequirements: 'dietary_requirements',
     wheelchairRequired: 'wheelchair_required',
@@ -232,15 +264,13 @@ function updatesToDbRow(updates: Partial<Guest>): Record<string, any> {
   for (const [key, value] of Object.entries(updates)) {
     if (skip.has(key)) continue;
 
-    // datetime-local inputs produce "YYYY-MM-DDTHH:MM"; split into separate DATE and TIME columns
-    if (key === 'arrivalTime') {
-      row['arrival_date'] = cleanDate(value as string);
-      row['arrival_time'] = cleanTime(value as string);
+    // DATE/TIME fields — normalise to safe formats before sending to PostgreSQL
+    if (key === 'arrival_date' || key === 'departure_date') {
+      row[key] = cleanDate(value as string);
       continue;
     }
-    if (key === 'departureTime') {
-      row['departure_date'] = cleanDate(value as string);
-      row['departure_time'] = cleanTime(value as string);
+    if (key === 'arrival_time' || key === 'departure_time') {
+      row[key] = cleanTime(value as string);
       continue;
     }
 
@@ -446,14 +476,14 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
         special_needs:      toNull(guestData.specialNeeds),
         dietary_requirements: toNull(guestData.dietaryRequirements),
         flight_number:      toNull(guestData.arrivalFlightNumber),
-        arrival_date:       cleanDate(guestData.arrivalTime),
-        departure_date:     cleanDate(guestData.departureTime),
+        arrival_date:       cleanDate(guestData.arrival_date),
+        arrival_time:       cleanTime(guestData.arrival_time),
         arrival_airport:    toNull(guestData.arrivalAirport),
         arrival_terminal:   toNull(guestData.arrivalTerminal),
+        departure_date:     cleanDate(guestData.departure_date),
+        departure_time:     cleanTime(guestData.departure_time),
         departure_airport:  toNull(guestData.departureAirport),
         departure_terminal: toNull(guestData.departureTerminal),
-        arrival_time:       cleanTime(guestData.arrivalTime),
-        departure_time:     cleanTime(guestData.departureTime),
         remarks:            null,
         status:             'Awaiting Review',
         appeal_status:      'none',

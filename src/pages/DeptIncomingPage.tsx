@@ -60,9 +60,13 @@ interface PersonRow {
   assignedDepartmentAt?: string;
   status: string;
   arrivalTime?: string;
+  arrival_date?: string;
+  arrival_time?: string;
   arrivalAirport?: string;
   arrivalFlightNumber?: string;
   departureTime?: string;
+  departure_date?: string;
+  departure_time?: string;
   departureAirport?: string;
   designation: string | string[];
 }
@@ -91,9 +95,9 @@ function buildRows(guests: Guest[], dept: string): PersonRow[] {
           isFamily: true, familyLastName: lastName,
           familyGroupId: g.familyGroupId,
           assignedDepartmentAt: g.assignedDepartmentAt, status: g.status,
-          arrivalTime: g.arrivalTime, arrivalAirport: g.arrivalAirport,
+          arrival_date: g.arrival_date, arrival_time: g.arrival_time, arrivalAirport: g.arrivalAirport,
           arrivalFlightNumber: g.arrivalFlightNumber,
-          departureTime: g.departureTime, departureAirport: g.departureAirport,
+          departure_date: g.departure_date, departure_time: g.departure_time, departureAirport: g.departureAirport,
           designation: g.designation,
         });
       }
@@ -108,9 +112,9 @@ function buildRows(guests: Guest[], dept: string): PersonRow[] {
         relationship: isFamily ? 'Head' : 'Individual',
         isFamily, familyLastName: lastName, familyGroupId: g.id,
         assignedDepartmentAt: g.assignedDepartmentAt, status: g.status,
-        arrivalTime: g.arrivalTime, arrivalAirport: g.arrivalAirport,
+        arrival_date: g.arrival_date, arrival_time: g.arrival_time, arrivalAirport: g.arrivalAirport,
         arrivalFlightNumber: g.arrivalFlightNumber,
-        departureTime: g.departureTime, departureAirport: g.departureAirport,
+        departure_date: g.departure_date, departure_time: g.departure_time, departureAirport: g.departureAirport,
         designation: g.designation,
       });
     }
@@ -123,9 +127,9 @@ function buildRows(guests: Guest[], dept: string): PersonRow[] {
             relationship: m.relationship,
             isFamily: true, familyLastName: lastName, familyGroupId: g.id,
             assignedDepartmentAt: m.assignedDepartmentAt, status: m.status ?? g.status,
-            arrivalTime: g.arrivalTime, arrivalAirport: g.arrivalAirport,
+            arrival_date: g.arrival_date, arrival_time: g.arrival_time, arrivalAirport: g.arrivalAirport,
             arrivalFlightNumber: g.arrivalFlightNumber,
-            departureTime: g.departureTime, departureAirport: g.departureAirport,
+            departure_date: g.departure_date, departure_time: g.departure_time, departureAirport: g.departureAirport,
             designation: g.designation,
           });
         }
@@ -416,8 +420,8 @@ export default function DeptIncomingPage() {
         }
 
         // Date mismatch — warn but proceed
-        const guestArrival = row.arrivalTime?.substring(0, 10);
-        const guestDeparture = row.departureTime?.substring(0, 10);
+        const guestArrival = row.arrival_date;
+        const guestDeparture = row.departure_date;
         if (
           (room.available_from && guestArrival && guestArrival < room.available_from) ||
           (room.available_to && guestDeparture && guestDeparture > room.available_to)
@@ -867,11 +871,11 @@ export default function DeptIncomingPage() {
 
                             {/* Arrival */}
                             <td className="px-4 py-2.5 whitespace-nowrap">
-                              {row.arrivalTime ? (
+                              {(row.arrival_date || row.arrival_time) ? (
                                 <div>
                                   <div className="text-xs text-[#1A1A1A]">
-                                    {formatDateShort(row.arrivalTime)}
-                                    {' '}{formatTime(row.arrivalTime)}
+                                    {formatDateShort(row.arrival_date)}
+                                    {' · '}{formatTime(row.arrival_time)}
                                   </div>
                                   {(row.arrivalFlightNumber || row.arrivalAirport) && (
                                     <div className="text-xs text-gray-400">
@@ -884,11 +888,11 @@ export default function DeptIncomingPage() {
 
                             {/* Departure */}
                             <td className="px-4 py-2.5 whitespace-nowrap">
-                              {row.departureTime ? (
+                              {(row.departure_date || row.departure_time) ? (
                                 <div>
                                   <div className="text-xs text-[#1A1A1A]">
-                                    {formatDateShort(row.departureTime)}
-                                    {' '}{formatTime(row.departureTime)}
+                                    {formatDateShort(row.departure_date)}
+                                    {' · '}{formatTime(row.departure_time)}
                                   </div>
                                   {row.departureAirport && (
                                     <div className="text-xs text-gray-400">{row.departureAirport}</div>
@@ -1069,8 +1073,8 @@ export default function DeptIncomingPage() {
                                     ) : locRooms.map(room => {
                                       const isFull = room.occupancy >= room.capacity;
                                       const almostFull = !isFull && (room.capacity - room.occupancy) <= 1;
-                                      const guestArrival = row.arrivalTime?.substring(0, 10);
-                                      const guestDep = row.departureTime?.substring(0, 10);
+                                      const guestArrival = row.arrival_date;
+                                      const guestDep = row.departure_date;
                                       const hasMismatch = !!(
                                         (room.available_from && guestArrival && guestArrival < room.available_from) ||
                                         (room.available_to && guestDep && guestDep > room.available_to)
@@ -1161,10 +1165,12 @@ export default function DeptIncomingPage() {
           mode="place"
           guestName={placeDialogRow.name}
           guestCountry={placeDialogRow.country}
-          arrivalTime={placeDialogRow.arrivalTime}
+          arrival_date={placeDialogRow.arrival_date}
+          arrival_time={placeDialogRow.arrival_time}
           arrivalAirport={placeDialogRow.arrivalAirport}
           arrivalFlightNumber={placeDialogRow.arrivalFlightNumber}
-          departureTime={placeDialogRow.departureTime}
+          departure_date={placeDialogRow.departure_date}
+          departure_time={placeDialogRow.departure_time}
           departureAirport={placeDialogRow.departureAirport}
           locations={locations}
           guestCountByLocation={guestCountByLocation}

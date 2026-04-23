@@ -35,11 +35,13 @@ const editSchema = z.object({
   arrivalFlightNumber: z.string().optional(),
   arrivalAirport: z.string().optional(),
   arrivalTerminal: z.string().optional(),
-  arrivalTime: z.string().optional(),
+  arrival_date: z.string().optional(),
+  arrival_time: z.string().optional(),
   departureFlightNumber: z.string().optional(),
   departureAirport: z.string().optional(),
   departureTerminal: z.string().optional(),
-  departureTime: z.string().optional(),
+  departure_date: z.string().optional(),
+  departure_time: z.string().optional(),
 });
 
 type EditFormData = z.infer<typeof editSchema>;
@@ -193,11 +195,13 @@ export function GuestEditModal({ guest, open, onClose, onSaveAndResubmit }: Gues
         arrivalFlightNumber: guest.arrivalFlightNumber ?? '',
         arrivalAirport: guest.arrivalAirport ?? '',
         arrivalTerminal: guest.arrivalTerminal ?? '',
-        arrivalTime: guest.arrivalTime ?? '',
+        arrival_date: guest.arrival_date ?? '',
+        arrival_time: guest.arrival_time ?? '',
         departureFlightNumber: guest.departureFlightNumber ?? '',
         departureAirport: guest.departureAirport ?? '',
         departureTerminal: guest.departureTerminal ?? '',
-        departureTime: guest.departureTime ?? '',
+        departure_date: guest.departure_date ?? '',
+        departure_time: guest.departure_time ?? '',
       });
       setEditDesignations(Array.isArray(guest.designation) ? guest.designation : (guest.designation ? [guest.designation] : []));
     }
@@ -232,11 +236,13 @@ export function GuestEditModal({ guest, open, onClose, onSaveAndResubmit }: Gues
     arrivalFlightNumber: data.arrivalFlightNumber || undefined,
     arrivalAirport: data.arrivalAirport || undefined,
     arrivalTerminal: data.arrivalTerminal || undefined,
-    arrivalTime: data.arrivalTime || undefined,
+    arrival_date: data.arrival_date || undefined,
+    arrival_time: data.arrival_time || undefined,
     departureFlightNumber: data.departureFlightNumber || undefined,
     departureAirport: data.departureAirport || undefined,
     departureTerminal: data.departureTerminal || undefined,
-    departureTime: data.departureTime || undefined,
+    departure_date: data.departure_date || undefined,
+    departure_time: data.departure_time || undefined,
   });
 
   const onSave = (data: EditFormData) => {
@@ -446,7 +452,10 @@ export function GuestEditModal({ guest, open, onClose, onSaveAndResubmit }: Gues
                     </div>
                     <div>
                       <Label className="text-sm">Date &amp; Time</Label>
-                      <Input type="datetime-local" {...register('arrivalTime')} className="mt-1" />
+                      <div className="grid grid-cols-2 gap-2 mt-1">
+                        <Input type="date" {...register('arrival_date')} />
+                        <Input type="time" {...register('arrival_time')} />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -469,7 +478,10 @@ export function GuestEditModal({ guest, open, onClose, onSaveAndResubmit }: Gues
                     </div>
                     <div>
                       <Label className="text-sm">Date &amp; Time</Label>
-                      <Input type="datetime-local" {...register('departureTime')} className="mt-1" />
+                      <div className="grid grid-cols-2 gap-2 mt-1">
+                        <Input type="date" {...register('departure_date')} />
+                        <Input type="time" {...register('departure_time')} />
+                      </div>
                     </div>
                   </div>
                 </div>

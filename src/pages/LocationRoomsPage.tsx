@@ -752,8 +752,8 @@ export default function LocationRoomsPage() {
                             {guestData && (
                               <p className="text-xs text-[#4A4A4A] mt-0.5">{guestData.country}</p>
                             )}
-                            {guestData?.arrivalTime && (
-                              <p className="text-[10px] text-gray-400 mt-0.5">Arrival: {guestData.arrivalTime}</p>
+                            {guestData?.arrival_date && (
+                              <p className="text-[10px] text-gray-400 mt-0.5">Arrival: {guestData.arrival_date}</p>
                             )}
                             <div className="flex items-center gap-1.5 mt-2">
                               <button

@@ -272,15 +272,13 @@ const fmt = (d: string | null): string => d ? formatDateWithWeekday(d, { long: t
 const fmtShort = (d: string | null): string => d ? formatDateWithWeekday(d) : '';
 
 // "28 Jun 2026" or "28 Jun 2026, 14:30" — used for combined departure column
-function fmtDep(d: string | null | undefined): string {
-  if (!d) return '—';
-  const datePart = formatDate(d);
+function fmtDep(dateStr: string | null | undefined, timeStr?: string | null): string {
+  if (!dateStr) return '—';
+  const datePart = formatDate(dateStr);
   if (datePart === '—') return '—';
-  const s = String(d);
-  if (!s.includes('T')) return datePart;
-  const timePart = s.split('T')[1]?.slice(0, 5) ?? '';
-  if (!timePart || timePart === '00:00') return datePart;
-  return `${datePart}, ${timePart}`;
+  const t = (timeStr ?? '').slice(0, 5);
+  if (!t || t === '00:00') return datePart;
+  return `${datePart}, ${t}`;
 }
 
 function fmtFlight(flightNum: string | undefined, airport: string | undefined): string | null {
@@ -887,13 +885,12 @@ export default function AdminMulaqatPage() {
       new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const fmtPdfShort = (d: string) =>
       new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-    const fmtDepTime = (d: string | null | undefined) => {
-      if (!d) return '—';
-      const dt = new Date(d);
-      if (isNaN(dt.getTime())) return '—';
-      const datePart = dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-      const h = dt.getHours(), m = dt.getMinutes();
-      return (h === 0 && m === 0) ? datePart : `${datePart}, ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    const fmtDepTime = (dateStr: string | null | undefined, timeStr?: string | null) => {
+      if (!dateStr) return '—';
+      const datePart = formatDate(dateStr);
+      if (datePart === '—') return '—';
+      const t = (timeStr ?? '').slice(0, 5);
+      return (!t || t === '00:00') ? datePart : `${datePart}, ${t}`;
     };
 
     const doc = new jsPDF(orientation as 'landscape' | 'portrait');
@@ -980,7 +977,7 @@ export default function AdminMulaqatPage() {
                   designation: g ? String(formatDesignation(g.designation ?? '')) : '—',
                   gender: ga?.gender ?? '—', religion: ga?.religion ?? '—',
                   introduction: ga?.introduction ?? '—', contact: ga?.phone ?? '—',
-                  departure: fmtDepTime(g?.departureTime), department: g?.assignedDepartment ?? '—',
+                  departure: fmtDepTime(g?.departure_date, g?.departure_time), department: g?.assignedDepartment ?? '—',
                   location: g?.placedLocation ?? '—',
                 };
                 delegRows.push(checkedDelegKeys.map(k => rowMap[k] ?? '—'));
@@ -1067,7 +1064,7 @@ export default function AdminMulaqatPage() {
             language: slot.language ?? '—',
             designation: g ? String(formatDesignation(g.designation ?? '')) : '—',
             contact: ga?.phone ?? '—', introduction: ga?.introduction ?? '—',
-            departure: fmtDepTime(g?.departureTime), department: g?.assignedDepartment ?? '—',
+            departure: fmtDepTime(g?.departure_date, g?.departure_time), department: g?.assignedDepartment ?? '—',
             location: g?.placedLocation ?? '—',
           };
           dafRows.push(checkedDaftariKeys.map(k => rowMap[k] ?? '—'));
@@ -1188,13 +1185,12 @@ export default function AdminMulaqatPage() {
       new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const fmtPdfShort = (d: string) =>
       new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-    const fmtDepLocal = (d: string | null | undefined) => {
-      if (!d) return '—';
-      const dt = new Date(d);
-      if (isNaN(dt.getTime())) return '—';
-      const datePart = dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-      const h = dt.getHours(), m = dt.getMinutes();
-      return (h === 0 && m === 0) ? datePart : `${datePart}, ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    const fmtDepLocal = (dateStr: string | null | undefined, timeStr?: string | null) => {
+      if (!dateStr) return '—';
+      const datePart = formatDate(dateStr);
+      if (datePart === '—') return '—';
+      const t = (timeStr ?? '').slice(0, 5);
+      return (!t || t === '00:00') ? datePart : `${datePart}, ${t}`;
     };
 
     const allDelDays = [...overviewDelegationDays, ...archivedDelegationDays];
@@ -1306,7 +1302,7 @@ export default function AdminMulaqatPage() {
         religion:     ga?.religion ?? '—',
         contact:      ga?.phone ?? '—',
         introduction: ga?.introduction ?? '—',
-        departure:    fmtDepLocal(g?.departureTime),
+        departure:    fmtDepLocal(g?.departure_date, g?.departure_time),
         department:   g?.assignedDepartment ?? '—',
         location:     g?.placedLocation ?? '—',
       };
@@ -2788,7 +2784,7 @@ export default function AdminMulaqatPage() {
                                                                       </td>
                                                                       <td className="px-2 py-1.5 text-[#4A4A4A]">{formatDesignation(gInfo?.designation)}</td>
                                                                       <td className="px-2 py-1.5 whitespace-nowrap">
-                                                                        <div className="text-[#4A4A4A]">{fmtDep(gInfo?.departureTime)}</div>
+                                                                        <div className="text-[#4A4A4A]">{fmtDep(gInfo?.departure_date, gInfo?.departure_time)}</div>
                                                                         {fmtFlight(gInfo?.departureFlightNumber, gInfo?.departureAirport) && (
                                                                           <div className="text-xs text-gray-400 mt-0.5">{fmtFlight(gInfo?.departureFlightNumber, gInfo?.departureAirport)}</div>
                                                                         )}
@@ -3071,7 +3067,7 @@ export default function AdminMulaqatPage() {
                                                       </td>
                                                       <td className="px-3 py-2.5 text-xs text-[#4A4A4A]">{formatDesignation(gInfo?.designation)}</td>
                                                       <td className="px-3 py-2.5 text-xs whitespace-nowrap">
-                                                        <div className="text-[#4A4A4A]">{fmtDep(gInfo?.departureTime)}</div>
+                                                        <div className="text-[#4A4A4A]">{fmtDep(gInfo?.departure_date, gInfo?.departure_time)}</div>
                                                         {fmtFlight(gInfo?.departureFlightNumber, gInfo?.departureAirport) && (
                                                           <div className="text-xs text-gray-400 mt-0.5">{fmtFlight(gInfo?.departureFlightNumber, gInfo?.departureAirport)}</div>
                                                         )}
@@ -3292,7 +3288,7 @@ export default function AdminMulaqatPage() {
                                                       </td>
                                                       <td className="px-3 py-2 text-[#4A4A4A]">{formatDesignation(g.designation)}</td>
                                                       <td className="px-3 py-2 whitespace-nowrap">
-                                                        <div className="text-[#4A4A4A]">{fmtDep(g.departureTime)}</div>
+                                                        <div className="text-[#4A4A4A]">{fmtDep(g?.departure_date, g?.departure_time)}</div>
                                                         {fmtFlight(g.departureFlightNumber, g.departureAirport) && (
                                                           <div className="text-xs text-gray-400 mt-0.5">{fmtFlight(g.departureFlightNumber, g.departureAirport)}</div>
                                                         )}
@@ -3471,7 +3467,7 @@ export default function AdminMulaqatPage() {
                                     </td>
                                     <td className="px-3 py-3 text-sm text-[#4A4A4A]">{formatDesignation(guest.designation)}</td>
                                     <td className="px-3 py-3 whitespace-nowrap">
-                                      <div className="text-sm text-[#4A4A4A]">{fmtDep(guest.departureTime)}</div>
+                                      <div className="text-sm text-[#4A4A4A]">{fmtDep(guest?.departure_date, guest?.departure_time)}</div>
                                       {fmtFlight(guest.departureFlightNumber, guest.departureAirport) && (
                                         <div className="text-xs text-gray-400 mt-0.5">{fmtFlight(guest.departureFlightNumber, guest.departureAirport)}</div>
                                       )}
@@ -4002,7 +3998,7 @@ export default function AdminMulaqatPage() {
                               </div>
                             </td>
                             <td className="px-3 py-2.5 text-xs whitespace-nowrap">
-                              <div className="text-[#4A4A4A]">{fmtDep(guestInfo?.departureTime)}</div>
+                              <div className="text-[#4A4A4A]">{fmtDep(guestInfo?.departure_date, guestInfo?.departure_time)}</div>
                               {fmtFlight(guestInfo?.departureFlightNumber, guestInfo?.departureAirport) && (
                                 <div className="text-xs text-gray-400 mt-0.5">{fmtFlight(guestInfo?.departureFlightNumber, guestInfo?.departureAirport)}</div>
                               )}

@@ -196,11 +196,13 @@ const editSchema = z.object({
   arrivalFlightNumber: z.string().optional(),
   arrivalAirport: z.string().optional(),
   arrivalTerminal: z.string().optional(),
-  arrivalTime: z.string().optional(),
+  arrival_date: z.string().optional(),
+  arrival_time: z.string().optional(),
   departureFlightNumber: z.string().optional(),
   departureAirport: z.string().optional(),
   departureTerminal: z.string().optional(),
-  departureTime: z.string().optional(),
+  departure_date: z.string().optional(),
+  departure_time: z.string().optional(),
 });
 
 type EditFormData = z.infer<typeof editSchema>;
@@ -267,11 +269,13 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
         arrivalFlightNumber: guest.arrivalFlightNumber ?? '',
         arrivalAirport: guest.arrivalAirport ?? '',
         arrivalTerminal: guest.arrivalTerminal ?? '',
-        arrivalTime: guest.arrivalTime ?? '',
+        arrival_date: guest.arrival_date ?? '',
+        arrival_time: guest.arrival_time ?? '',
         departureFlightNumber: guest.departureFlightNumber ?? '',
         departureAirport: guest.departureAirport ?? '',
         departureTerminal: guest.departureTerminal ?? '',
-        departureTime: guest.departureTime ?? '',
+        departure_date: guest.departure_date ?? '',
+        departure_time: guest.departure_time ?? '',
       });
       setRoomInput(guest.roomAssignment ?? '');
       setEditPassportCountry(guest.passportCountry ?? '');
@@ -323,11 +327,13 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
       arrivalFlightNumber: data.arrivalFlightNumber || undefined,
       arrivalAirport: data.arrivalAirport || undefined,
       arrivalTerminal: data.arrivalTerminal || undefined,
-      arrivalTime: data.arrivalTime || undefined,
+      arrival_date: data.arrival_date || undefined,
+      arrival_time: data.arrival_time || undefined,
       departureFlightNumber: data.departureFlightNumber || undefined,
       departureAirport: data.departureAirport || undefined,
       departureTerminal: data.departureTerminal || undefined,
-      departureTime: data.departureTime || undefined,
+      departure_date: data.departure_date || undefined,
+      departure_time: data.departure_time || undefined,
     });
     toast.success('Guest updated successfully');
     setIsEditMode(false);
@@ -352,11 +358,13 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
       arrivalFlightNumber: guest.arrivalFlightNumber ?? '',
       arrivalAirport: guest.arrivalAirport ?? '',
       arrivalTerminal: guest.arrivalTerminal ?? '',
-      arrivalTime: guest.arrivalTime ?? '',
+      arrival_date: guest.arrival_date ?? '',
+      arrival_time: guest.arrival_time ?? '',
       departureFlightNumber: guest.departureFlightNumber ?? '',
       departureAirport: guest.departureAirport ?? '',
       departureTerminal: guest.departureTerminal ?? '',
-      departureTime: guest.departureTime ?? '',
+      departure_date: guest.departure_date ?? '',
+      departure_time: guest.departure_time ?? '',
     });
     setEditPassportCountry(guest.passportCountry ?? '');
     setEditDesignations(Array.isArray(guest.designation) ? guest.designation : (guest.designation ? [guest.designation] : []));
@@ -759,13 +767,15 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
                             placeholder="e.g. T2"
                           />
                         </div>
-                        <div>
-                          <Label className="text-sm">Date &amp; Time</Label>
-                          <Input
-                            type="datetime-local"
-                            {...register('arrivalTime')}
-                            className="mt-1"
-                          />
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-sm">Arrival Date</Label>
+                            <Input type="date" {...register('arrival_date')} className="mt-1" />
+                          </div>
+                          <div>
+                            <Label className="text-sm">Arrival Time</Label>
+                            <Input type="time" {...register('arrival_time')} className="mt-1" />
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -798,13 +808,15 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
                             placeholder="e.g. T2"
                           />
                         </div>
-                        <div>
-                          <Label className="text-sm">Date &amp; Time</Label>
-                          <Input
-                            type="datetime-local"
-                            {...register('departureTime')}
-                            className="mt-1"
-                          />
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-sm">Departure Date</Label>
+                            <Input type="date" {...register('departure_date')} className="mt-1" />
+                          </div>
+                          <div>
+                            <Label className="text-sm">Departure Time</Label>
+                            <Input type="time" {...register('departure_time')} className="mt-1" />
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -822,7 +834,10 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
                       <InfoRow
                         label="Date & Time"
                         value={
-                          formatDateTime(guest.arrivalTime) === '—' ? undefined : formatDateTime(guest.arrivalTime)
+                          (() => {
+                            const s = formatDateTime(guest.arrival_date, guest.arrival_time);
+                            return s === '—' ? undefined : s;
+                          })()
                         }
                       />
                     </div>
@@ -838,7 +853,10 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
                       <InfoRow
                         label="Date & Time"
                         value={
-                          formatDateTime(guest.departureTime) === '—' ? undefined : formatDateTime(guest.departureTime)
+                          (() => {
+                            const s = formatDateTime(guest.departure_date, guest.departure_time);
+                            return s === '—' ? undefined : s;
+                          })()
                         }
                       />
                     </div>

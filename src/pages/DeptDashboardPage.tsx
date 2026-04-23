@@ -12,7 +12,9 @@ import { formatDate as sharedFormatDate } from '@/utils/dateHelpers';
 import { getStatusBadgeClass } from '@/lib/constants';
 import { useDepartments } from '@/hooks/useDepartments';
 import { GuestViewModal } from '@/components/GuestViewModal';
+import { GuestCalendarWidget } from '@/components/shared/GuestCalendarWidget';
 import { supabase } from '@/lib/supabase';
+import { formatTime } from '@/utils/dateHelpers';
 import type { Guest } from '@/types';
 
 const shortenRef = (ref: string) =>
@@ -88,12 +90,12 @@ export default function DeptDashboardPage() {
   // ── Urgent counts ─────────────────────────────────────────────────────────────
 
   const arrivingTodayNoRoom = useMemo(
-    () => deptGuests.filter(g => g.arrivalTime?.startsWith(todayStr) && !g.roomAssignment).length,
+    () => deptGuests.filter(g => (g.arrival_date === todayStr) && !g.roomAssignment).length,
     [deptGuests, todayStr],
   );
 
   const arrivingTomorrowNoRoom = useMemo(
-    () => deptGuests.filter(g => g.arrivalTime?.startsWith(tomorrowStr) && !g.roomAssignment).length,
+    () => deptGuests.filter(g => (g.arrival_date === tomorrowStr) && !g.roomAssignment).length,
     [deptGuests, tomorrowStr],
   );
 
@@ -107,10 +109,10 @@ export default function DeptDashboardPage() {
   const dailyStats = useMemo(() =>
     next7Days.map(dayStr => ({
       dayStr,
-      arriving:  deptGuests.filter(g => g.arrivalTime?.startsWith(dayStr)).length,
-      departing: deptGuests.filter(g => g.departureTime?.startsWith(dayStr)).length,
-      net: deptGuests.filter(g => g.arrivalTime?.startsWith(dayStr)).length
-         - deptGuests.filter(g => g.departureTime?.startsWith(dayStr)).length,
+      arriving:  deptGuests.filter(g => (g.arrival_date === dayStr)).length,
+      departing: deptGuests.filter(g => (g.departure_date === dayStr)).length,
+      net: deptGuests.filter(g => (g.arrival_date === dayStr)).length
+         - deptGuests.filter(g => (g.departure_date === dayStr)).length,
     })), [deptGuests, next7Days]);
 
   // ── Fetch occupancy + rooms available soon ────────────────────────────────────
@@ -374,7 +376,7 @@ export default function DeptDashboardPage() {
                           )}
                         </div>
                         <div className="text-xs text-gray-400 mt-0.5">
-                          Arrives: {fmtDate(g.arrivalTime)} &nbsp;|&nbsp; Departs: {fmtDate(g.departureTime)}
+                          Arrives: {fmtDate(g.arrival_date)} &nbsp;|&nbsp; Departs: {fmtDate(g.departure_date)}
                         </div>
                       </div>
                     </div>
@@ -582,6 +584,36 @@ export default function DeptDashboardPage() {
                 )}
               </div>
             )}
+
+            {/* ── 📅 Calendar widget (shared) ─────────────────────────────────── */}
+            <GuestCalendarWidget
+              guests={deptGuests}
+              title={`📅 ${dept || 'Department'} — Upcoming Schedule`}
+              onGuestClick={(id) => setViewGuestId(id)}
+              renderGuestLine={(g, type) => {
+                const time     = type === 'arrival' ? g.arrival_time     : g.departure_time;
+                const flight   = type === 'arrival' ? g.arrivalFlightNumber : g.departureFlightNumber;
+                const airport  = type === 'arrival' ? g.arrivalAirport   : g.departureAirport;
+                const terminal = type === 'arrival' ? g.arrivalTerminal  : g.departureTerminal;
+                const dotCls   = type === 'arrival' ? 'bg-green-500' : 'bg-yellow-500';
+                const meta = [flight, airport, terminal ? `T${terminal}` : ''].filter(Boolean).join(' · ');
+                return (
+                  <>
+                    <span className={`w-2 h-2 rounded-full ${dotCls} shrink-0`} />
+                    <span className="text-gray-500">{formatTime(time)}</span>
+                    <span className="font-medium text-gray-800">{g.fullName}</span>
+                    {meta && <span className="text-gray-400 text-xs">{meta}</span>}
+                    {g.transportDepartmentName ? (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-[#F0F7F4] text-[#2D5A45] border border-[#D4E9DC]">
+                        {g.transportDepartmentName}
+                      </span>
+                    ) : (
+                      <span className="text-red-600 text-[11px] font-medium">⚠️ No transport</span>
+                    )}
+                  </>
+                );
+              }}
+            />
 
             {/* ── 📅 Upcoming Arrivals & Departures ───────────────────────────────── */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
