@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { formatDate, formatTime } from '@/utils/dateHelpers';
 import { AlertTriangle, ChevronDown, MapPin } from 'lucide-react';
 import {
   Dialog,
@@ -61,11 +62,9 @@ export interface PlaceGuestDialogProps {
 
 function formatDT(dt?: string) {
   if (!dt) return null;
-  const d = new Date(dt);
-  return {
-    date: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-    time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-  };
+  const date = formatDate(dt);
+  const time = formatTime(dt);
+  return { date: date === '—' ? '' : date, time: time === '—' ? '' : time };
 }
 
 export function PlaceGuestDialog({
@@ -325,7 +324,7 @@ export function PlaceGuestDialog({
                         {(room.available_from || room.available_to) && (
                           <div className="text-xs text-gray-400">
                             {room.available_from && room.available_to
-                              ? `${new Date(room.available_from + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${new Date(room.available_to + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
+                              ? `${new Date(room.available_from + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${new Date(room.available_to + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
                               : room.available_from ? `From ${room.available_from}` : `Until ${room.available_to}`}
                           </div>
                         )}

@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { formatDate, formatDateShort, formatTime } from '@/utils/dateHelpers';
 import { ChevronDown, ChevronRight, Inbox, Eye, MapPin, Search, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
@@ -512,8 +513,8 @@ export default function DeptIncomingPage() {
     if (td?.isSeasonal && td.activeFrom && td.activeTo) {
       const today = new Date().toISOString().substring(0, 10);
       if (today < td.activeFrom || today > td.activeTo) {
-        const from = new Date(td.activeFrom).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-        const to   = new Date(td.activeTo).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        const from = formatDate(td.activeFrom);
+        const to   = formatDate(td.activeTo);
         toast.warning(`${tdName} is not active yet (active ${from} — ${to})`, { duration: 5000 });
       }
     }
@@ -869,8 +870,8 @@ export default function DeptIncomingPage() {
                               {row.arrivalTime ? (
                                 <div>
                                   <div className="text-xs text-[#1A1A1A]">
-                                    {new Date(row.arrivalTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                                    {' '}{new Date(row.arrivalTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                    {formatDateShort(row.arrivalTime)}
+                                    {' '}{formatTime(row.arrivalTime)}
                                   </div>
                                   {(row.arrivalFlightNumber || row.arrivalAirport) && (
                                     <div className="text-xs text-gray-400">
@@ -886,8 +887,8 @@ export default function DeptIncomingPage() {
                               {row.departureTime ? (
                                 <div>
                                   <div className="text-xs text-[#1A1A1A]">
-                                    {new Date(row.departureTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                                    {' '}{new Date(row.departureTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                    {formatDateShort(row.departureTime)}
+                                    {' '}{formatTime(row.departureTime)}
                                   </div>
                                   {row.departureAirport && (
                                     <div className="text-xs text-gray-400">{row.departureAirport}</div>

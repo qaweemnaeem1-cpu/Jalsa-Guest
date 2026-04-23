@@ -1,622 +1,663 @@
 /**
- * /admin/drivers — all drivers across the system (Super Admin view).
- * Sub-tabs: Drivers | Tasks | Suggestions
+ * /admin/drivers — one-page transport management for Super Admin.
+ * Shows ALL drivers grouped by transport dept, ALL guests needing pickup/dropoff.
  */
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import { SortableHeader, sortData } from '@/components/SortableHeader';
-import {
-  Plus, Eye, Pencil, Trash2, Car, Users, CheckCircle2, ClipboardList, FileText,
-  MessageCircle, Wrench, ChevronDown, ChevronUp, ArrowLeftRight, BarChart3, MapPin, ExternalLink,
-} from 'lucide-react';
-import { calculateETA, formatETA, isETAOverdue, getMapLink } from '@/lib/driverMatchUtils';
-import { toast } from 'sonner';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { useAuth } from '@/hooks/useAuth';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import {
+  Phone, MapPin, MessageCircle, ChevronDown, ChevronUp, Loader2, Plus, Car, Check,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { SidebarUserFooter } from '@/components/SidebarUserFooter';
+import { TopBar } from '@/components/TopBar';
 import { SUPER_ADMIN_NAV } from '@/lib/navItems';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { DriverFormDialog, type DriverRecord } from '@/components/DriverFormDialog';
-import { DriverTaskViewDialog } from '@/components/DriverTaskViewDialog';
-import { CreateTaskDialog, type DriverInfo } from '@/components/CreateTaskDialog';
-import { DailyReportDialog } from '@/components/DailyReportDialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import { getMapLink } from '@/lib/driverMatchUtils';
 import { DriverMessagesDialog } from '@/components/DriverMessagesDialog';
-import { AddMaintenanceDialog, ViewMaintenanceLogDialog } from '@/components/VehicleMaintenanceDialog';
-import { ROLE_LABELS } from '@/lib/constants';
-import { TopBar } from '@/components/TopBar';
 import { useTransportDepts } from '@/hooks/useTransportDepartments';
+import type { TransportDepartment } from '@/types';
+import { formatDate, formatTime, formatDateShort, formatTimestampTime } from '@/utils/dateHelpers';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface DriverRow extends DriverRecord {
+interface DriverRow {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string | null;
+  vehicle_type?: string | null;
+  vehicle_model?: string | null;
+  vehicle_registration?: string | null;
+  vehicle_capacity?: number | null;
+  vehicle_available_from?: string | null;
+  vehicle_available_to?: string | null;
+  is_head_driver?: boolean;
+  is_available?: boolean;
+  transport_department_id?: string | null;
   tasksToday: number;
+  hasActiveTask: boolean;
+}
+
+interface GuestRow {
+  id: string;
+  full_name: string;
+  country?: string | null;
+  contact_number?: string | null;
+  arrival_time?: string | null;
+  departure_time?: string | null;
+  flight_number?: string | null;
+  arrival_airport?: string | null;
+  arrival_terminal?: string | null;
+  departure_airport?: string | null;
+  departure_terminal?: string | null;
+  placed_location?: string | null;
+  transport_department_id?: string | null;
+  family_members?: { id: string }[];
 }
 
 interface TaskRow {
   id: string;
   driver_id: string;
-  driver_name?: string;
+  driver_name?: string | null;
+  guest_id?: string | null;
+  guest_name?: string | null;
   task_type: string;
   status: string;
-  is_suggestion: boolean;
-  scheduled_date: string;
-  scheduled_time?: string;
+  scheduled_date?: string | null;
+  scheduled_time?: string | null;
   started_at?: string | null;
-  guest_name?: string;
-  pickup_location?: string;
-  dropoff_location?: string;
-  passenger_count?: number;
-  location?: string;
-  department?: string;
-  notes?: string;
+  completed_at?: string | null;
+  pickup_location?: string | null;
+  dropoff_location?: string | null;
+  transport_department_id?: string | null;
 }
 
-interface WeeklyReportPrefs {
-  driverList: boolean;
-  taskSummary: boolean;
-  completionRates: boolean;
-  mileageData: boolean;
-  costData: boolean;
-  passengerCounts: boolean;
-  vehicleStatus: boolean;
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const todayStr = new Date().toISOString().slice(0, 10);
+
+const DEPT_COLOR_CYCLE = [
+  { header: 'text-green-700 bg-green-50 border-green-200',    dot: 'bg-green-500'  },
+  { header: 'text-blue-700 bg-blue-50 border-blue-200',       dot: 'bg-blue-500'   },
+  { header: 'text-purple-700 bg-purple-50 border-purple-200', dot: 'bg-purple-500' },
+  { header: 'text-amber-700 bg-amber-50 border-amber-200',    dot: 'bg-amber-500'  },
+  { header: 'text-teal-700 bg-teal-50 border-teal-200',       dot: 'bg-teal-500'   },
+  { header: 'text-rose-700 bg-rose-50 border-rose-200',       dot: 'bg-rose-500'   },
+];
+
+function fmtDateTime(iso?: string | null): string {
+  if (!iso) return '—';
+  // driver_tasks.completed_at etc. — full ISO timestamps
+  return `${formatDateShort(iso)} ${formatTimestampTime(iso)}`;
 }
 
-type Tab = 'drivers' | 'tasks' | 'suggestions';
+const fmtDate = (iso?: string | null): string => iso ? formatDate(iso) : '';
+const fmtTime = (iso?: string | null): string => formatTime(iso);
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const TYPE_LABELS: Record<string, string> = {
-  airport_pickup: 'Airport Pickup', airport_dropoff: 'Airport Drop-off',
-  mulaqat_transport: 'Mulaqat Transport', other: 'Other',
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  suggested: 'bg-blue-100 text-blue-700',
-  pending: 'bg-amber-100 text-amber-700',
-  in_progress: 'bg-emerald-100 text-emerald-700',
-  completed: 'bg-green-100 text-green-700',
-  cancelled: 'bg-red-100 text-red-700',
-};
-
-const DEFAULT_WEEKLY_PREFS: WeeklyReportPrefs = {
-  driverList: true, taskSummary: true, completionRates: true,
-  mileageData: false, costData: false, passengerCounts: false, vehicleStatus: true,
-};
-
-function loadWeeklyPrefs(): WeeklyReportPrefs {
-  try {
-    const raw = localStorage.getItem('fleet_weekly_report_columns');
-    if (raw) return { ...DEFAULT_WEEKLY_PREFS, ...JSON.parse(raw) };
-  } catch { /* ignore */ }
-  return { ...DEFAULT_WEEKLY_PREFS };
+function driverStatus(driver: DriverRow): 'available' | 'on_task' | 'off_duty' {
+  if (driver.hasActiveTask) return 'on_task';
+  if (!driver.is_available) return 'off_duty';
+  return 'available';
 }
 
-function getWeekRange() {
-  const today = new Date();
-  const day = today.getDay();
-  const diffToMon = day === 0 ? -6 : 1 - day;
-  const mon = new Date(today);
-  mon.setDate(today.getDate() + diffToMon);
-  const sun = new Date(mon);
-  sun.setDate(mon.getDate() + 6);
-  return {
-    from: mon.toISOString().substring(0, 10),
-    to: sun.toISOString().substring(0, 10),
+function StatusDot({ status }: { status: 'available' | 'on_task' | 'off_duty' }) {
+  const cls = status === 'available' ? 'bg-green-500' : status === 'on_task' ? 'bg-blue-500' : 'bg-yellow-400';
+  const title = status === 'available' ? 'Available' : status === 'on_task' ? 'On Task' : 'Off Duty';
+  return <span className={`inline-block w-2.5 h-2.5 rounded-full ${cls} shrink-0`} title={title} />;
+}
+
+function vehicleAvailLabel(driver: DriverRow): { label: string; warn: 'none' | 'amber' | 'red' } {
+  if (!driver.vehicle_available_from && !driver.vehicle_available_to) {
+    return { label: 'Always', warn: 'none' };
+  }
+  const now = Date.now();
+  const toMs = driver.vehicle_available_to
+    ? new Date(driver.vehicle_available_to + (driver.vehicle_available_to.includes('T') ? '' : 'T12:00:00')).getTime()
+    : null;
+  if (toMs && toMs < now) {
+    return { label: `${fmtDate(driver.vehicle_available_from)} — ${fmtDate(driver.vehicle_available_to)} EXPIRED`, warn: 'red' };
+  }
+  if (toMs && toMs < now + 7 * 86400000) {
+    return { label: `${fmtDate(driver.vehicle_available_from)} — ${fmtDate(driver.vehicle_available_to)}`, warn: 'amber' };
+  }
+  const from = driver.vehicle_available_from ? fmtDate(driver.vehicle_available_from) : '';
+  const to   = driver.vehicle_available_to   ? fmtDate(driver.vehicle_available_to)   : '';
+  const label = from && to ? `${from} — ${to}` : from ? `From ${from}` : to ? `Until ${to}` : 'Always';
+  return { label, warn: 'none' };
+}
+
+function passengerLabel(guest: GuestRow): string {
+  const total = 1 + (guest.family_members?.length ?? 0);
+  return total === 1 ? '1 passenger' : `Family (${total})`;
+}
+
+function taskDuration(task: TaskRow): string {
+  if (!task.started_at || !task.completed_at) return '';
+  const ms   = new Date(task.completed_at).getTime() - new Date(task.started_at).getTime();
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return `${mins} min`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+// ── Add/Edit Driver Dialog ────────────────────────────────────────────────────
+
+interface AdminDriverFormProps {
+  open: boolean;
+  onClose: () => void;
+  driver: DriverRow | null;
+  transportDepts: TransportDepartment[];
+  onSaved: (driver: DriverRow) => void;
+}
+
+function AdminDriverFormDialog({ open, onClose, driver, transportDepts, onSaved }: AdminDriverFormProps) {
+  const isEdit = !!driver;
+  const [name, setName]         = useState('');
+  const [email, setEmail]       = useState('');
+  const [phone, setPhone]       = useState('');
+  const [password, setPassword] = useState('');
+  const [tdId, setTdId]         = useState('');
+  const [vType, setVType]       = useState('');
+  const [vModel, setVModel]     = useState('');
+  const [vReg, setVReg]         = useState('');
+  const [vCap, setVCap]         = useState('');
+  const [isHead, setIsHead]     = useState(false);
+  const [saving, setSaving]     = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    if (driver) {
+      setName(driver.name); setEmail(driver.email);
+      setPhone(driver.phone ?? ''); setPassword('');
+      setTdId(driver.transport_department_id ?? '');
+      setVType(driver.vehicle_type ?? ''); setVModel(driver.vehicle_model ?? '');
+      setVReg(driver.vehicle_registration ?? '');
+      setVCap(driver.vehicle_capacity != null ? String(driver.vehicle_capacity) : '');
+      setIsHead(driver.is_head_driver ?? false);
+    } else {
+      setName(''); setEmail(''); setPhone(''); setPassword('');
+      setTdId(transportDepts[0]?.id ?? '');
+      setVType(''); setVModel(''); setVReg(''); setVCap(''); setIsHead(false);
+    }
+  }, [open, driver, transportDepts]);
+
+  const handleSave = async () => {
+    if (!name.trim()) { toast.error('Name is required'); return; }
+    if (!email.trim()) { toast.error('Email is required'); return; }
+    if (!isEdit && !password.trim()) { toast.error('Password is required'); return; }
+    if (!tdId) { toast.error('Transport team is required'); return; }
+    const selectedTd = transportDepts.find(t => t.id === tdId);
+    setSaving(true);
+    try {
+      const common = {
+        name: name.trim(), email: email.trim(), phone: phone.trim() || null,
+        transport_department_id: tdId,
+        transport_department_name: selectedTd?.name ?? null,
+        vehicle_type: vType || null, vehicle_model: vModel.trim() || null,
+        vehicle_registration: vReg.trim() || null,
+        vehicle_capacity: vCap ? Number(vCap) : null,
+        is_head_driver: isHead,
+      };
+      if (isEdit && driver) {
+        const updates: Record<string, unknown> = { ...common };
+        if (password.trim()) updates.password_hash = password.trim();
+        const { data, error } = await supabase.from('users').update(updates).eq('id', driver.id).select().single();
+        if (error) throw error;
+        toast.success('Driver updated');
+        onSaved({ ...(data as DriverRow), tasksToday: driver.tasksToday, hasActiveTask: driver.hasActiveTask });
+      } else {
+        const { data, error } = await supabase.from('users').insert({
+          ...common, password_hash: password.trim(), role: 'driver', is_available: true,
+        }).select().single();
+        if (error) throw error;
+        toast.success('Driver added');
+        onSaved({ ...(data as DriverRow), tasksToday: 0, hasActiveTask: false });
+      }
+      onClose();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save driver');
+    } finally {
+      setSaving(false);
+    }
   };
-}
 
-// ── AlertCard helper ──────────────────────────────────────────────────────────
-
-function AlertCard({ type, icon, title, sub, onClick }: {
-  type: 'amber' | 'orange' | 'red' | 'blue';
-  icon: string; title: string; sub?: string; onClick?: () => void;
-}) {
-  const colors = {
-    amber:  'bg-amber-50 border-amber-200 text-amber-800',
-    orange: 'bg-orange-50 border-orange-200 text-orange-800',
-    red:    'bg-red-50 border-red-200 text-red-800',
-    blue:   'bg-blue-50 border-blue-200 text-blue-800',
-  };
   return (
-    <div onClick={onClick} className={`flex-1 min-w-[220px] border rounded-xl p-3 ${colors[type]} ${onClick ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}>
-      <div className="flex items-center gap-2 font-medium text-sm">{icon} {title}</div>
-      {sub && <div className="text-xs mt-1 opacity-75">{sub}</div>}
+    <Dialog open={open} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? 'Edit Driver' : 'Add Driver'}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-1">
+          <div className="space-y-1.5">
+            <Label>Name <span className="text-red-500">*</span></Label>
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="Driver name"
+              className="border-[#E8E3DB] focus:border-[#2D5A45] focus-visible:ring-[#2D5A45]" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Email <span className="text-red-500">*</span></Label>
+            <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="driver@example.com"
+              className="border-[#E8E3DB] focus:border-[#2D5A45] focus-visible:ring-[#2D5A45]" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Phone</Label>
+            <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+44 7000 000000"
+              className="border-[#E8E3DB] focus:border-[#2D5A45] focus-visible:ring-[#2D5A45]" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>
+              Password{!isEdit && <span className="text-red-500"> *</span>}
+              {isEdit && <span className="text-xs font-normal text-[#4A4A4A] ml-1">(leave blank to keep current)</span>}
+            </Label>
+            <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"
+              className="border-[#E8E3DB] focus:border-[#2D5A45] focus-visible:ring-[#2D5A45]" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Transport Team <span className="text-red-500">*</span></Label>
+            <select value={tdId} onChange={e => setTdId(e.target.value)}
+              className="w-full border border-[#E8E3DB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2D5A45] bg-white">
+              <option value="">Select team…</option>
+              {transportDepts.map(td => <option key={td.id} value={td.id}>{td.name}</option>)}
+            </select>
+          </div>
+          <div className="pt-1 border-t border-[#E8E3DB]">
+            <p className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider mb-3">Vehicle Details</p>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label>Vehicle Type</Label>
+                <select value={vType} onChange={e => setVType(e.target.value)}
+                  className="w-full border border-[#E8E3DB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2D5A45] bg-white">
+                  <option value="">None / Unknown</option>
+                  {['Saloon', 'MPV', 'Minibus', 'Coach', 'Van', 'SUV'].map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Model</Label>
+                  <Input value={vModel} onChange={e => setVModel(e.target.value)} placeholder="e.g. Toyota Alphard"
+                    className="border-[#E8E3DB] focus:border-[#2D5A45] focus-visible:ring-[#2D5A45]" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Registration</Label>
+                  <Input value={vReg} onChange={e => setVReg(e.target.value)} placeholder="e.g. AB12 CDE"
+                    className="border-[#E8E3DB] focus:border-[#2D5A45] focus-visible:ring-[#2D5A45]" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Passenger Capacity</Label>
+                <Input type="number" min="1" max="72" value={vCap} onChange={e => setVCap(e.target.value)} placeholder="e.g. 8"
+                  className="border-[#E8E3DB] focus:border-[#2D5A45] focus-visible:ring-[#2D5A45]" />
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <input type="checkbox" id="isHeadAdmin" checked={isHead} onChange={e => setIsHead(e.target.checked)}
+              className="accent-[#2D5A45] w-4 h-4" />
+            <label htmlFor="isHeadAdmin" className="text-sm cursor-pointer">Nazim Transport (head driver)</label>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving} className="bg-[#2D5A45] hover:bg-[#234839] text-white">
+            {saving ? <><Loader2 className="w-4 h-4 animate-spin mr-1.5" />Saving…</> : (isEdit ? 'Update' : 'Add Driver')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Section header ────────────────────────────────────────────────────────────
+
+function SectionHeader({ label, count }: { label: string; count?: number }) {
+  return (
+    <div className="flex items-center gap-3 mb-4">
+      <div className="h-px flex-1 bg-[#E8E3DB]" />
+      <div className="flex items-center gap-2 shrink-0">
+        <span className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">{label}</span>
+        {count !== undefined && (
+          <span className="text-xs font-bold bg-[#2D5A45] text-white px-1.5 py-0.5 rounded-full">{count}</span>
+        )}
+      </div>
+      <div className="h-px flex-1 bg-[#E8E3DB]" />
     </div>
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AdminDriversPage() {
-  const { user } = useAuth();
-  const navigate  = useNavigate();
-  const { pathname } = useLocation();
-
-  // core state
-  const [tab, setTab]           = useState<Tab>('drivers');
-  const [drivers, setDrivers]   = useState<DriverRow[]>([]);
-  const [tasks, setTasks]       = useState<TaskRow[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [overdueMaintCount, setOverdueMaintCount] = useState(0);
-  const [fleetOpen, setFleetOpen] = useState(true);
-
-  // filters
-  const [deptFilter, setDeptFilter]   = useState('');
-  const [locFilter, setLocFilter]     = useState('');
-  const [statFilter, setStatFilter]   = useState('');
-  const [tdFilter, setTdFilter]       = useState('');
-  const [taskStatus, setTaskStatus]   = useState('');
-
+  const { user }           = useAuth();
   const { transportDepts } = useTransportDepts();
+  const navigate           = useNavigate();
+  const location           = useLocation();
 
-  // drivers table sort
-  const [driverSortCol, setDriverSortCol] = useState<string | null>(null);
-  const [driverSortDir, setDriverSortDir] = useState<'asc' | 'desc'>('asc');
-  const handleDriverSort = (col: string) => {
-    if (driverSortCol === col) setDriverSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setDriverSortCol(col); setDriverSortDir('asc'); }
-  };
+  const [drivers, setDrivers]               = useState<DriverRow[]>([]);
+  const [pickupGuests, setPickupGuests]     = useState<GuestRow[]>([]);
+  const [dropoffGuests, setDropoffGuests]   = useState<GuestRow[]>([]);
+  const [tasks, setTasks]                   = useState<TaskRow[]>([]);
+  const [loading, setLoading]               = useState(true);
+  const [formOpen, setFormOpen]             = useState(false);
+  const [editDriver, setEditDriver]         = useState<DriverRow | null>(null);
+  const [msgDriver, setMsgDriver]           = useState<DriverRow | null>(null);
+  const [showMsgList, setShowMsgList]       = useState(false);
+  const [completedExpanded, setCompletedExpanded] = useState(false);
+  const [assigning, setAssigning]           = useState<Record<string, boolean>>({});
 
-  // existing dialogs
-  const [formOpen, setFormOpen]         = useState(false);
-  const [reportOpen, setReportOpen]     = useState(false);
-  const [editDriver, setEditDriver]     = useState<DriverRecord | null>(null);
-  const [viewDriver, setViewDriver]     = useState<DriverRecord | null>(null);
-  const [assignDriver, setAssignDriver] = useState<DriverRecord | null>(null);
-  const [msgDriver, setMsgDriver]       = useState<DriverRecord | null>(null);
-  const [deleteId, setDeleteId]         = useState<string | null>(null);
-  const [maintViewDriver, setMaintViewDriver] = useState<DriverRecord | null>(null);
-  const [maintAddDriver, setMaintAddDriver]   = useState<DriverRecord | null>(null);
-
-  // transfer dialog
-  const [transferTask, setTransferTask]         = useState<TaskRow | null>(null);
-  const [transferDept, setTransferDept]         = useState('');
-  const [transferLoc, setTransferLoc]           = useState('');
-  const [transferDriverId, setTransferDriverId] = useState('');
-  const [transferReason, setTransferReason]     = useState('');
-  const [transferring, setTransferring]         = useState(false);
-
-  // weekly report
-  const [weeklyReportOpen, setWeeklyReportOpen]           = useState(false);
-  const [weeklyReportPrefs, setWeeklyReportPrefs]         = useState<WeeklyReportPrefs>(loadWeeklyPrefs);
-  const [weeklyReportFrom, setWeeklyReportFrom]           = useState(() => getWeekRange().from);
-  const [weeklyReportTo, setWeeklyReportTo]               = useState(() => getWeekRange().to);
-  const [weeklyReportGenerating, setWeeklyReportGenerating] = useState(false);
-
-  const loadedRef = useRef(false);
-
-  // ── Fetch ─────────────────────────────────────────────────────────────────
+  // ── Fetch ─────────────────────────────────────────────────────────────────────
 
   const fetchAll = useCallback(async () => {
-    const today = new Date().toISOString().substring(0, 10);
-    const [driversRes, tasksRes, maintRes] = await Promise.all([
-      supabase.from('users')
-        .select('*')
-        .eq('role', 'driver'),
-      supabase.from('driver_tasks')
-        .select('id,driver_id,driver_name,task_type,status,is_suggestion,scheduled_date,scheduled_time,started_at,guest_name,pickup_location,dropoff_location,passenger_count,location,department,notes')
-        .gte('scheduled_date', today)
-        .order('scheduled_date', { ascending: true })
-        .order('scheduled_time', { ascending: true })
-        .limit(300),
-      supabase.from('vehicle_maintenance')
-        .select('id', { count: 'exact', head: true })
-        .lt('next_due_date', today)
-        .not('next_due_date', 'is', null),
+    const [driversRes, activeTasksRes, todayTasksRes, pickupRes, dropoffRes] = await Promise.all([
+      supabase.from('users').select('*').eq('role', 'driver')
+        .order('transport_department_id').order('is_head_driver', { ascending: false }).order('name'),
+      supabase.from('driver_tasks').select('*')
+        .in('status', ['pending', 'in_progress']).gte('scheduled_date', todayStr),
+      supabase.from('driver_tasks').select('driver_id, status')
+        .eq('scheduled_date', todayStr).neq('status', 'cancelled').neq('status', 'suggested'),
+      supabase.from('guests')
+        .select('id, full_name, country, contact_number, arrival_time, flight_number, arrival_airport, arrival_terminal, placed_location, transport_department_id, family_members(*)')
+        .gte('arrival_time', todayStr + 'T00:00:00').order('arrival_time'),
+      supabase.from('guests')
+        .select('id, full_name, country, contact_number, departure_time, flight_number, departure_airport, departure_terminal, placed_location, transport_department_id, family_members(*)')
+        .gte('departure_time', todayStr + 'T00:00:00').order('departure_time'),
     ]);
 
-    const countMap: Record<string, number> = {};
-    for (const t of (tasksRes.data ?? []) as TaskRow[]) {
-      if (t.scheduled_date === today && t.status !== 'cancelled' && t.status !== 'suggested') {
-        countMap[t.driver_id] = (countMap[t.driver_id] ?? 0) + 1;
-      }
+    const taskCountMap: Record<string, number> = {};
+    const activeSet = new Set<string>();
+    for (const t of todayTasksRes.data ?? []) {
+      taskCountMap[t.driver_id] = (taskCountMap[t.driver_id] ?? 0) + 1;
     }
-    setDrivers((driversRes.data ?? []).map(d => ({ ...d, tasksToday: countMap[d.id] ?? 0 })) as DriverRow[]);
-    setTasks((tasksRes.data ?? []) as TaskRow[]);
-    setOverdueMaintCount(maintRes.count ?? 0);
+    for (const t of activeTasksRes.data ?? []) {
+      if (t.status === 'in_progress') activeSet.add(t.driver_id);
+    }
+    setDrivers((driversRes.data ?? []).map(d => ({
+      ...d, tasksToday: taskCountMap[d.id] ?? 0, hasActiveTask: activeSet.has(d.id),
+    })));
+
+    const allGuestIds = [
+      ...(pickupRes.data ?? []).map(g => g.id),
+      ...(dropoffRes.data ?? []).map(g => g.id),
+    ];
+    const completedRes = allGuestIds.length > 0
+      ? await supabase.from('driver_tasks').select('guest_id, task_type')
+          .in('guest_id', allGuestIds).eq('status', 'completed')
+      : { data: [] };
+    const completedPickup  = new Set<string>();
+    const completedDropoff = new Set<string>();
+    for (const t of completedRes.data ?? []) {
+      if (t.task_type === 'airport_pickup')  completedPickup.add(t.guest_id);
+      if (t.task_type === 'airport_dropoff') completedDropoff.add(t.guest_id);
+    }
+    setPickupGuests((pickupRes.data ?? []).filter(g => !completedPickup.has(g.id)) as GuestRow[]);
+    setDropoffGuests((dropoffRes.data ?? []).filter(g => !completedDropoff.has(g.id)) as GuestRow[]);
+
+    const completedTodayRes = await supabase.from('driver_tasks').select('*')
+      .eq('status', 'completed').eq('scheduled_date', todayStr);
+    setTasks([...(activeTasksRes.data ?? []), ...(completedTodayRes.data ?? [])] as TaskRow[]);
     setLoading(false);
   }, []);
 
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // ── Real-time ─────────────────────────────────────────────────────────────────
+
   useEffect(() => {
-    if (loadedRef.current) return;
-    loadedRef.current = true;
-    fetchAll();
+    const channel = supabase.channel('admin-drivers-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'driver_tasks' }, () => fetchAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => fetchAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'guests' }, () => fetchAll())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [fetchAll]);
 
-  useEffect(() => {
-    localStorage.setItem('fleet_weekly_report_columns', JSON.stringify(weeklyReportPrefs));
-  }, [weeklyReportPrefs]);
+  // ── Assignment ────────────────────────────────────────────────────────────────
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
-
-  const handleDelete = async (id: string) => {
-    const { error } = await supabase.from('users').delete().eq('id', id);
-    if (error) { toast.error('Failed to delete driver'); return; }
-    toast.success('Driver removed');
-    setDrivers(prev => prev.filter(d => d.id !== id));
-    setDeleteId(null);
-  };
-
-  const handleSaved = (saved: DriverRecord) => {
-    setDrivers(prev => {
-      const idx = prev.findIndex(d => d.id === saved.id);
-      if (idx >= 0) {
-        const next = [...prev]; next[idx] = { ...next[idx], ...saved }; return next;
-      }
-      return [{ ...saved, tasksToday: 0 }, ...prev];
-    });
-  };
-
-  const handleTransfer = async () => {
-    if (!transferTask || !transferDriverId) { toast.error('Select a driver'); return; }
-    setTransferring(true);
-    const target = drivers.find(d => d.id === transferDriverId);
-    if (!target) { setTransferring(false); return; }
-    const oldLoc = transferTask.location ?? transferTask.department ?? 'original location';
-    const noteAddition = `Transferred from ${oldLoc}${transferReason ? ': ' + transferReason : ''}`;
-    const newNotes = [transferTask.notes, noteAddition].filter(Boolean).join('\n');
-    const { error } = await supabase.from('driver_tasks').update({
-      driver_id: transferDriverId,
-      driver_name: target.name,
-      location: target.location,
-      department: target.department,
-      notes: newNotes,
-    }).eq('id', transferTask.id);
-    setTransferring(false);
-    if (error) { toast.error('Transfer failed'); return; }
-    toast.success(`Task transferred to ${target.name}${target.location ? ' at ' + target.location : ''}`);
-    setTransferTask(null); setTransferDept(''); setTransferLoc(''); setTransferDriverId(''); setTransferReason('');
-    loadedRef.current = false; fetchAll();
-  };
-
-  const handleGenerateWeeklyReport = async () => {
-    setWeeklyReportGenerating(true);
+  const handleAssign = async (
+    guest: GuestRow,
+    driverId: string,
+    taskType: 'airport_pickup' | 'airport_dropoff',
+  ) => {
+    const driver = drivers.find(d => d.id === driverId);
+    if (!driver) return;
+    const key = `${guest.id}_${taskType}`;
+    setAssigning(prev => ({ ...prev, [key]: true }));
     try {
-      const [driversRes, tasksRes] = await Promise.all([
-        supabase.from('users')
-          .select('id,name,email,phone,location,department,vehicle_type,vehicle_model,vehicle_registration,vehicle_capacity,is_available')
-          .eq('role', 'driver'),
-        supabase.from('driver_tasks')
-          .select('id,driver_id,driver_name,task_type,status,scheduled_date,passenger_count,location,department')
-          .gte('scheduled_date', weeklyReportFrom)
-          .lte('scheduled_date', weeklyReportTo)
-          .neq('status', 'cancelled')
-          .neq('status', 'suggested'),
-      ]);
+      const timeField  = taskType === 'airport_pickup' ? guest.arrival_time : guest.departure_time;
+      const airport    = taskType === 'airport_pickup' ? guest.arrival_airport : guest.departure_airport;
+      const terminal   = taskType === 'airport_pickup' ? guest.arrival_terminal : guest.departure_terminal;
+      const pickupLoc  = taskType === 'airport_pickup'
+        ? [airport, terminal].filter(Boolean).join(' ')
+        : guest.placed_location ?? '';
+      const dropoffLoc = taskType === 'airport_pickup'
+        ? guest.placed_location ?? ''
+        : [airport, terminal].filter(Boolean).join(' ');
 
-      const allDrivers = (driversRes.data ?? []) as DriverRow[];
-      const allTasks   = (tasksRes.data ?? []) as TaskRow[];
+      const existing = tasks.find(t =>
+        t.guest_id === guest.id && t.task_type === taskType &&
+        t.status !== 'completed' && t.status !== 'cancelled'
+      );
 
-      const doc = new jsPDF('landscape');
-      const pageW = 297, pageH = 210, center = pageW / 2, margin = 14;
-      const lastY = () => (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
-
-      const fmtD = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-
-      // Page 1: Fleet Summary
-      doc.setFontSize(18); doc.setFont('helvetica', 'bold');
-      doc.text('JALSA SALANA UK 2026', center, 14, { align: 'center' });
-      doc.setFontSize(12); doc.text('WEEKLY FLEET REPORT', center, 21, { align: 'center' });
-      doc.setFontSize(9); doc.setFont('helvetica', 'normal');
-      doc.text(`Week: ${fmtD(weeklyReportFrom)} — ${fmtD(weeklyReportTo)}`, center, 27, { align: 'center' });
-      doc.setLineWidth(0.4); doc.line(margin, 30, pageW - margin, 30);
-
-      const totalTasks = allTasks.length;
-      const completedTasks = allTasks.filter(t => t.status === 'completed').length;
-      const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-
-      autoTable(doc, {
-        startY: 35,
-        head: [['Metric', 'Value']],
-        body: [
-          ['Total Drivers', String(allDrivers.length)],
-          ['Available Now', String(allDrivers.filter(d => d.is_available).length)],
-          ['Total Tasks (week)', String(totalTasks)],
-          ['Completed', `${completedTasks} (${completionRate}%)`],
-          ['Pending / In Progress', String(totalTasks - completedTasks)],
-        ],
-        styles: { fontSize: 9, cellPadding: 3 },
-        headStyles: { fillColor: [45, 90, 69] as [number, number, number], textColor: 255 },
-        theme: 'grid',
-        margin: { left: margin, right: pageW / 2 + 10 },
-      });
-
-      // Department breakdown (right side same page)
-      const deptMap: Record<string, { drivers: number; tasks: number; completed: number }> = {};
-      for (const d of allDrivers) {
-        const dept = d.department ?? 'Unknown';
-        if (!deptMap[dept]) deptMap[dept] = { drivers: 0, tasks: 0, completed: 0 };
-        deptMap[dept].drivers++;
-      }
-      for (const t of allTasks) {
-        const dept = t.department ?? 'Unknown';
-        if (!deptMap[dept]) deptMap[dept] = { drivers: 0, tasks: 0, completed: 0 };
-        deptMap[dept].tasks++;
-        if (t.status === 'completed') deptMap[dept].completed++;
-      }
-
-      autoTable(doc, {
-        startY: 35,
-        head: [['Department', 'Drivers', 'Tasks', 'Done', 'Rate']],
-        body: Object.entries(deptMap).map(([dept, d]) => [
-          dept, String(d.drivers), String(d.tasks), String(d.completed),
-          d.tasks > 0 ? `${Math.round((d.completed / d.tasks) * 100)}%` : '—',
-        ]),
-        styles: { fontSize: 9, cellPadding: 3 },
-        headStyles: { fillColor: [45, 90, 69] as [number, number, number], textColor: 255 },
-        theme: 'grid',
-        margin: { left: pageW / 2 + 10, right: margin },
-      });
-
-      // Page 2+: Per department driver breakdown
-      if (weeklyReportPrefs.taskSummary || weeklyReportPrefs.driverList) {
-        const tasksByDriver: Record<string, TaskRow[]> = {};
-        for (const t of allTasks) {
-          if (!tasksByDriver[t.driver_id]) tasksByDriver[t.driver_id] = [];
-          tasksByDriver[t.driver_id].push(t);
-        }
-        const driversByDept: Record<string, DriverRow[]> = {};
-        for (const d of allDrivers) {
-          const dept = d.department ?? 'Unknown';
-          if (!driversByDept[dept]) driversByDept[dept] = [];
-          driversByDept[dept].push(d);
-        }
-        for (const [dept, deptDrivers] of Object.entries(driversByDept)) {
-          doc.addPage();
-          doc.setFontSize(13); doc.setFont('helvetica', 'bold');
-          doc.text(`Department: ${dept}`, margin, 14);
-          doc.setLineWidth(0.3); doc.line(margin, 17, pageW - margin, 17);
-
-          const colHeaders = ['Driver', 'Location', 'Vehicle'];
-          if (weeklyReportPrefs.vehicleStatus) colHeaders.push('Status');
-          colHeaders.push('Tasks');
-          if (weeklyReportPrefs.completionRates) colHeaders.push('Done', 'Rate');
-          if (weeklyReportPrefs.passengerCounts) colHeaders.push('Pax');
-
-          const rows = deptDrivers.map(d => {
-            const dTasks = tasksByDriver[d.id] ?? [];
-            const done = dTasks.filter(t => t.status === 'completed').length;
-            const pax = dTasks.reduce((s, t) => s + (t.passenger_count ?? 0), 0);
-            const row: string[] = [
-              d.name,
-              d.location ?? '—',
-              d.vehicle_type ? `${d.vehicle_type}${d.vehicle_model ? ' ' + d.vehicle_model : ''}` : '—',
-            ];
-            if (weeklyReportPrefs.vehicleStatus) row.push(d.is_available ? 'Available' : 'Off Duty');
-            row.push(String(dTasks.length));
-            if (weeklyReportPrefs.completionRates) {
-              row.push(String(done));
-              row.push(dTasks.length > 0 ? `${Math.round((done / dTasks.length) * 100)}%` : '—');
-            }
-            if (weeklyReportPrefs.passengerCounts) row.push(String(pax));
-            return row;
-          });
-
-          autoTable(doc, {
-            startY: 20,
-            head: [colHeaders],
-            body: rows,
-            styles: { fontSize: 8, cellPadding: 2.5 },
-            headStyles: { fillColor: [45, 90, 69] as [number, number, number], textColor: 255 },
-            theme: 'grid',
-            margin: { left: margin, right: margin },
-          });
-        }
-      }
-
-      // Summary / top performers page
-      doc.addPage();
-      doc.setFontSize(16); doc.setFont('helvetica', 'bold');
-      doc.text('SUMMARY', center, 14, { align: 'center' });
-      doc.setLineWidth(0.4); doc.line(margin, 17, pageW - margin, 17);
-
-      const perfMap: Record<string, { name: string; done: number; total: number }> = {};
-      for (const d of allDrivers) perfMap[d.id] = { name: d.name, done: 0, total: 0 };
-      for (const t of allTasks) {
-        if (perfMap[t.driver_id]) {
-          perfMap[t.driver_id].total++;
-          if (t.status === 'completed') perfMap[t.driver_id].done++;
-        }
-      }
-      const topPerformers = Object.values(perfMap)
-        .filter(d => d.total > 0)
-        .sort((a, b) => (b.done / b.total) - (a.done / a.total))
-        .slice(0, 5);
-
-      autoTable(doc, {
-        startY: 22,
-        head: [['Top Performers (by Completion Rate)', 'Tasks Done', 'Total', 'Rate']],
-        body: topPerformers.map(d => [d.name, String(d.done), String(d.total), `${Math.round((d.done / d.total) * 100)}%`]),
-        styles: { fontSize: 9, cellPadding: 3 },
-        headStyles: { fillColor: [45, 90, 69] as [number, number, number], textColor: 255 },
-        theme: 'grid',
-        margin: { left: margin, right: pageW / 2 + 10 },
-      });
-
-      const overloaded = Object.values(perfMap).filter(d => d.total > 6);
-      if (overloaded.length > 0) {
-        autoTable(doc, {
-          startY: lastY() + 8,
-          head: [['Overloaded Drivers', 'Task Count', 'Recommendation']],
-          body: overloaded.map(d => [d.name, String(d.total), 'Consider redistributing tasks']),
-          styles: { fontSize: 9, cellPadding: 3 },
-          headStyles: { fillColor: [200, 80, 40] as [number, number, number], textColor: 255 },
-          theme: 'grid',
-          margin: { left: margin, right: pageW / 2 + 10 },
+      if (existing) {
+        const { error } = await supabase.from('driver_tasks')
+          .update({ driver_id: driverId, driver_name: driver.name, status: 'pending' })
+          .eq('id', existing.id);
+        if (error) throw error;
+      } else {
+        const scheduledDate  = timeField ? timeField.slice(0, 10) : todayStr;
+        const scheduledTime  = timeField && timeField.length > 10
+          ? new Date(timeField).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+          : undefined;
+        const passengerCount = 1 + (guest.family_members?.length ?? 0);
+        const { error } = await supabase.from('driver_tasks').insert({
+          guest_id: guest.id, guest_name: guest.full_name,
+          driver_id: driverId, driver_name: driver.name,
+          task_type: taskType,
+          pickup_location: pickupLoc, dropoff_location: dropoffLoc,
+          scheduled_date: scheduledDate, scheduled_time: scheduledTime ?? null,
+          flight_number: guest.flight_number ?? null,
+          passenger_count: passengerCount,
+          priority: 'normal', status: 'pending',
+          transport_department_id: guest.transport_department_id ?? null,
+          is_suggestion: false,
         });
+        if (error) throw error;
       }
-
-      // Page footers
-      const pageCount = doc.getNumberOfPages();
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(120, 120, 120);
-        doc.text(`Page ${i} of ${pageCount}`, center, pageH - 8, { align: 'center' });
-        doc.text(`Generated: ${new Date().toLocaleString()}`, margin, pageH - 8);
-        doc.text('Jalsa Guest — Weekly Fleet Report', pageW - margin, pageH - 8, { align: 'right' });
-        if (user) doc.text(`By: ${user.name} (${ROLE_LABELS[user.role]})`, margin, pageH - 4);
-        doc.setTextColor(0, 0, 0);
-      }
-
-      doc.save(`Fleet-Report-${weeklyReportFrom}.pdf`);
-      toast.success('Weekly fleet report generated');
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to generate report');
+      const verb = taskType === 'airport_pickup' ? 'pick up' : 'drop off';
+      toast.success(`${driver.name} assigned to ${verb} ${guest.full_name}`);
+      fetchAll();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to assign driver');
     } finally {
-      setWeeklyReportGenerating(false);
-      setWeeklyReportOpen(false);
+      setAssigning(prev => ({ ...prev, [key]: false }));
     }
   };
 
-  // ── Derived values ─────────────────────────────────────────────────────────
+  // ── Derived ───────────────────────────────────────────────────────────────────
 
-  const today = new Date().toISOString().substring(0, 10);
-  const todayTasks     = tasks.filter(t => t.scheduled_date === today && !t.is_suggestion && t.status !== 'cancelled');
-  const completedToday = todayTasks.filter(t => t.status === 'completed');
-  const completionRate = todayTasks.length > 0 ? Math.round((completedToday.length / todayTasks.length) * 100) : 0;
-  const vehicleCount   = drivers.filter(d => d.vehicle_type).length;
+  const activeTasks    = tasks.filter(t => t.status === 'pending' || t.status === 'in_progress');
+  const completedToday = tasks.filter(t => t.status === 'completed');
 
-  const depts = useMemo(() => [...new Set(drivers.map(d => d.department).filter(Boolean))] as string[], [drivers]);
-  const locs  = useMemo(() => [...new Set(drivers.map(d => d.location).filter(Boolean))] as string[], [drivers]);
+  const pickupDriverMap:  Record<string, string> = {};
+  const dropoffDriverMap: Record<string, string> = {};
+  for (const t of activeTasks) {
+    if (!t.guest_id) continue;
+    if (t.task_type === 'airport_pickup')  pickupDriverMap[t.guest_id]  = t.driver_id;
+    if (t.task_type === 'airport_dropoff') dropoffDriverMap[t.guest_id] = t.driver_id;
+  }
 
-  const filteredDrivers = useMemo(() => drivers.filter(d => {
-    if (deptFilter && d.department !== deptFilter) return false;
-    if (locFilter  && d.location   !== locFilter)  return false;
-    if (tdFilter   && (d as DriverRow & { transport_department_id?: string }).transport_department_id !== tdFilter) return false;
-    if (statFilter === 'available' && !d.is_available) return false;
-    if (statFilter === 'off_duty'  &&  d.is_available) return false;
-    return true;
-  }), [drivers, deptFilter, locFilter, tdFilter, statFilter]);
+  const knownTdIds = new Set(transportDepts.map(d => d.id));
 
-  const activeTasks     = tasks.filter(t => !t.is_suggestion && t.status !== 'cancelled');
-  const suggestionTasks = tasks.filter(t =>  t.is_suggestion && t.status === 'suggested');
-  const filteredTasks   = taskStatus ? activeTasks.filter(t => t.status === taskStatus) : activeTasks;
+  // ── Sub-components ────────────────────────────────────────────────────────────
 
-  const driverInfos: DriverInfo[] = filteredDrivers.map(d => ({
-    id: d.id, name: d.name, vehicle_type: d.vehicle_type, vehicle_model: d.vehicle_model,
-    vehicle_capacity: d.vehicle_capacity, is_available: d.is_available, location: d.location,
-  }));
-
-  // Fleet overview
-  const activeTaskMap = useMemo(() => {
-    const map: Record<string, { task_type: string; guest_name?: string; started_at?: string | null; pickup_location?: string; dropoff_location?: string }> = {};
-    for (const t of tasks) {
-      if (t.status === 'in_progress') map[t.driver_id] = {
-        task_type: t.task_type, guest_name: t.guest_name,
-        started_at: t.started_at, pickup_location: t.pickup_location, dropoff_location: t.dropoff_location,
-      };
-    }
-    return map;
-  }, [tasks]);
-
-  const fleetByDept = useMemo(() => {
-    const map: Record<string, DriverRow[]> = {};
-    for (const d of drivers) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const tdName = (d as any).transport_department_name ?? '(No Transport Dept)';
-      if (!map[tdName]) map[tdName] = [];
-      map[tdName].push(d);
-    }
-    return map;
-  }, [drivers]);
-
-  // Alerts
-  const alertOverloaded = useMemo(() => drivers.filter(d => d.tasksToday > 6), [drivers]);
-  const hasAlerts = suggestionTasks.length > 0 || alertOverloaded.length > 0 || overdueMaintCount > 0;
-
-  // Transfer derived
-  const transferLocOptions = useMemo(() =>
-    [...new Set(drivers.filter(d => !transferDept || d.department === transferDept).map(d => d.location).filter(Boolean))] as string[],
-    [drivers, transferDept]
-  );
-  const transferDriverOptions = useMemo(() =>
-    drivers.filter(d =>
-      (!transferDept || d.department === transferDept) &&
-      (!transferLoc  || d.location   === transferLoc) &&
-      d.id !== transferTask?.driver_id
-    ),
-    [drivers, transferDept, transferLoc, transferTask]
-  );
-
-  // Stats totals (all drivers)
-  const onDutyCount  = drivers.filter(d => d.tasksToday > 0).length;
-  const offDutyCount = drivers.filter(d => !d.is_available).length;
-
-  const deptColor = (dept: string) => {
-    if (/reserve/i.test(dept))    return 'bg-blue-50 text-blue-700';
-    if (/uk\s*jamaat/i.test(dept)) return 'bg-purple-50 text-purple-700';
-    return 'bg-teal-50 text-teal-700';
-  };
-
-  const activityLabel = (driverId: string, isAvail?: boolean): { text: string; dot: string } => {
-    const active = activeTaskMap[driverId];
-    if (active) {
-      const prefix: Record<string, string> = {
-        airport_pickup: 'Picking up', airport_dropoff: 'Dropping off',
-        mulaqat_transport: 'Mulaqat run', other: 'On task',
-      };
-      return {
-        text: active.guest_name ? `${prefix[active.task_type] ?? 'On task'}: ${active.guest_name}` : (prefix[active.task_type] ?? 'On task'),
-        dot: 'bg-blue-500',
-      };
-    }
-    if (isAvail) return { text: 'Available', dot: 'bg-green-500' };
-    return { text: 'Off Duty', dot: 'bg-amber-400' };
-  };
-
-  // ── Render ─────────────────────────────────────────────────────────────────
-
-  return (
-    <div className="min-h-screen bg-[#F5F0E8]">
-      <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-64 bg-white border-r border-[#E8E3DB] min-h-screen fixed left-0 top-0">
-          <div className="p-4 border-b border-[#E8E3DB]">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-[#2D5A45] rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">J</span>
-              </div>
-              <div>
-                <span className="font-semibold text-[#1A1A1A]">Jalsa Guest</span>
-                <p className="text-xs text-[#4A4A4A]">Jalsa Salana UK</p>
-              </div>
+  function DriverCard({ driver }: { driver: DriverRow }) {
+    const status = driverStatus(driver);
+    const avail  = vehicleAvailLabel(driver);
+    return (
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col gap-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <StatusDot status={status} />
+            <div>
+              <span className="font-semibold text-[#1A1A1A]">{driver.name}</span>
+              {driver.is_head_driver && (
+                <span className="ml-2 text-xs font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">★ Nazim</span>
+              )}
             </div>
           </div>
-          <nav className="p-4 space-y-1">
-            <div className="text-xs font-medium text-[#4A4A4A] uppercase tracking-wider mb-2">Main</div>
-            {SUPER_ADMIN_NAV.map((item, i) => (
-              <button key={i} onClick={() => navigate(item.href)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                  pathname === item.href ? 'bg-[#2D5A45] text-white' : 'text-[#4A4A4A] hover:bg-[#F5F0E8]'
-                }`}>
-                <item.icon className="w-5 h-5" />
-                {item.label}
-              </button>
-            ))}
-          </nav>
-        </aside>
+          <div className="flex items-center gap-1 shrink-0">
+            {driver.phone && (
+              <a href={`tel:${driver.phone}`} className="flex items-center gap-1 text-xs text-[#2D5A45] hover:underline">
+                <Phone className="w-3 h-3" />{driver.phone}
+              </a>
+            )}
+            <button onClick={() => setMsgDriver(driver)}
+              className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors" title="Messages">
+              <MessageCircle className="w-4 h-4" />
+            </button>
+            <button onClick={() => { setEditDriver(driver); setFormOpen(true); }}
+              className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors" title="Edit">
+              <Car className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        {(driver.vehicle_type || driver.vehicle_model) && (
+          <p className="text-sm text-[#4A4A4A]">
+            🚐 {[driver.vehicle_type, driver.vehicle_model, driver.vehicle_registration].filter(Boolean).join(' · ')}
+            {driver.vehicle_capacity != null && ` · ${driver.vehicle_capacity} seats`}
+          </p>
+        )}
+        <div className="flex items-center gap-4 text-xs text-[#4A4A4A]">
+          <span className={avail.warn === 'red' ? 'text-red-600 font-medium' : avail.warn === 'amber' ? 'text-amber-600 font-medium' : ''}>
+            Available: {avail.label}
+          </span>
+          <span className={driver.tasksToday > 0 ? 'text-amber-700 font-medium' : ''}>
+            Today: {driver.tasksToday} task{driver.tasksToday !== 1 ? 's' : ''}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
-        <main className="flex-1 ml-64">
-          <TopBar title="Drivers" />
-          <div className="p-8">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-2xl font-bold text-[#1A1A1A]">Drivers</h1>
-              <p className="text-sm text-[#4A4A4A] mt-0.5">All transport drivers across all locations</p>
+  function GuestCard({ guest, taskType }: { guest: GuestRow; taskType: 'airport_pickup' | 'airport_dropoff' }) {
+    const isPickup   = taskType === 'airport_pickup';
+    const time       = isPickup ? guest.arrival_time : guest.departure_time;
+    const airport    = isPickup ? guest.arrival_airport : guest.departure_airport;
+    const terminal   = isPickup ? guest.arrival_terminal : guest.departure_terminal;
+    const assignedId = isPickup ? pickupDriverMap[guest.id] : dropoffDriverMap[guest.id];
+    const key        = `${guest.id}_${taskType}`;
+    const isLoading  = assigning[key] ?? false;
+    const mapUrl     = airport ? getMapLink(airport, terminal ?? undefined) : undefined;
+
+    return (
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <div>
+            <p className="font-semibold text-[#1A1A1A]">{guest.full_name}</p>
+            {guest.country && <p className="text-xs text-[#4A4A4A]">{guest.country}</p>}
+          </div>
+          <span className="text-xs bg-[#F5F0E8] text-[#2D5A45] px-2 py-0.5 rounded-full shrink-0">
+            👥 {passengerLabel(guest)}
+          </span>
+        </div>
+        <div className="text-sm text-[#4A4A4A] space-y-1 mb-3">
+          {(guest.flight_number || time) && (
+            <p>✈️ {[guest.flight_number, fmtDateTime(time), airport, terminal].filter(Boolean).join(' · ')}</p>
+          )}
+          <p className={isPickup ? 'text-green-700' : 'text-amber-700'}>
+            {isPickup ? '→' : '←'} {guest.placed_location ?? '—'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            <select
+              value={assignedId ?? ''}
+              onChange={e => { if (e.target.value) handleAssign(guest, e.target.value, taskType); }}
+              disabled={isLoading}
+              className="flex-1 min-w-0 border border-[#E8E3DB] rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:border-[#2D5A45] bg-white disabled:opacity-60 truncate"
+            >
+              <option value="">Select Driver ▼</option>
+              {drivers.map(d => (
+                <option key={d.id} value={d.id}>
+                  {d.name}{d.vehicle_type ? ` · ${d.vehicle_type}` : ''}{d.vehicle_capacity != null ? ` · ${d.vehicle_capacity}p` : ''}
+                  {d.is_available ? ' 🟢' : ' 🟡'}
+                </option>
+              ))}
+            </select>
+            {assignedId && <Check className="w-4 h-4 text-green-600 shrink-0" />}
+            {isLoading && <Loader2 className="w-4 h-4 animate-spin text-[#2D5A45] shrink-0" />}
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {guest.contact_number && (
+              <a href={`tel:${guest.contact_number}`}
+                className="flex items-center gap-1 text-xs border border-[#E8E3DB] rounded-lg px-2.5 py-1.5 text-[#2D5A45] hover:bg-[#F5F0E8] transition-colors">
+                <Phone className="w-3 h-3" /> Call
+              </a>
+            )}
+            {mapUrl && (
+              <a href={mapUrl} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs border border-[#E8E3DB] rounded-lg px-2.5 py-1.5 text-[#4A4A4A] hover:bg-[#F5F0E8] transition-colors">
+                <MapPin className="w-3 h-3" /> Navigate
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="flex min-h-screen bg-[#F5F0E8]">
+      {/* Sidebar */}
+      <aside className="w-64 bg-white border-r border-[#E8E3DB] min-h-screen fixed left-0 top-0 flex flex-col">
+        <div className="p-4 border-b border-[#E8E3DB]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-[#2D5A45] rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-lg">J</span>
             </div>
+            <div>
+              <span className="font-semibold text-[#1A1A1A]">Jalsa Guest</span>
+              <p className="text-xs text-[#4A4A4A]">Admin View</p>
+            </div>
+          </div>
+        </div>
+        <nav className="p-4 space-y-1 flex-1">
+          <div className="text-xs font-medium text-[#4A4A4A] uppercase tracking-wider mb-2">Main</div>
+          {SUPER_ADMIN_NAV.map((item, i) => (
+            <button key={i} onClick={() => navigate(item.href)}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                location.pathname === item.href
+                  ? 'bg-[#2D5A45] text-white'
+                  : 'text-[#4A4A4A] hover:bg-[#F5F0E8]'
+              }`}>
+              <item.icon className="w-5 h-5" />
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <SidebarUserFooter />
+      </aside>
+      <main className="ml-64 flex-1">
+        <TopBar />
+        <div className="p-8 max-w-5xl">
+
+          <div className="flex items-center justify-between mb-8">
+            <h1 className="text-2xl font-bold text-[#1A1A1A] flex items-center gap-2">
+              🚗 Transportation — All Teams
+            </h1>
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setWeeklyReportOpen(true)}
-                className="text-[#2D5A45] border-[#2D5A45] hover:bg-[#F5F0E8] gap-2">
-                <BarChart3 className="w-4 h-4" /> Weekly Report
-              </Button>
-              <Button variant="outline" onClick={() => setReportOpen(true)}
-                className="text-[#2D5A45] border-[#2D5A45] hover:bg-[#F5F0E8] gap-2">
-                <FileText className="w-4 h-4" /> Daily Report
-              </Button>
+              <button onClick={() => setShowMsgList(true)}
+                className="flex items-center gap-1.5 text-sm border border-[#E8E3DB] rounded-lg px-3 py-2 text-[#4A4A4A] hover:bg-white transition-colors bg-white">
+                <MessageCircle className="w-4 h-4" /> Messages
+              </button>
               <Button onClick={() => { setEditDriver(null); setFormOpen(true); }}
                 className="bg-[#2D5A45] hover:bg-[#234839] text-white gap-2">
                 <Plus className="w-4 h-4" /> Add Driver
@@ -624,412 +665,187 @@ export default function AdminDriversPage() {
             </div>
           </div>
 
-          {/* Alerts Panel */}
-          {!loading && (
-            <div className="mb-6">
-              {hasAlerts ? (
-                <div className="flex gap-3 flex-wrap">
-                  {suggestionTasks.length > 0 && (
-                    <AlertCard type="amber" icon="⚠️"
-                      title={`${suggestionTasks.length} task${suggestionTasks.length !== 1 ? 's' : ''} unassigned for today`}
-                      sub="Click to view and assign"
-                      onClick={() => setTab('suggestions')}
-                    />
-                  )}
-                  {alertOverloaded.length > 0 && (
-                    <AlertCard type="orange" icon="📋"
-                      title={`${alertOverloaded.length} driver${alertOverloaded.length > 1 ? 's' : ''} overloaded today`}
-                      sub={alertOverloaded.map(d => `${d.name}: ${d.tasksToday} tasks`).join(' · ')}
-                    />
-                  )}
-                  {overdueMaintCount > 0 && (
-                    <AlertCard type="red" icon="🔧"
-                      title={`${overdueMaintCount} vehicle${overdueMaintCount !== 1 ? 's' : ''} with overdue maintenance`}
-                      sub="Check maintenance logs for affected drivers"
-                    />
-                  )}
-                </div>
-              ) : (
-                <div className="bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-2 text-green-700 text-sm">
-                  <span>✅</span>
-                  <span className="font-medium">All clear — no urgent driver issues</span>
-                </div>
-              )}
+          {loading ? (
+            <div className="flex items-center justify-center py-20 text-[#4A4A4A]">
+              <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading…
             </div>
-          )}
+          ) : (
+            <div className="space-y-8">
 
-          {/* Stats — 5 cards */}
-          <div className="grid grid-cols-5 gap-4 mb-6">
-            {[
-              { icon: Users,        label: 'Total Drivers',   value: String(drivers.length), sub: null,                         color: 'bg-blue-50 text-blue-700'    },
-              { icon: CheckCircle2, label: 'On Duty / Off',   value: String(onDutyCount),    sub: `Off duty: ${offDutyCount}`,  color: 'bg-green-50 text-green-700'  },
-              { icon: Car,          label: 'Vehicles',         value: String(vehicleCount),   sub: `${drivers.length - vehicleCount} without`, color: 'bg-indigo-50 text-indigo-700' },
-              { icon: ClipboardList,label: "Today's Tasks",   value: String(todayTasks.length), sub: null,                     color: 'bg-amber-50 text-amber-700'  },
-              { icon: CheckCircle2, label: 'Completed',        value: `${completionRate}%`,   sub: `${completedToday.length} done`, color: 'bg-emerald-50 text-emerald-700' },
-            ].map(s => (
-              <div key={s.label} className="bg-white rounded-xl p-4 border border-[#E8E3DB]">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-2 ${s.color}`}>
-                  <s.icon className="w-4 h-4" />
-                </div>
-                <p className="text-2xl font-bold text-[#1A1A1A]">{s.value}</p>
-                <p className="text-xs text-[#4A4A4A]">{s.label}</p>
-                {s.sub && <p className="text-xs text-gray-400 mt-0.5">{s.sub}</p>}
-              </div>
-            ))}
-          </div>
-
-          {/* Fleet Overview */}
-          <div className="bg-white rounded-xl border border-[#E8E3DB] mb-6">
-            <div className="flex items-center justify-between p-4 cursor-pointer select-none"
-              onClick={() => setFleetOpen(v => !v)}>
-              <div className="flex items-center gap-2">
-                <Car className="w-5 h-5 text-[#2D5A45]" />
-                <h2 className="font-semibold text-[#1A1A1A]">Fleet Overview</h2>
-                <span className="text-xs text-[#4A4A4A] bg-[#F5F0E8] px-2 py-0.5 rounded-full">
-                  {drivers.length} drivers
-                </span>
-              </div>
-              <button className="p-1 rounded-lg hover:bg-[#F5F0E8] text-[#4A4A4A] transition-colors">
-                {fleetOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
-            </div>
-            {fleetOpen && (
-              <div className="border-t border-[#E8E3DB] p-4">
-                {loading ? (
-                  <p className="text-sm text-[#4A4A4A] text-center py-4">Loading…</p>
-                ) : Object.keys(fleetByDept).length === 0 ? (
-                  <p className="text-sm text-[#4A4A4A] text-center py-4">No drivers loaded.</p>
+              {/* ALL DRIVERS — grouped by transport dept */}
+              <section>
+                <SectionHeader label="All Drivers" count={drivers.length} />
+                {drivers.length === 0 ? (
+                  <p className="text-sm text-center text-[#4A4A4A] py-6">No drivers found.</p>
                 ) : (
-                  <div className="space-y-5">
-                    {Object.entries(fleetByDept).map(([tdName, tdDrivers]) => (
-                      <div key={tdName}>
-                        <div className={`text-xs font-semibold uppercase tracking-wider px-2 py-1 rounded-md inline-block mb-2 ${deptColor(tdName)}`}>
-                          {tdName}
+                  <div className="space-y-6">
+                    {transportDepts.map((dept, idx) => {
+                      const deptDrivers = drivers.filter(d => d.transport_department_id === dept.id);
+                      if (deptDrivers.length === 0) return null;
+                      const colors = DEPT_COLOR_CYCLE[idx % DEPT_COLOR_CYCLE.length];
+                      return (
+                        <div key={dept.id}>
+                          <div className={`flex items-center gap-3 mb-3 px-3 py-2 rounded-lg border text-sm font-semibold ${colors.header}`}>
+                            <span className={`w-2.5 h-2.5 rounded-full ${colors.dot}`} />
+                            {dept.name}
+                            <span className="ml-auto text-xs font-normal opacity-70">
+                              {deptDrivers.length} driver{deptDrivers.length !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {deptDrivers.map(d => <DriverCard key={d.id} driver={d} />)}
+                          </div>
                         </div>
-                        <div className="pl-3 space-y-1.5">
-                          {tdDrivers.map(d => {
-                            const { text, dot } = activityLabel(d.id, d.is_available);
-                            const badgeCls = dot === 'bg-green-500'
-                              ? 'bg-green-50 text-green-700'
-                              : dot === 'bg-blue-500'
-                                ? 'bg-blue-50 text-blue-700'
-                                : 'bg-amber-50 text-amber-700';
-                            const activeTask = activeTaskMap[d.id];
-                            const eta = activeTask?.started_at
-                              ? calculateETA({ task_type: activeTask.task_type, pickup_location: activeTask.pickup_location, dropoff_location: activeTask.dropoff_location, started_at: activeTask.started_at })
-                              : null;
-                            const etaStr  = eta ? formatETA(eta) : null;
-                            const etaOver = eta ? isETAOverdue(eta) : false;
-                            const mapAirport = activeTask
-                              ? (activeTask.task_type === 'airport_pickup' ? activeTask.pickup_location : activeTask.dropoff_location)
-                              : undefined;
-                            const mapUrl = mapAirport ? getMapLink(mapAirport) : null;
-                            return (
-                              <div key={d.id} className="flex items-center gap-2 text-sm flex-wrap">
-                                <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
-                                <span className="font-medium text-[#1A1A1A] min-w-[120px]">{d.name}</span>
-                                <span className="text-[#4A4A4A] text-xs">{d.vehicle_model ?? d.vehicle_type ?? '—'}</span>
-                                {d.vehicle_registration && (
-                                  <span className="text-[#4A4A4A] text-xs font-mono bg-gray-100 px-1.5 rounded">
-                                    {d.vehicle_registration}
-                                  </span>
-                                )}
-                                <span className={`text-xs px-2 py-0.5 rounded-full ${badgeCls}`}>{text}</span>
-                                {etaStr && (
-                                  <span className={`text-xs font-medium ${etaOver ? 'text-red-600' : 'text-blue-600'}`}>
-                                    {etaStr}
-                                  </span>
-                                )}
-                                {mapUrl && (
-                                  <a href={mapUrl} target="_blank" rel="noopener noreferrer"
-                                    className="flex items-center gap-0.5 text-xs text-[#2D5A45] hover:underline">
-                                    <MapPin className="w-3 h-3" />
-                                    <ExternalLink className="w-2.5 h-2.5 opacity-50" />
-                                  </a>
-                                )}
-                              </div>
-                            );
-                          })}
+                      );
+                    })}
+                    {/* Drivers not assigned to any known transport dept */}
+                    {(() => {
+                      const unassigned = drivers.filter(d => !d.transport_department_id || !knownTdIds.has(d.transport_department_id));
+                      if (unassigned.length === 0) return null;
+                      return (
+                        <div>
+                          <div className="flex items-center gap-3 mb-3 px-3 py-2 rounded-lg border text-sm font-semibold text-gray-600 bg-gray-50 border-gray-200">
+                            <span className="w-2.5 h-2.5 rounded-full bg-gray-400" />
+                            Unassigned
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {unassigned.map(d => <DriverCard key={d.id} driver={d} />)}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })()}
                   </div>
                 )}
-              </div>
-            )}
-          </div>
+              </section>
 
-          {/* Filters */}
-          <div className="flex items-center gap-3 mb-4 flex-wrap">
-            <select value={deptFilter} onChange={e => setDeptFilter(e.target.value)}
-              className="border border-[#E8E3DB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2D5A45] bg-white">
-              <option value="">All Departments</option>
-              {depts.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
-            <select value={tdFilter} onChange={e => setTdFilter(e.target.value)}
-              className="border border-[#E8E3DB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2D5A45] bg-white">
-              <option value="">All Transport Teams</option>
-              {transportDepts.map(td => (
-                <option key={td.id} value={td.id}>{td.name}</option>
-              ))}
-            </select>
-            <select value={locFilter} onChange={e => setLocFilter(e.target.value)}
-              className="border border-[#E8E3DB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2D5A45] bg-white">
-              <option value="">All Locations</option>
-              {locs.map(l => <option key={l} value={l}>{l}</option>)}
-            </select>
-            <select value={statFilter} onChange={e => setStatFilter(e.target.value)}
-              className="border border-[#E8E3DB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2D5A45] bg-white">
-              <option value="">All Statuses</option>
-              <option value="available">Available</option>
-              <option value="off_duty">Off Duty</option>
-            </select>
-          </div>
-
-          {/* Tabs */}
-          <div className="flex gap-1 mb-4 bg-white border border-[#E8E3DB] rounded-xl p-1 w-fit">
-            {([['drivers', 'Drivers', Users], ['tasks', 'Tasks', ClipboardList], ['suggestions', 'Suggestions', Car]] as [Tab, string, React.ElementType][]).map(([t, label, Icon]) => (
-              <button key={t} onClick={() => setTab(t)}
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === t ? 'bg-[#2D5A45] text-white' : 'text-[#4A4A4A] hover:bg-[#F5F0E8]'}`}>
-                <Icon className="w-4 h-4" /> {label}
-                {t === 'suggestions' && suggestionTasks.length > 0 && (
-                  <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center ${tab === 'suggestions' ? 'bg-white/30' : 'bg-blue-100 text-blue-700'}`}>
-                    {suggestionTasks.length}
-                  </span>
+              {/* GUESTS NEEDING PICKUP */}
+              <section>
+                <SectionHeader label="Guests Needing Pickup" count={pickupGuests.length} />
+                {pickupGuests.length === 0 ? (
+                  <p className="text-sm text-center text-[#4A4A4A] py-6">No upcoming arrivals.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {pickupGuests.map(g => <GuestCard key={g.id} guest={g} taskType="airport_pickup" />)}
+                  </div>
                 )}
-              </button>
-            ))}
-          </div>
+              </section>
 
-          {/* Tab: Drivers */}
-          {tab === 'drivers' && (
-            <div className="bg-white rounded-xl border border-[#E8E3DB]">
-              {loading ? (
-                <div className="p-8 text-center text-[#4A4A4A] text-sm">Loading…</div>
-              ) : filteredDrivers.length === 0 ? (
-                <div className="p-8 text-center text-[#4A4A4A] text-sm">No drivers found.</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-[#E8E3DB] bg-[#F5F0E8]">
-                        <SortableHeader label="Name" column="name" sortCol={driverSortCol} sortDir={driverSortDir} onSort={handleDriverSort} />
-                        <SortableHeader label="Dept / Location" column="location" sortCol={driverSortCol} sortDir={driverSortDir} onSort={handleDriverSort} />
-                        <SortableHeader label="Vehicle" column="vehicle_type" sortCol={driverSortCol} sortDir={driverSortDir} onSort={handleDriverSort} />
-                        <SortableHeader label="Status" column="is_available" sortCol={driverSortCol} sortDir={driverSortDir} onSort={handleDriverSort} />
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Today</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#E8E3DB]">
-                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                      {(sortData(filteredDrivers as any[], driverSortCol, driverSortDir) as typeof filteredDrivers).map(d => (
-                        <tr key={d.id} className="hover:bg-[#F5F0E8]/50 transition-colors">
-                          <td className="px-4 py-3">
-                            <div className="font-medium text-[#1A1A1A]">{d.name}</div>
-                            <div className="text-xs text-[#4A4A4A]">
-                              {d.is_head_driver && <span className="mr-1 text-amber-600 font-medium">★ Nazim</span>}
-                              {d.email}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-[#4A4A4A] text-xs">
-                            <div>{d.department ?? '—'}</div>
-                            <div>{d.location ?? '—'}</div>
-                          </td>
-                          <td className="px-4 py-3 text-[#4A4A4A]">
-                            {d.vehicle_type ? `${d.vehicle_type}${d.vehicle_capacity != null ? ` (${d.vehicle_capacity} pax)` : ''}` : '—'}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${d.is_available ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                              {d.is_available ? 'Available' : 'Off Duty'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${d.tasksToday > 0 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                              {d.tasksToday}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-1">
-                              <button onClick={() => setViewDriver(d)} title="View Tasks"
-                                className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors">
-                                <Eye className="w-4 h-4" />
-                              </button>
-                              <button onClick={() => { setEditDriver(d); setFormOpen(true); }} title="Edit"
-                                className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors">
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                              <button onClick={() => setMsgDriver(d)} title="Messages"
-                                className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors">
-                                <MessageCircle className="w-4 h-4" />
-                              </button>
-                              <button onClick={() => setMaintViewDriver(d)} title="Maintenance Log"
-                                className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors">
-                                <Wrench className="w-4 h-4" />
-                              </button>
-                              <button onClick={() => setAssignDriver(d)} title="Assign Task"
-                                className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-[#F5F0E8] hover:text-[#2D5A45] transition-colors">
-                                <Plus className="w-4 h-4" />
-                              </button>
-                              {deleteId === d.id ? (
-                                <>
-                                  <button onClick={() => handleDelete(d.id)} className="text-xs text-red-600 font-medium px-2 py-1 rounded-lg hover:bg-red-50">Confirm</button>
-                                  <button onClick={() => setDeleteId(null)} className="text-xs text-[#4A4A4A] px-2 py-1 rounded-lg hover:bg-[#F5F0E8]">No</button>
-                                </>
-                              ) : (
-                                <button onClick={() => setDeleteId(d.id)} title="Remove"
-                                  className="p-1.5 rounded-lg text-[#4A4A4A] hover:bg-red-50 hover:text-red-600 transition-colors">
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
+              {/* GUESTS NEEDING DROPOFF */}
+              <section>
+                <SectionHeader label="Guests Needing Dropoff" count={dropoffGuests.length} />
+                {dropoffGuests.length === 0 ? (
+                  <p className="text-sm text-center text-[#4A4A4A] py-6">No upcoming departures.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {dropoffGuests.map(g => <GuestCard key={g.id} guest={g} taskType="airport_dropoff" />)}
+                  </div>
+                )}
+              </section>
 
-          {/* Tab: Tasks */}
-          {tab === 'tasks' && (
-            <div className="bg-white rounded-xl border border-[#E8E3DB]">
-              <div className="p-4 border-b border-[#E8E3DB] flex items-center gap-3">
-                <h2 className="font-semibold text-[#1A1A1A] flex-1">Active Tasks</h2>
-                <select value={taskStatus} onChange={e => setTaskStatus(e.target.value)}
-                  className="border border-[#E8E3DB] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#2D5A45] bg-white">
-                  <option value="">All Statuses</option>
-                  <option value="pending">Pending</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="completed">Completed</option>
-                </select>
-              </div>
-              {filteredTasks.length === 0 ? (
-                <div className="p-8 text-center text-[#4A4A4A] text-sm">No tasks.</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-[#E8E3DB] bg-[#F5F0E8]">
-                        <th className="px-4 py-3 text-left font-medium text-[#4A4A4A]">Type</th>
-                        <th className="px-4 py-3 text-left font-medium text-[#4A4A4A]">Driver</th>
-                        <th className="px-4 py-3 text-left font-medium text-[#4A4A4A]">Guest</th>
-                        <th className="px-4 py-3 text-left font-medium text-[#4A4A4A]">Date / Time</th>
-                        <th className="px-4 py-3 text-left font-medium text-[#4A4A4A]">Route</th>
-                        <th className="px-4 py-3 text-left font-medium text-[#4A4A4A]">Status</th>
-                        <th className="px-4 py-3 text-left font-medium text-[#4A4A4A]">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#E8E3DB]">
-                      {filteredTasks.map(t => (
-                        <tr key={t.id} className="hover:bg-[#F5F0E8]/50">
-                          <td className="px-4 py-3 font-medium text-[#1A1A1A]">{TYPE_LABELS[t.task_type] ?? t.task_type}</td>
-                          <td className="px-4 py-3 text-[#4A4A4A]">
-                            <div>{t.driver_name ?? '—'}</div>
-                            {t.location && <div className="text-xs text-gray-400">{t.location}</div>}
-                          </td>
-                          <td className="px-4 py-3 text-[#4A4A4A]">{t.guest_name ?? '—'}</td>
-                          <td className="px-4 py-3 text-[#4A4A4A]">{t.scheduled_date}{t.scheduled_time && ` · ${t.scheduled_time}`}</td>
-                          <td className="px-4 py-3 text-[#4A4A4A] text-xs">{t.pickup_location} → {t.dropoff_location}</td>
-                          <td className="px-4 py-3">
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[t.status] ?? 'bg-gray-100 text-gray-600'}`}>
-                              {t.status}
+              {/* ACTIVE TASKS */}
+              {activeTasks.length > 0 && (
+                <section>
+                  <SectionHeader label="Active Tasks" count={activeTasks.length} />
+                  <div className="space-y-3">
+                    {activeTasks.map(t => {
+                      const isInProgress = t.status === 'in_progress';
+                      return (
+                        <div key={t.id} className={`rounded-xl p-4 border ${isInProgress ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'}`}>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${isInProgress ? 'bg-blue-200 text-blue-800' : 'bg-amber-200 text-amber-800'}`}>
+                              {isInProgress ? '🔵 IN PROGRESS' : '🟡 PENDING'}
                             </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <button
-                              onClick={() => { setTransferTask(t); setTransferDept(''); setTransferLoc(''); setTransferDriverId(''); setTransferReason(''); }}
-                              title="Transfer to another driver"
-                              className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg text-[#2D5A45] border border-[#2D5A45] hover:bg-[#F5F0E8] transition-colors">
-                              <ArrowLeftRight className="w-3 h-3" /> Transfer
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Tab: Suggestions */}
-          {tab === 'suggestions' && (
-            <div className="bg-white rounded-xl border border-[#E8E3DB]">
-              <div className="p-4 border-b border-[#E8E3DB]">
-                <h2 className="font-semibold text-[#1A1A1A]">Auto-generated Suggestions</h2>
-                <p className="text-xs text-[#4A4A4A] mt-0.5">Tasks auto-created from guest placement — awaiting driver assignment</p>
-              </div>
-              {suggestionTasks.length === 0 ? (
-                <div className="p-8 text-center text-[#4A4A4A] text-sm">No unassigned suggestions.</div>
-              ) : (
-                <div className="divide-y divide-[#E8E3DB]">
-                  {suggestionTasks.map(t => (
-                    <div key={t.id} className="px-4 py-3 flex items-center justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-[#1A1A1A]">{TYPE_LABELS[t.task_type] ?? t.task_type}</span>
-                          <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">suggestion</span>
+                            <span className="text-sm font-medium text-[#1A1A1A]">
+                              {t.driver_name ?? 'Driver'} → {t.guest_name ?? '—'}
+                            </span>
+                          </div>
+                          {(t.pickup_location || t.dropoff_location) && (
+                            <p className="text-xs text-[#4A4A4A] mt-1.5">
+                              {t.pickup_location ?? '—'} → {t.dropoff_location ?? '—'}
+                            </p>
+                          )}
+                          {isInProgress && t.started_at && (
+                            <p className="text-xs text-blue-700 mt-1">Started: {fmtTime(t.started_at)}</p>
+                          )}
                         </div>
-                        {t.guest_name && <div className="text-xs text-[#4A4A4A] mt-0.5">Guest: {t.guest_name}</div>}
-                        <div className="text-xs text-[#4A4A4A]">
-                          {t.scheduled_date}{t.scheduled_time && ` at ${t.scheduled_time}`}
-                          {t.location && ` · ${t.location}`}
-                          {t.pickup_location && ` · ${t.pickup_location} → ${t.dropoff_location ?? ''}`}
-                        </div>
-                      </div>
-                      <Button size="sm" onClick={() => setAssignDriver(null)}
-                        className="bg-[#2D5A45] hover:bg-[#234839] text-white text-xs shrink-0">
-                        Assign
-                      </Button>
-                    </div>
-                  ))}
-                </div>
+                      );
+                    })}
+                  </div>
+                </section>
               )}
+
+              {/* COMPLETED TODAY */}
+              {completedToday.length > 0 && (
+                <section>
+                  <SectionHeader label="Completed Today" count={completedToday.length} />
+                  <div className="space-y-2">
+                    {(completedExpanded ? completedToday : completedToday.slice(0, 3)).map(t => {
+                      const dur = taskDuration(t);
+                      return (
+                        <div key={t.id} className="rounded-xl p-3 border bg-gray-50 border-gray-200 text-gray-500">
+                          <p className="text-sm">
+                            <span className="text-green-600 font-medium">✅</span>{' '}
+                            {t.driver_name ?? 'Driver'} → {t.guest_name ?? '—'}
+                            {dur && <span className="text-xs ml-2">· {dur}</span>}
+                          </p>
+                          {(t.pickup_location || t.dropoff_location) && (
+                            <p className="text-xs mt-0.5">{t.pickup_location ?? '—'} → {t.dropoff_location ?? '—'}</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {completedToday.length > 3 && (
+                      <button onClick={() => setCompletedExpanded(e => !e)}
+                        className="flex items-center gap-1 text-xs text-[#4A4A4A] hover:text-[#2D5A45] mt-1">
+                        {completedExpanded
+                          ? <><ChevronUp className="w-3.5 h-3.5" /> Show less</>
+                          : <><ChevronDown className="w-3.5 h-3.5" /> Show all {completedToday.length} completed</>
+                        }
+                      </button>
+                    )}
+                  </div>
+                </section>
+              )}
+
             </div>
           )}
-          </div>{/* /p-8 */}
-        </main>
-      </div>
+        </div>
+      </main>
 
-      {/* ── Dialogs ── */}
+      {/* Dialogs */}
 
-      <DriverFormDialog
+      <AdminDriverFormDialog
         open={formOpen}
         onClose={() => { setFormOpen(false); setEditDriver(null); }}
         driver={editDriver}
-        onSaved={handleSaved}
+        transportDepts={transportDepts}
+        onSaved={saved => {
+          setDrivers(prev => {
+            const idx = prev.findIndex(d => d.id === saved.id);
+            if (idx >= 0) { const next = [...prev]; next[idx] = saved; return next; }
+            return [saved, ...prev];
+          });
+          setFormOpen(false); setEditDriver(null);
+        }}
       />
 
-      {viewDriver && (
-        <DriverTaskViewDialog
-          open={!!viewDriver}
-          onClose={() => setViewDriver(null)}
-          driverId={viewDriver.id}
-          driverName={viewDriver.name}
-          locationName={viewDriver.location}
-        />
-      )}
-
-      {assignDriver && (
-        <CreateTaskDialog
-          open={!!assignDriver}
-          onClose={() => setAssignDriver(null)}
-          drivers={driverInfos}
-          preselectedDriverId={assignDriver?.id}
-          locationName={assignDriver?.location ?? user?.location ?? ''}
-          departmentName={assignDriver?.department ?? undefined}
-          onCreated={() => { loadedRef.current = false; fetchAll(); }}
-        />
-      )}
-
-      <DailyReportDialog
-        open={reportOpen}
-        onClose={() => setReportOpen(false)}
-        generatedBy={user?.name ?? 'Super Admin'}
-      />
+      <Dialog open={showMsgList} onOpenChange={o => !o && setShowMsgList(false)}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader><DialogTitle>Driver Messages</DialogTitle></DialogHeader>
+          <div className="space-y-1.5 py-1 max-h-80 overflow-y-auto">
+            {drivers.map(d => (
+              <button key={d.id} onClick={() => { setMsgDriver(d); setShowMsgList(false); }}
+                className="w-full text-left flex items-center gap-3 p-3 rounded-lg hover:bg-[#F5F0E8] transition-colors">
+                <MessageCircle className="w-4 h-4 text-[#2D5A45] shrink-0" />
+                <div>
+                  <p className="text-sm font-medium">{d.name}</p>
+                  {d.vehicle_type && <p className="text-xs text-[#4A4A4A]">{d.vehicle_type}</p>}
+                </div>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {user && (
         <DriverMessagesDialog
@@ -1040,155 +856,6 @@ export default function AdminDriversPage() {
           currentUser={{ id: user.id, name: user.name, role: user.role }}
         />
       )}
-
-      {maintViewDriver && (
-        <ViewMaintenanceLogDialog
-          open={!!maintViewDriver}
-          onClose={() => setMaintViewDriver(null)}
-          driverId={maintViewDriver.id}
-          driverName={maintViewDriver.name}
-          vehicleRegistration={maintViewDriver.vehicle_registration ?? undefined}
-          onAddEntry={() => { setMaintAddDriver(maintViewDriver); setMaintViewDriver(null); }}
-        />
-      )}
-
-      {maintAddDriver && (
-        <AddMaintenanceDialog
-          open={!!maintAddDriver}
-          onClose={() => setMaintAddDriver(null)}
-          driverId={maintAddDriver.id}
-          vehicleRegistration={maintAddDriver.vehicle_registration ?? undefined}
-          onSaved={() => setMaintAddDriver(null)}
-        />
-      )}
-
-      {/* Transfer Dialog */}
-      <Dialog open={!!transferTask} onOpenChange={o => { if (!o) setTransferTask(null); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ArrowLeftRight className="w-5 h-5 text-[#2D5A45]" /> Transfer Task to Another Driver
-            </DialogTitle>
-          </DialogHeader>
-          {transferTask && (
-            <div className="space-y-4 py-1">
-              <div className="bg-[#F5F0E8] rounded-lg p-3 text-sm">
-                <p className="font-medium text-[#1A1A1A]">{TYPE_LABELS[transferTask.task_type] ?? transferTask.task_type}</p>
-                {transferTask.guest_name && <p className="text-[#4A4A4A] text-xs mt-0.5">Guest: {transferTask.guest_name}</p>}
-                <p className="text-[#4A4A4A] text-xs mt-0.5">
-                  Currently: <span className="font-medium">{transferTask.driver_name ?? '(Unassigned)'}</span>
-                  {(transferTask.location ?? transferTask.department) && ` · ${transferTask.location ?? transferTask.department}`}
-                </p>
-              </div>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs font-medium text-[#4A4A4A] block mb-1">Department</label>
-                  <select value={transferDept}
-                    onChange={e => { setTransferDept(e.target.value); setTransferLoc(''); setTransferDriverId(''); }}
-                    className="w-full border border-[#E8E3DB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2D5A45] bg-white">
-                    <option value="">Any Department</option>
-                    {depts.map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-[#4A4A4A] block mb-1">Location</label>
-                  <select value={transferLoc}
-                    onChange={e => { setTransferLoc(e.target.value); setTransferDriverId(''); }}
-                    className="w-full border border-[#E8E3DB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2D5A45] bg-white">
-                    <option value="">Any Location</option>
-                    {transferLocOptions.map(l => <option key={l} value={l}>{l}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-[#4A4A4A] block mb-1">Assign To</label>
-                  <select value={transferDriverId} onChange={e => setTransferDriverId(e.target.value)}
-                    className="w-full border border-[#E8E3DB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2D5A45] bg-white">
-                    <option value="">Select driver…</option>
-                    {transferDriverOptions.map(d => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}{d.vehicle_type ? ` · ${d.vehicle_type}` : ''}{d.vehicle_capacity != null ? ` · ${d.vehicle_capacity} pax` : ''}{d.location ? ` · ${d.location}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-[#4A4A4A] block mb-1">Reason (optional)</label>
-                  <input
-                    value={transferReason}
-                    onChange={e => setTransferReason(e.target.value)}
-                    placeholder="e.g. Original driver unavailable"
-                    className="w-full border border-[#E8E3DB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2D5A45]"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setTransferTask(null)} className="border-[#D4CFC7] text-[#4A4A4A]">Cancel</Button>
-            <Button onClick={handleTransfer} disabled={!transferDriverId || transferring}
-              className="bg-[#2D5A45] hover:bg-[#234839] text-white">
-              {transferring ? 'Transferring…' : 'Transfer Task'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Weekly Report Dialog */}
-      <Dialog open={weeklyReportOpen} onOpenChange={o => { if (!o) setWeeklyReportOpen(false); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-[#2D5A45]" /> Weekly Fleet Report
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-1">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-[#4A4A4A] block mb-1">From</label>
-                <input type="date" value={weeklyReportFrom} onChange={e => setWeeklyReportFrom(e.target.value)}
-                  className="w-full border border-[#E8E3DB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2D5A45]" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-[#4A4A4A] block mb-1">To</label>
-                <input type="date" value={weeklyReportTo} onChange={e => setWeeklyReportTo(e.target.value)}
-                  className="w-full border border-[#E8E3DB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2D5A45]" />
-              </div>
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wide mb-2">Include</p>
-              <div className="space-y-2">
-                {([
-                  ['driverList',       'Driver list with vehicle details'],
-                  ['taskSummary',      'Task summary per driver'],
-                  ['completionRates',  'Completion rates'],
-                  ['mileageData',      'Mileage data'],
-                  ['costData',         'Fuel / maintenance costs'],
-                  ['passengerCounts',  'Passenger counts'],
-                  ['vehicleStatus',    'Vehicle availability status'],
-                ] as [keyof WeeklyReportPrefs, string][]).map(([key, label]) => (
-                  <label key={key} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={weeklyReportPrefs[key]}
-                      onChange={e => setWeeklyReportPrefs(p => ({ ...p, [key]: e.target.checked }))}
-                      className="w-3.5 h-3.5 rounded border-gray-300 accent-[#2D5A45]"
-                    />
-                    <span className="text-sm text-gray-700">{label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setWeeklyReportOpen(false)} className="border-[#D4CFC7] text-[#4A4A4A]">Cancel</Button>
-            <Button onClick={handleGenerateWeeklyReport} disabled={weeklyReportGenerating}
-              className="bg-[#2D5A45] hover:bg-[#234839] text-white gap-2">
-              <FileText className="w-4 h-4" />
-              {weeklyReportGenerating ? 'Generating…' : 'Generate Report'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

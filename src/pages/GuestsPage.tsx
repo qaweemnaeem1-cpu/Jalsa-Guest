@@ -1,4 +1,5 @@
 import { useState, Fragment } from 'react';
+import { formatDate as sharedFormatDate } from '@/utils/dateHelpers';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -121,13 +122,7 @@ const formatTimeAgo = (dateString: string) => {
   return date.toLocaleDateString();
 };
 
-// Format date as "24 Mar 2026"
-const formatDate = (dateString: string) => {
-  if (!dateString) return '—';
-  const d = new Date(dateString);
-  if (isNaN(d.getTime())) return dateString;
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-};
+const formatDate = (dateString: string) => sharedFormatDate(dateString);
 
 // Get status badge styling
 const getStatusBadgeStyle = (status: string) => {

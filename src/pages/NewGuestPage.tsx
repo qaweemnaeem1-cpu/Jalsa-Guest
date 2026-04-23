@@ -6,6 +6,7 @@ import { useGuests } from '@/hooks/useGuests';
 import { useDesignations } from '@/hooks/useDesignations';
 import { useAssignableItems } from '@/hooks/useAssignableItems';
 import { useAuditTrail } from '@/hooks/useAuditTrail';
+import { formatDateTime } from '@/utils/dateHelpers';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -263,12 +264,7 @@ function FamilyMemberForm({
 
   const sameFlightEnabled = member.sameFlight !== false;
 
-  const fmtDateTime = (dt?: string) => {
-    if (!dt) return '—';
-    const d = new Date(dt);
-    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) + ', ' +
-      d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  };
+  const fmtDateTime = (dt?: string) => formatDateTime(dt);
 
   const getAirportName = (code: string) => AIRPORTS.find(a => a.code === code)?.name ?? code;
 
@@ -1061,6 +1057,8 @@ export default function NewGuestPage() {
         v === '' || v === undefined || v === null ? null : v;
       const toInt = (v: unknown) => { const n = parseInt(String(v)); return isNaN(n) ? null : n; };
       const toBool = (v: unknown) => v === true || v === 'true';
+      const cleanTime = (v?: string | null) => { if (!v) return null; const t = v.includes('T') ? v.split('T')[1] : v; return t?.slice(0, 5) || null; };
+      const cleanDate = (v?: string | null) => { if (!v) return null; return v.includes('T') ? v.split('T')[0] : v; };
       const now = new Date().toISOString();
 
       if (formData.guestType === 'family') {
@@ -1103,10 +1101,12 @@ export default function NewGuestPage() {
           flight_number:     toNull(formData.arrivalFlightNumber),
           arrival_airport:   toNull(formData.arrivalAirport),
           arrival_terminal:  toNull(formData.arrivalTerminal),
-          arrival_time:      toNull(formData.arrivalTime),
+          arrival_date:      cleanDate(formData.arrivalTime),
+          arrival_time:      cleanTime(formData.arrivalTime),
           departure_airport:  toNull(formData.departureAirport),
           departure_terminal: toNull(formData.departureTerminal),
-          departure_time:    toNull(formData.departureTime),
+          departure_date:    cleanDate(formData.departureTime),
+          departure_time:    cleanTime(formData.departureTime),
           special_needs:     toNull(formData.specialNeeds),
           dietary_requirements: toNull(formData.dietaryRequirements),
           wheelchair_required: toBool(formData.wheelchairRequired),
@@ -1159,10 +1159,12 @@ export default function NewGuestPage() {
             flight_number:        useSameFlight ? toNull(formData.arrivalFlightNumber)  : toNull(m.arrivalFlightNumber),
             arrival_airport:      useSameFlight ? toNull(formData.arrivalAirport)       : toNull(m.arrivalAirport),
             arrival_terminal:     useSameFlight ? toNull(formData.arrivalTerminal)      : toNull(m.arrivalTerminal),
-            arrival_time:         useSameFlight ? toNull(formData.arrivalTime)          : toNull(m.arrivalTime),
+            arrival_date:         cleanDate(useSameFlight ? formData.arrivalTime : m.arrivalTime),
+            arrival_time:         cleanTime(useSameFlight ? formData.arrivalTime : m.arrivalTime),
             departure_airport:    useSameFlight ? toNull(formData.departureAirport)     : toNull(m.departureAirport),
             departure_terminal:   useSameFlight ? toNull(formData.departureTerminal)    : toNull(m.departureTerminal),
-            departure_time:       useSameFlight ? toNull(formData.departureTime)        : toNull(m.departureTime),
+            departure_date:       cleanDate(useSameFlight ? formData.departureTime : m.departureTime),
+            departure_time:       cleanTime(useSameFlight ? formData.departureTime : m.departureTime),
           });
         }
 

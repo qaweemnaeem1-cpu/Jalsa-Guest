@@ -18,6 +18,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { getMapLink, looksLikeAirport } from '@/lib/driverMatchUtils';
+import { formatDate, formatTimestamp } from '@/utils/dateHelpers';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -30,16 +31,6 @@ function thisWeekStart() {
 }
 function thisMonthStart() {
   const d = new Date(); d.setDate(1); return d.toISOString().split('T')[0];
-}
-function fmtDate(iso: string) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'short', year: 'numeric',
-  });
-}
-function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString('en-GB', {
-    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-  });
 }
 function calcDuration(startIso?: string, endIso?: string): string {
   if (!startIso || !endIso) return '—';
@@ -123,7 +114,7 @@ function TimelineItem({ label, time, by, done }: { label: string; time?: string;
       <div>
         <p className="text-sm font-medium text-[#1A1A1A]">{label}</p>
         <p className="text-xs text-[#4A4A4A]">
-          {time ? fmtDateTime(time) : '—'}
+          {time ? formatTimestamp(time) : '—'}
           {by ? ` · ${by}` : ''}
         </p>
       </div>
@@ -266,7 +257,7 @@ function DetailDialog({ task, onClose }: { task: CompletedTask | null; onClose: 
               <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">Handover History</p>
               <p className="text-sm text-[#1A1A1A]">
                 Handed over from <strong>{task.handover_from_driver_name}</strong>
-                {task.handover_at ? ` at ${fmtDateTime(task.handover_at)}` : ''}
+                {task.handover_at ? ` at ${formatTimestamp(task.handover_at)}` : ''}
               </p>
               {task.handover_reason && (
                 <p className="text-xs text-[#4A4A4A] mt-1 italic">Reason: "{task.handover_reason}"</p>
@@ -537,7 +528,7 @@ export default function TransportCompletedPage() {
                         <td className="px-3 py-3 whitespace-nowrap">
                           <p className="font-medium text-[#1A1A1A]">{task.driver_name ?? '—'}</p>
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap text-[#1A1A1A] font-medium">{fmtDate(task.scheduled_date)}</td>
+                        <td className="px-3 py-3 whitespace-nowrap text-[#1A1A1A] font-medium">{formatDate(task.scheduled_date)}</td>
                         <td className="px-3 py-3 whitespace-nowrap text-[#4A4A4A]">{task.scheduled_time ?? '—'}</td>
                         <td className="px-3 py-3 whitespace-nowrap">
                           <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${tm.bg} ${tm.text}`}>
@@ -570,7 +561,7 @@ export default function TransportCompletedPage() {
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${pm.cls}`}>{pm.label}</span>
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap text-[#4A4A4A] text-xs">
-                          {task.completed_at ? fmtDateTime(task.completed_at) : '—'}
+                          {task.completed_at ? formatTimestamp(task.completed_at) : '—'}
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap">
                           <button

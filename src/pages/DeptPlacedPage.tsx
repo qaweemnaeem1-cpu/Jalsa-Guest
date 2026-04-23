@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { formatDate } from '@/utils/dateHelpers';
 import { ArrowRightLeft, CheckCircle, ChevronRight, Eye, Search, Users } from 'lucide-react';
 import { Fragment } from 'react';
 import { toast } from 'sonner';
@@ -205,8 +206,8 @@ export default function DeptPlacedPage() {
     if (td?.isSeasonal && td.activeFrom && td.activeTo) {
       const today = new Date().toISOString().substring(0, 10);
       if (today < td.activeFrom || today > td.activeTo) {
-        const from = new Date(td.activeFrom).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-        const to   = new Date(td.activeTo).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        const from = formatDate(td.activeFrom);
+        const to   = formatDate(td.activeTo);
         toast.warning(`${tdName} is not active yet (active ${from} — ${to})`, { duration: 5000 });
       }
     }
@@ -824,7 +825,7 @@ export default function DeptPlacedPage() {
                           {row.arrivalTime ? (
                             <div>
                               <div className="text-sm text-[#1A1A1A]">
-                                {new Date(row.arrivalTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                {formatDate(row.arrivalTime)}
                               </div>
                               {row.arrivalAirport && <div className="text-xs text-gray-400">{row.arrivalAirport}</div>}
                             </div>
@@ -834,7 +835,7 @@ export default function DeptPlacedPage() {
                           {row.departureTime ? (
                             <div>
                               <div className="text-sm text-[#1A1A1A]">
-                                {new Date(row.departureTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                {formatDate(row.departureTime)}
                               </div>
                               {row.departureAirport && <div className="text-xs text-gray-400">{row.departureAirport}</div>}
                             </div>

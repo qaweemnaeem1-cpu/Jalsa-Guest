@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { formatTimestampTime, formatTimestampDateShort } from '@/utils/dateHelpers';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -42,13 +43,8 @@ interface DriverMessagesDialogProps {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-}
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
+const fmtTime = (iso: string) => formatTimestampTime(iso);
+const fmtDate = (iso: string) => formatTimestampDateShort(iso);
 
 const ROLE_LABELS: Record<string, string> = {
   driver:           'Driver',

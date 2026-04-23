@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { formatDate } from '@/utils/dateHelpers';
 import { SortableHeader, sortData } from '@/components/SortableHeader';
 import { useTransportDepts, getTransportDeptBadgeClass, type AddTransportDeptInput } from '@/hooks/useTransportDepartments';
 import type { TransportDepartment } from '@/types';
@@ -1520,7 +1521,7 @@ export default function UsersPage() {
                                   </td>
                                   <td className="px-4 py-3 text-sm text-[#4A4A4A]">
                                     {td.isSeasonal && (td.activeFrom || td.activeTo)
-                                      ? `${td.activeFrom ? new Date(td.activeFrom).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '?'} — ${td.activeTo ? new Date(td.activeTo).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '?'}`
+                                      ? `${td.activeFrom ? formatDate(td.activeFrom) : '?'} — ${td.activeTo ? formatDate(td.activeTo) : '?'}`
                                       : td.isSeasonal ? <span className="text-amber-600 text-xs">Dates not set</span> : <span className="text-gray-400 text-xs">Always active</span>
                                     }
                                   </td>

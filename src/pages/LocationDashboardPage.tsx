@@ -14,6 +14,7 @@ import { LocationSidebar } from '@/components/LocationSidebar';
 import { LocationUserMenu } from '@/components/LocationUserMenu';
 import { supabase } from '@/lib/supabase';
 import type { Guest, Room, BedAssignment } from '@/types';
+import { formatDate, formatTime, formatTimestampTime } from '@/utils/dateHelpers';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -60,16 +61,6 @@ function OccupancyBar({ occupied, total }: { occupied: number; total: number }) 
       <span className="text-xs text-gray-500">{occupied}/{total} beds</span>
     </div>
   );
-}
-
-function fmtTime(iso?: string): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-}
-
-function fmtDate(iso?: string): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 // ── Driver widget types ────────────────────────────────────────────────────────
@@ -132,6 +123,30 @@ export default function LocationDashboardPage() {
   const { totalBeds, occupiedBeds } = useMemo(() => getLocationOccupancy(loc), [loc, getLocationOccupancy]);
   const roomGroups = useMemo(() => getRoomsByLocation(loc), [loc, getRoomsByLocation]);
   const flatRooms  = useMemo(() => roomGroups.flatMap(g => g.rooms), [roomGroups]);
+
+  // ── Diagnostic: log guest date/time data (remove after bug is fixed) ─────────
+  useEffect(() => {
+    if (!locGuests.length) return;
+    console.log('[LocDashboard] Guest arrivalTime/departureTime (hook-reconstructed):',
+      locGuests.map(g => ({
+        name: g.fullName,
+        arrivalTime: g.arrivalTime,
+        departureTime: g.departureTime,
+      })),
+    );
+    const ids = locGuests.map(g => g.id);
+    supabase
+      .from('guests')
+      .select('id, full_name, arrival_date, arrival_time, departure_date, departure_time')
+      .in('id', ids)
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn('[LocDashboard] Raw DB fetch failed:', error.message);
+        } else {
+          console.log('[LocDashboard] Raw DB rows:', data);
+        }
+      });
+  }, [locGuests]);
 
   // ── Today's arrivals / departures ─────────────────────────────────────────────
 
@@ -397,7 +412,7 @@ export default function LocationDashboardPage() {
                           {recentArrivals.map(a => (
                             <div key={a.id} className="px-4 py-2.5">
                               <p className="text-xs font-medium text-[#1A1A1A]">
-                                {new Date(a.completed_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                {formatTimestampTime(a.completed_at)}
                                 {' '}— {a.driver_name} arrived with {a.guest_name ?? 'guest'}
                               </p>
                             </div>
@@ -458,7 +473,7 @@ export default function LocationDashboardPage() {
                             )}
                           </div>
                           <div className="text-xs text-gray-400 mt-0.5">
-                            Arrives: {fmtDate(g.arrivalTime)} &nbsp;|&nbsp; Departs: {fmtDate(g.departureTime)}
+                            Arrives: {formatDate(g.arrivalTime)} &nbsp;|&nbsp; Departs: {formatDate(g.departureTime)}
                           </div>
                         </div>
                       </div>
@@ -493,7 +508,7 @@ export default function LocationDashboardPage() {
                       >
                         <span className="text-sm font-medium text-green-900 truncate max-w-[130px]">{g.fullName}</span>
                         <div className="flex items-center gap-2 shrink-0 text-xs text-green-700">
-                          <span>{fmtTime(g.arrivalTime)}</span>
+                          <span>{formatTime(g.arrivalTime)}</span>
                           {g.arrivalFlightNumber && (
                             <span className="font-mono bg-green-100 px-1.5 py-0.5 rounded">{g.arrivalFlightNumber}</span>
                           )}
@@ -527,7 +542,7 @@ export default function LocationDashboardPage() {
                       >
                         <span className="text-sm font-medium text-amber-900 truncate max-w-[130px]">{g.fullName}</span>
                         <div className="flex items-center gap-2 shrink-0 text-xs text-amber-700">
-                          <span>{fmtTime(g.departureTime)}</span>
+                          <span>{formatTime(g.departureTime)}</span>
                           {g.departureFlightNumber && (
                             <span className="font-mono bg-amber-100 px-1.5 py-0.5 rounded">{g.departureFlightNumber}</span>
                           )}
@@ -546,12 +561,6 @@ export default function LocationDashboardPage() {
                   <Car className="w-4 h-4 text-[#2D5A45]" />
                   <h2 className="text-sm font-semibold text-[#1A1A1A]">Drivers — {loc}</h2>
                 </div>
-                <button
-                  onClick={() => navigate('/location/drivers')}
-                  className="text-xs text-[#2D5A45] hover:underline flex items-center gap-1 font-medium"
-                >
-                  Manage <ArrowRight className="w-3 h-3" />
-                </button>
               </div>
 
               {driverStatusRows.length === 0 ? (

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { formatDateTime } from '@/utils/dateHelpers';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -821,12 +822,7 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
                       <InfoRow
                         label="Date & Time"
                         value={
-                          guest.arrivalTime
-                            ? new Date(guest.arrivalTime).toLocaleString('en-GB', {
-                                day: 'numeric', month: 'short', year: 'numeric',
-                                hour: '2-digit', minute: '2-digit',
-                              })
-                            : undefined
+                          formatDateTime(guest.arrivalTime) === '—' ? undefined : formatDateTime(guest.arrivalTime)
                         }
                       />
                     </div>
@@ -842,12 +838,7 @@ export function GuestProfilePanel({ guest, open, onClose }: GuestProfilePanelPro
                       <InfoRow
                         label="Date & Time"
                         value={
-                          guest.departureTime
-                            ? new Date(guest.departureTime).toLocaleString('en-GB', {
-                                day: 'numeric', month: 'short', year: 'numeric',
-                                hour: '2-digit', minute: '2-digit',
-                              })
-                            : undefined
+                          formatDateTime(guest.departureTime) === '—' ? undefined : formatDateTime(guest.departureTime)
                         }
                       />
                     </div>

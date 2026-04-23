@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, Fragment, createContext, useContext } from 'react';
+import { formatDate, formatDateWithWeekday } from '@/utils/dateHelpers';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
@@ -267,29 +268,19 @@ const DAFTAR_PRINT_COL_LABELS: Record<string, string> = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmt(d: string | null): string {
-  if (!d) return '';
-  return new Date(d).toLocaleDateString('en-GB', {
-    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
-  });
-}
-
-function fmtShort(d: string | null): string {
-  if (!d) return '';
-  return new Date(d).toLocaleDateString('en-GB', {
-    weekday: 'short', day: 'numeric', month: 'short',
-  });
-}
+const fmt = (d: string | null): string => d ? formatDateWithWeekday(d, { long: true }) : '';
+const fmtShort = (d: string | null): string => d ? formatDateWithWeekday(d) : '';
 
 // "28 Jun 2026" or "28 Jun 2026, 14:30" — used for combined departure column
 function fmtDep(d: string | null | undefined): string {
   if (!d) return '—';
-  const dt = new Date(d);
-  if (isNaN(dt.getTime())) return '—';
-  const datePart = dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  const h = dt.getHours(), m = dt.getMinutes();
-  if (h === 0 && m === 0) return datePart;
-  return `${datePart}, ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  const datePart = formatDate(d);
+  if (datePart === '—') return '—';
+  const s = String(d);
+  if (!s.includes('T')) return datePart;
+  const timePart = s.split('T')[1]?.slice(0, 5) ?? '';
+  if (!timePart || timePart === '00:00') return datePart;
+  return `${datePart}, ${timePart}`;
 }
 
 function fmtFlight(flightNum: string | undefined, airport: string | undefined): string | null {

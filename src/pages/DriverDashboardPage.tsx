@@ -11,6 +11,7 @@ import type { DriverTask, DriverTaskStatus, DriverTaskType, DriverTaskPriority }
 import { InlineMessagesPanel } from '@/components/DriverMessagesDialog';
 import { AddMaintenanceDialog, type MaintenanceEntry, computeStatus } from '@/components/VehicleMaintenanceDialog';
 import { TopBar } from '@/components/TopBar';
+import { formatDateWithWeekday } from '@/utils/dateHelpers';
 
 // ── avatar / contact helpers ──────────────────────────────────────────────────
 
@@ -37,9 +38,7 @@ function tomorrowStr() {
 function dayAfterStr() {
   const d = new Date(); d.setDate(d.getDate() + 2); return d.toISOString().split('T')[0];
 }
-function fmtDate(iso: string) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-}
+const fmtDate = (iso: string) => formatDateWithWeekday(iso);
 
 const TASK_TYPE_META: Record<DriverTaskType, { label: string; bg: string; text: string; icon: React.ReactNode }> = {
   airport_pickup:    { label: 'Pickup',   bg: 'bg-blue-100',   text: 'text-blue-700',   icon: <Plane className="w-4 h-4" /> },
@@ -535,11 +534,11 @@ export default function DriverDashboardPage() {
           const isOverdue = status === 'overdue';
           const typeLabel = m.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
           const dueInfo = [
-            m.next_due_date ? new Date(m.next_due_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '',
+            m.next_due_date ? new Date(m.next_due_date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '',
             m.next_due_mileage ? `${m.next_due_mileage.toLocaleString()} km` : '',
           ].filter(Boolean).join(' or ');
           const daysInfo = m.next_due_date
-            ? Math.ceil((new Date(m.next_due_date + 'T00:00:00').getTime() - Date.now()) / 86400000)
+            ? Math.ceil((new Date(m.next_due_date + 'T12:00:00').getTime() - Date.now()) / 86400000)
             : null;
           return (
             <div key={m.id} className={`rounded-xl border p-3 mb-3 flex items-start justify-between gap-3 ${
@@ -648,7 +647,7 @@ export default function DriverDashboardPage() {
               {weekSchedule.map(day => {
                 const meta  = SCHED_META[day.status];
                 const isToday = day.date === today;
-                const label = new Date(day.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+                const label = new Date(day.date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
                 return (
                   <div key={day.date} className={`flex items-center justify-between px-5 py-2.5 ${isToday ? 'bg-[#F5F0E8]/50' : ''}`}>
                     <div className="flex items-center gap-2">

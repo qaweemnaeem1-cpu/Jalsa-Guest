@@ -18,6 +18,7 @@ function GuestAvatar({ name }: { name: string }) {
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { DriverSidebar } from '@/components/DriverSidebar';
+import { formatDateShort } from '@/utils/dateHelpers';
 import { supabase } from '@/lib/supabase';
 import type { DriverTask, DriverTaskType, DriverTaskPriority } from '@/types';
 import {
@@ -36,9 +37,7 @@ import { TopBar } from '@/components/TopBar';
 function todayStr()    { return new Date().toISOString().split('T')[0]; }
 function tomorrowStr() { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0]; }
 function thisWeekEnd() { const d = new Date(); d.setDate(d.getDate() + (6 - d.getDay())); return d.toISOString().split('T')[0]; }
-function fmtDate(iso: string) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
+const fmtDate = (iso: string) => formatDateShort(iso);
 
 type DateFilter = 'all' | 'today' | 'tomorrow' | 'week';
 type TaskStatus = 'suggested' | 'pending' | 'in_progress' | 'completed' | 'cancelled';

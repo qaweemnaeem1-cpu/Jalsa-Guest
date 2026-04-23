@@ -89,11 +89,15 @@ function rowToGuest(row: any): Guest {
     arrivalFlightNumber: row.flight_number ?? row.arrival_flight_number ?? undefined,
     arrivalAirport: row.arrival_airport ?? undefined,
     arrivalTerminal: row.arrival_terminal ?? undefined,
-    arrivalTime: row.arrival_time ?? row.arrival_date ?? undefined,
+    arrivalTime: row.arrival_date && row.arrival_time
+      ? `${row.arrival_date}T${String(row.arrival_time).slice(0, 5)}`
+      : (row.arrival_date ?? row.arrival_time ?? undefined),
     departureFlightNumber: row.flight_number ?? row.departure_flight_number ?? undefined,
     departureAirport: row.departure_airport ?? undefined,
     departureTerminal: row.departure_terminal ?? undefined,
-    departureTime: row.departure_time ?? row.departure_date ?? undefined,
+    departureTime: row.departure_date && row.departure_time
+      ? `${row.departure_date}T${String(row.departure_time).slice(0, 5)}`
+      : (row.departure_date ?? row.departure_time ?? undefined),
     specialNeeds: row.special_needs ?? undefined,
     dietaryRequirements: row.dietary_requirements ?? undefined,
     wheelchairRequired: row.wheelchair_required ?? false,
@@ -140,6 +144,17 @@ function rowToGuest(row: any): Guest {
   };
 }
 
+function cleanTime(value?: string | null): string | null {
+  if (!value) return null;
+  const t = value.includes('T') ? value.split('T')[1] : value;
+  return t?.slice(0, 5) || null; // HH:MM only
+}
+
+function cleanDate(value?: string | null): string | null {
+  if (!value) return null;
+  return value.includes('T') ? value.split('T')[0] : value;
+}
+
 /** Convert a camelCase Partial<Guest> to snake_case DB columns.
  *  Only emits columns that actually exist in the guests table. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -161,10 +176,9 @@ function updatesToDbRow(updates: Partial<Guest>): Record<string, any> {
     arrivalFlightNumber: 'flight_number',     // DB has single flight_number column
     arrivalAirport:     'arrival_airport',
     arrivalTerminal:    'arrival_terminal',
-    arrivalTime:        'arrival_time',
+    // arrivalTime / departureTime handled specially below (split into date+time)
     departureAirport:   'departure_airport',
     departureTerminal:  'departure_terminal',
-    departureTime:      'departure_time',
     specialNeeds:       'special_needs',
     dietaryRequirements: 'dietary_requirements',
     wheelchairRequired: 'wheelchair_required',
@@ -217,6 +231,19 @@ function updatesToDbRow(updates: Partial<Guest>): Record<string, any> {
   const row: Record<string, any> = {};
   for (const [key, value] of Object.entries(updates)) {
     if (skip.has(key)) continue;
+
+    // datetime-local inputs produce "YYYY-MM-DDTHH:MM"; split into separate DATE and TIME columns
+    if (key === 'arrivalTime') {
+      row['arrival_date'] = cleanDate(value as string);
+      row['arrival_time'] = cleanTime(value as string);
+      continue;
+    }
+    if (key === 'departureTime') {
+      row['departure_date'] = cleanDate(value as string);
+      row['departure_time'] = cleanTime(value as string);
+      continue;
+    }
+
     const dbKey = map[key] ?? key;
     // Convert empty strings to null so PostgreSQL doesn't reject typed columns
     // Arrays are passed through as-is (TEXT[] columns); empty arrays become null
@@ -419,14 +446,14 @@ export function GuestsProvider({ children }: { children: ReactNode }) {
         special_needs:      toNull(guestData.specialNeeds),
         dietary_requirements: toNull(guestData.dietaryRequirements),
         flight_number:      toNull(guestData.arrivalFlightNumber),
-        arrival_date:       toNull(guestData.arrivalTime),
-        departure_date:     toNull(guestData.departureTime),
+        arrival_date:       cleanDate(guestData.arrivalTime),
+        departure_date:     cleanDate(guestData.departureTime),
         arrival_airport:    toNull(guestData.arrivalAirport),
         arrival_terminal:   toNull(guestData.arrivalTerminal),
         departure_airport:  toNull(guestData.departureAirport),
         departure_terminal: toNull(guestData.departureTerminal),
-        arrival_time:       toNull(guestData.arrivalTime),
-        departure_time:     toNull(guestData.departureTime),
+        arrival_time:       cleanTime(guestData.arrivalTime),
+        departure_time:     cleanTime(guestData.departureTime),
         remarks:            null,
         status:             'Awaiting Review',
         appeal_status:      'none',

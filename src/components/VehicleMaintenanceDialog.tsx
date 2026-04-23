@@ -8,6 +8,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Wrench, Pencil, Trash2, Plus, Loader2, X } from 'lucide-react';
+import { formatDate } from '@/utils/dateHelpers';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import {
@@ -65,11 +66,7 @@ const MAINT_TYPE_OPTIONS: MaintenanceType[] = [
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function fmtDate(iso: string) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'short', year: 'numeric',
-  });
-}
+const fmtDate = (iso: string) => formatDate(iso);
 
 function fmtCost(n: number) {
   return `£${n.toFixed(2)}`;
@@ -79,7 +76,7 @@ function fmtCost(n: number) {
 export function computeStatus(entry: Pick<MaintenanceEntry, 'next_due_date' | 'status'>): MaintenanceStatus {
   if (!entry.next_due_date) return entry.status;
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const due   = new Date(entry.next_due_date + 'T00:00:00');
+  const due   = new Date(entry.next_due_date + 'T12:00:00');
   if (due < today) return 'overdue';
   const diff = (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
   if (diff <= 7) return 'scheduled';

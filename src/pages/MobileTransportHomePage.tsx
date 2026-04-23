@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { formatTime } from '@/utils/dateHelpers';
 import {
   AlertTriangle, CheckCircle2, Clock, Users, Car, ClipboardList,
   ChevronRight, UserCheck, RefreshCw,
@@ -240,7 +241,7 @@ export default function MobileTransportHomePage() {
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <Clock className="w-3 h-3 text-[#4A4A4A] dark:text-gray-500" />
                         <span className="text-xs text-[#4A4A4A] dark:text-gray-400">
-                          {a.flight_arrival_time ? new Date(a.flight_arrival_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                          {formatTime(a.flight_arrival_time)}
                           {a.pickup_location ? ` · ${a.pickup_location}` : ''}
                         </span>
                       </div>

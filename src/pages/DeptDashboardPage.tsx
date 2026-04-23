@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { DeptSidebar } from '@/components/DeptSidebar';
 import { DeptUserMenu } from '@/components/DeptUserMenu';
+import { formatDate as sharedFormatDate } from '@/utils/dateHelpers';
 import { getStatusBadgeClass } from '@/lib/constants';
 import { useDepartments } from '@/hooks/useDepartments';
 import { GuestViewModal } from '@/components/GuestViewModal';
@@ -302,10 +303,7 @@ export default function DeptDashboardPage() {
     return 'bg-blue-500';
   }
 
-  function fmtDate(iso?: string): string {
-    if (!iso) return '—';
-    return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  }
+  const fmtDate = (iso?: string): string => sharedFormatDate(iso);
 
   if (!user) return null;
 
@@ -534,7 +532,7 @@ export default function DeptDashboardPage() {
                     <Car className="w-4 h-4 text-[#2D5A45]" />
                     <h2 className="text-sm font-semibold text-[#1A1A1A]">Drivers — {dept}</h2>
                   </div>
-                  <button onClick={() => navigate('/dept/drivers')}
+                  <button onClick={() => navigate('/dept/transportation')}
                     className="text-xs text-[#2D5A45] hover:underline flex items-center gap-1">
                     View All Drivers <ArrowRight className="w-3 h-3" />
                   </button>
@@ -576,7 +574,7 @@ export default function DeptDashboardPage() {
                 {totalUnassignedTasks > 0 && (
                   <div className="mt-3 flex items-center justify-between text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                     <span>⚠️ {totalUnassignedTasks} unassigned task{totalUnassignedTasks !== 1 ? 's' : ''} today</span>
-                    <button onClick={() => navigate('/dept/drivers')}
+                    <button onClick={() => navigate('/dept/transportation')}
                       className="text-xs text-[#2D5A45] hover:underline flex items-center gap-1 font-medium">
                       View All Drivers <ArrowRight className="w-3 h-3" />
                     </button>
@@ -604,7 +602,7 @@ export default function DeptDashboardPage() {
                 <tbody className="divide-y divide-[#E8E3DB]">
                   {dailyStats.map(({ dayStr, arriving, departing, net }) => {
                     const isToday = dayStr === todayStr;
-                    const dateObj = new Date(dayStr + 'T00:00:00');
+                    const dateObj = new Date(dayStr + 'T12:00:00');
                     const dateLabel = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
                     const dayLabel  = dateObj.toLocaleDateString('en-GB', { weekday: 'short' });
                     return (

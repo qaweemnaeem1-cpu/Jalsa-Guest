@@ -134,7 +134,7 @@ function generatePDF(
   const pageH = doc.internal.pageSize.getHeight();
   const margin = 14;
 
-  const dateFmt = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-GB', {
+  const dateFmt = new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-GB', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
 
@@ -432,7 +432,7 @@ function generatePDF(
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(180, 30, 30);
       doc.text(
-        `• ${a.driver_name}: ${a.type.replace(/_/g, ' ')} overdue${a.next_due_date ? ` (due ${new Date(a.next_due_date + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })})` : ''}`,
+        `• ${a.driver_name}: ${a.type.replace(/_/g, ' ')} overdue${a.next_due_date ? ` (due ${new Date(a.next_due_date + 'T12:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })})` : ''}`,
         margin + 2, finalY,
       );
       finalY += 5;

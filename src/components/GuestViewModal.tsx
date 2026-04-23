@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { formatDateTime, formatTimestamp } from '@/utils/dateHelpers';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -1090,12 +1091,7 @@ export function GuestViewModal({
                       <PlainField label="Terminal" value={guest.arrivalTerminal} />
                       <PlainField
                         label="Date & Time"
-                        value={guest.arrivalTime
-                          ? new Date(guest.arrivalTime).toLocaleString('en-GB', {
-                              day: 'numeric', month: 'short', year: 'numeric',
-                              hour: '2-digit', minute: '2-digit',
-                            })
-                          : undefined}
+                        value={formatDateTime(guest.arrivalTime) === '—' ? undefined : formatDateTime(guest.arrivalTime)}
                       />
                     </div>
                   )}
@@ -1129,12 +1125,7 @@ export function GuestViewModal({
                       <PlainField label="Terminal" value={guest.departureTerminal} />
                       <PlainField
                         label="Date & Time"
-                        value={guest.departureTime
-                          ? new Date(guest.departureTime).toLocaleString('en-GB', {
-                              day: 'numeric', month: 'short', year: 'numeric',
-                              hour: '2-digit', minute: '2-digit',
-                            })
-                          : undefined}
+                        value={formatDateTime(guest.departureTime) === '—' ? undefined : formatDateTime(guest.departureTime)}
                       />
                     </div>
                   )}
@@ -1167,10 +1158,7 @@ export function GuestViewModal({
                       {guest.assignedDepartmentAt && (
                         <PlainField
                           label="Assigned on"
-                          value={new Date(guest.assignedDepartmentAt).toLocaleString('en-GB', {
-                            day: 'numeric', month: 'short', year: 'numeric',
-                            hour: '2-digit', minute: '2-digit',
-                          })}
+                          value={formatTimestamp(guest.assignedDepartmentAt)}
                         />
                       )}
                     </div>
@@ -1198,10 +1186,7 @@ export function GuestViewModal({
                       {guest.placedAt && (
                         <PlainField
                           label="Placed on"
-                          value={new Date(guest.placedAt).toLocaleString('en-GB', {
-                            day: 'numeric', month: 'short', year: 'numeric',
-                            hour: '2-digit', minute: '2-digit',
-                          })}
+                          value={formatTimestamp(guest.placedAt)}
                         />
                       )}
                     </div>

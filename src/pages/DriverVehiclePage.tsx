@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { TopBar } from '@/components/TopBar';
+import { formatDate } from '@/utils/dateHelpers';
 import {
   AddMaintenanceDialog, ViewMaintenanceLogDialog,
   type MaintenanceEntry, MAINT_TYPE_META, MAINT_STATUS_META, computeStatus,
@@ -50,17 +51,13 @@ function monthStartStr() {
   const d = new Date(); d.setDate(1);
   return d.toISOString().split('T')[0];
 }
-function fmtDate(iso: string) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'short', year: 'numeric',
-  });
-}
+const fmtDate = (iso: string) => formatDate(iso);
 function daysAgo(iso: string) {
-  const diff = Math.floor((Date.now() - new Date(iso + 'T00:00:00').getTime()) / 86400000);
+  const diff = Math.floor((Date.now() - new Date(iso + 'T12:00:00').getTime()) / 86400000);
   return diff === 0 ? 'today' : diff === 1 ? '1 day ago' : `${diff} days ago`;
 }
 function daysUntil(iso: string) {
-  const diff = Math.ceil((new Date(iso + 'T00:00:00').getTime() - Date.now()) / 86400000);
+  const diff = Math.ceil((new Date(iso + 'T12:00:00').getTime() - Date.now()) / 86400000);
   if (diff < 0) return 'overdue';
   if (diff === 0) return 'today';
   return `in ${diff} day${diff === 1 ? '' : 's'}`;
@@ -503,9 +500,9 @@ export default function DriverVehiclePage() {
                 )}
                 {mileageStats.nextDueDate && (
                   <div className={`rounded-xl px-4 py-3 ${
-                    new Date(mileageStats.nextDueDate + 'T00:00:00') < new Date()
+                    new Date(mileageStats.nextDueDate + 'T12:00:00') < new Date()
                       ? 'bg-red-50'
-                      : (Date.parse(mileageStats.nextDueDate + 'T00:00:00') - Date.now()) / 86400000 <= 7
+                      : (Date.parse(mileageStats.nextDueDate + 'T12:00:00') - Date.now()) / 86400000 <= 7
                         ? 'bg-amber-50'
                         : 'bg-[#F5F0E8]'
                   }`}>

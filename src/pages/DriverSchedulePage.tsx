@@ -70,7 +70,7 @@ function weekStartOf(date: Date): string {
 /** Get 7 ISO dates starting from weekStart (Mon to Sun) */
 function weekDays(weekStart: string): string[] {
   const days: string[] = [];
-  const base = new Date(weekStart + 'T00:00:00');
+  const base = new Date(weekStart + 'T12:00:00');
   for (let i = 0; i < 7; i++) {
     const d = new Date(base);
     d.setDate(d.getDate() + i);
@@ -80,20 +80,20 @@ function weekDays(weekStart: string): string[] {
 }
 
 function addWeeks(weekStart: string, delta: number): string {
-  const d = new Date(weekStart + 'T00:00:00');
+  const d = new Date(weekStart + 'T12:00:00');
   d.setDate(d.getDate() + delta * 7);
   return d.toISOString().split('T')[0];
 }
 
 function fmtDayHeader(iso: string): string {
-  const d = new Date(iso + 'T00:00:00');
+  const d = new Date(iso + 'T12:00:00');
   return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' });
 }
 
 function fmtWeekRange(weekStart: string): string {
   const days = weekDays(weekStart);
-  const s = new Date(days[0] + 'T00:00:00');
-  const e = new Date(days[6] + 'T00:00:00');
+  const s = new Date(days[0] + 'T12:00:00');
+  const e = new Date(days[6] + 'T12:00:00');
   const sStr = s.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   const eStr = e.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   return `${sStr} — ${eStr}`;
@@ -179,7 +179,7 @@ function ScheduleEditDialog({
           </DialogTitle>
           {!isBulk && target && (
             <p className="text-sm text-[#4A4A4A]">
-              {new Date(target.dates[0] + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+              {new Date(target.dates[0] + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
           )}
         </DialogHeader>

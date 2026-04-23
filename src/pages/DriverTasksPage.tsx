@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase';
 import type { DriverTask, DriverTaskStatus, DriverTaskType, DriverTaskPriority, DriverTaskPassenger } from '@/types';
 import { HandoverDialog } from '@/components/HandoverDialog';
 import { TopBar } from '@/components/TopBar';
+import { formatDateShort } from '@/utils/dateHelpers';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,9 +34,7 @@ function todayStr()    { return new Date().toISOString().split('T')[0]; }
 function tomorrowStr() { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0]; }
 function thisWeekEnd() { const d = new Date(); d.setDate(d.getDate() + (6 - d.getDay())); return d.toISOString().split('T')[0]; }
 
-function fmtDate(iso: string) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
+const fmtDate = (iso: string) => formatDateShort(iso);
 
 type DateFilter   = 'all' | 'today' | 'tomorrow' | 'week';
 type TypeFilter   = 'all' | DriverTaskType;

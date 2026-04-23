@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { formatDateShort } from '@/utils/dateHelpers';
 import {
   ArrowLeft,
   ChevronDown,
@@ -487,13 +488,9 @@ export default function DeptLocationsPage() {
                                   </span>
                                   {(room.availableFrom || room.availableTo) && (
                                     <span className="text-xs text-gray-400 shrink-0">
-                                      {room.availableFrom
-                                        ? new Date(room.availableFrom).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-                                        : '—'}
+                                      {formatDateShort(room.availableFrom)}
                                       {' – '}
-                                      {room.availableTo
-                                        ? new Date(room.availableTo).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-                                        : '—'}
+                                      {formatDateShort(room.availableTo)}
                                     </span>
                                   )}
                                   {!room.availableFrom && !room.availableTo && (

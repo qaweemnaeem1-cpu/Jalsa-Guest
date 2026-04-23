@@ -6,6 +6,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { DriverSidebar } from '@/components/DriverSidebar';
 import { TopBar } from '@/components/TopBar';
+import { formatDate, formatTimestamp } from '@/utils/dateHelpers';
 import { supabase } from '@/lib/supabase';
 import type { DriverTask, DriverTaskType } from '@/types';
 import {
@@ -22,12 +23,8 @@ function thisMonthStart() {
   const d = new Date(); d.setDate(1); return d.toISOString().split('T')[0];
 }
 
-function fmtDate(iso: string) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-}
+const fmtDate = (iso: string) => formatDate(iso);
+const fmtDateTime = (iso: string) => formatTimestamp(iso);
 function calcDuration(startIso?: string, endIso?: string): string {
   if (!startIso || !endIso) return '—';
   const mins = Math.round((new Date(endIso).getTime() - new Date(startIso).getTime()) / 60000);

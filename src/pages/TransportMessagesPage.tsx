@@ -10,15 +10,12 @@ import { TransportSidebar } from '@/components/TransportSidebar';
 import { TopBar } from '@/components/TopBar';
 import { supabase } from '@/lib/supabase';
 import type { DriverMessage } from '@/components/DriverMessagesDialog';
+import { formatTimestampTime, formatTimestampDateShort } from '@/utils/dateHelpers';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-}
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
+const fmtTime = (iso: string) => formatTimestampTime(iso);
+const fmtDate = (iso: string) => formatTimestampDateShort(iso);
 
 // ── types ─────────────────────────────────────────────────────────────────────
 

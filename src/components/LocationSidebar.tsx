@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Inbox, BedDouble, CheckCircle, MessageSquare, Car } from 'lucide-react';
+import { LayoutDashboard, Inbox, BedDouble, CheckCircle, MessageSquare } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useGuests } from '@/hooks/useGuests';
 import { useRooms } from '@/hooks/useRooms';
@@ -52,7 +52,6 @@ export function LocationSidebar() {
     { icon: Inbox,           label: 'Incoming',          href: '/location/incoming',      badge: incomingCount,    badgeColor: 'bg-red-500' },
     { icon: BedDouble,       label: 'Rooms & Blocks',    href: '/location/rooms',         badge: 0 },
     { icon: CheckCircle,     label: 'Accommodated',      href: '/location/accommodated',  badge: accommodatedCount, badgeColor: 'bg-green-500' },
-    { icon: Car,             label: 'Drivers',           href: '/location/drivers',       badge: 0 },
     { icon: MessageSquare,   label: 'Messages',          href: '/location/messages',      badge: unreadMessages, badgeColor: 'bg-red-500' },
   ];
 

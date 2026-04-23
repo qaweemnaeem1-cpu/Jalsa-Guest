@@ -117,7 +117,7 @@ function DriverTasksDialog({ driver, onClose }: { driver: DriverRow | null; onCl
                 {tasks.map(t => (
                   <tr key={t.id} className="hover:bg-[#F5F0E8]/50">
                     <td className="px-3 py-2 whitespace-nowrap">
-                      {new Date(t.scheduled_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                      {new Date(t.scheduled_date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap text-[#4A4A4A]">{t.scheduled_time ?? '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap">

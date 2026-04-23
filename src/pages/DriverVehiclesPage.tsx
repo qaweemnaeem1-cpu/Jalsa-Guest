@@ -12,6 +12,7 @@ import {
   AddMaintenanceDialog, ViewMaintenanceLogDialog,
   type MaintenanceEntry, MAINT_TYPE_META, computeStatus,
 } from '@/components/VehicleMaintenanceDialog';
+import { formatDate } from '@/utils/dateHelpers';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -37,11 +38,7 @@ interface VehicleRow extends DriverRow {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function fmtDate(iso: string) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'short', year: 'numeric',
-  });
-}
+const fmtDate = (iso: string) => formatDate(iso);
 
 function maintStatusLabel(status?: VehicleRow['maintStatus']) {
   if (status === 'overdue')  return { label: 'OVERDUE',  cls: 'bg-red-100 text-red-700' };

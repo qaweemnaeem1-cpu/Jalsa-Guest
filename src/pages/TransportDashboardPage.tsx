@@ -14,23 +14,14 @@ import { TransportSidebar } from '@/components/TransportSidebar';
 import { TopBar } from '@/components/TopBar';
 import { supabase } from '@/lib/supabase';
 import type { DriverTask } from '@/types';
+import { formatDateShort, formatTime } from '@/utils/dateHelpers';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function todayStr() { return new Date().toISOString().split('T')[0]; }
 
-function fmtTime(iso: string) {
-  if (!iso) return '—';
-  if (iso.includes('T')) return iso.substring(11, 16);
-  return iso;
-}
-
-function fmtDate(iso?: string) {
-  if (!iso) return '—';
-  return new Date(iso.includes('T') ? iso : iso + 'T00:00:00').toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'short',
-  });
-}
+const fmtTime = (iso: string) => formatTime(iso);
+const fmtDate = (iso?: string) => formatDateShort(iso);
 
 // ── types ─────────────────────────────────────────────────────────────────────
 

@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { formatDate, formatDateShort, formatTime, formatTimestampTime } from '@/utils/dateHelpers';
 import { CheckCircle, ChevronRight, Eye, Search, MoveRight, ArrowRightLeft, Car, ClipboardList, AlertCircle, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
@@ -256,9 +257,14 @@ export default function LocationAccommodatedPage() {
   useEffect(() => {
     if (!assignDriverGuest) { setAssignDriverId(''); return; }
     if (assignDriverGuest.departureTime) {
-      const dep = new Date(assignDriverGuest.departureTime);
-      dep.setHours(dep.getHours() - 1);
-      setAssignPickupTime(dep.toTimeString().substring(0, 5));
+      // Extract HH:MM safely — departureTime may be "YYYY-MM-DDTHH:MM" or "HH:MM"
+      const rawTime = assignDriverGuest.departureTime.includes('T')
+        ? assignDriverGuest.departureTime.split('T')[1].slice(0, 5)
+        : assignDriverGuest.departureTime.slice(0, 5);
+      const [hh, mm] = rawTime.split(':').map(Number);
+      const totalMins = hh * 60 + mm - 60;
+      const pickup = `${String(Math.floor(((totalMins % 1440) + 1440) % 1440 / 60)).padStart(2, '0')}:${String(((totalMins % 60) + 60) % 60).padStart(2, '0')}`;
+      setAssignPickupTime(pickup);
     }
   }, [assignDriverGuest]);
 
@@ -479,7 +485,7 @@ export default function LocationAccommodatedPage() {
 
   function fmtTime(iso?: string) {
     if (!iso) return null;
-    return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    return formatTimestampTime(iso); // called on ISO timestamps (driver_tasks.completed_at / started_at)
   }
 
   if (!user) return null;
@@ -675,8 +681,8 @@ export default function LocationAccommodatedPage() {
                             {row.arrivalTime ? (
                               <div>
                                 <div className="text-xs text-[#1A1A1A]">
-                                  {new Date(row.arrivalTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                                  {' '}{new Date(row.arrivalTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                  {formatDateShort(row.arrivalTime)}
+                                  {' '}{formatTime(row.arrivalTime)}
                                 </div>
                                 {row.arrivalFlightNumber && (
                                   <div className="text-xs text-gray-400">{row.arrivalFlightNumber}</div>
@@ -692,8 +698,8 @@ export default function LocationAccommodatedPage() {
                             {row.departureTime ? (
                               <div>
                                 <div className="text-xs text-[#1A1A1A]">
-                                  {new Date(row.departureTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                                  {' '}{new Date(row.departureTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                  {formatDateShort(row.departureTime)}
+                                  {' '}{formatTime(row.departureTime)}
                                 </div>
                                 {row.departureFlightNumber && (
                                   <div className="text-xs text-gray-400">{row.departureFlightNumber}</div>
@@ -891,8 +897,8 @@ export default function LocationAccommodatedPage() {
                   <div>
                     <span className="text-gray-500">Departure:</span>{' '}
                     <span className="text-[#1A1A1A]">
-                      {new Date(assignDriverGuest.departureTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })},{' '}
-                      {new Date(assignDriverGuest.departureTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                      {formatDate(assignDriverGuest.departureTime)},{' '}
+                      {formatTime(assignDriverGuest.departureTime)}
                     </span>
                   </div>
                 )}
@@ -964,8 +970,8 @@ export default function LocationAccommodatedPage() {
                 <div className="text-sm text-[#4A4A4A]">
                   Departing:{' '}
                   <span className="font-medium text-[#1A1A1A]">
-                    {new Date(checklistGuest.departureTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })},{' '}
-                    {new Date(checklistGuest.departureTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                    {formatDate(checklistGuest.departureTime)},{' '}
+                    {formatTime(checklistGuest.departureTime)}
                   </span>
                   {checklistGuest.departureFlightNumber && (
                     <span className="font-mono ml-2">· {checklistGuest.departureFlightNumber}</span>

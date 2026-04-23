@@ -245,7 +245,7 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
       .single();
 
     if (error) { toast.error('Failed to add block'); return null; }
-    const block = rowToBlock(data);
+    const block: Block = { ...rowToBlock(data), locationId: locMapRef.current[data.location_id] ?? data.location_id };
     setBlocks(prev => [...prev, block]);
     toast.success('Block added');
     return block;
@@ -295,7 +295,7 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
     console.log('[addRoom] Result:', { data, error });
 
     if (error) { toast.error('Failed to add room'); return null; }
-    const room = rowToRoom(data);
+    const room: Room = { ...rowToRoom(data), locationId: locMapRef.current[data.location_id] ?? data.location_id };
     setRooms(prev => [...prev, room]);
     setBedAssignments(prev => ({
       ...prev,

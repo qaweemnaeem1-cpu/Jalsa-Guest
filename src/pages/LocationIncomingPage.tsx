@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState } from 'react';
+import { formatDateShort, formatTime } from '@/utils/dateHelpers';
 import { ChevronRight, Inbox, Eye, Check, Search, AlertTriangle, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
@@ -329,8 +330,8 @@ export default function LocationIncomingPage() {
                             {row.arrivalTime ? (
                               <div>
                                 <div className="text-xs text-[#1A1A1A]">
-                                  {new Date(row.arrivalTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                                  {' '}{new Date(row.arrivalTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                  {formatDateShort(row.arrivalTime)}
+                                  {' '}{formatTime(row.arrivalTime)}
                                 </div>
                                 {(row.arrivalFlightNumber || row.arrivalAirport) && (
                                   <div className="text-xs text-gray-400">
@@ -345,8 +346,8 @@ export default function LocationIncomingPage() {
                             {row.departureTime ? (
                               <div>
                                 <div className="text-xs text-[#1A1A1A]">
-                                  {new Date(row.departureTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                                  {' '}{new Date(row.departureTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                  {formatDateShort(row.departureTime)}
+                                  {' '}{formatTime(row.departureTime)}
                                 </div>
                                 {(row.departureFlightNumber || row.departureAirport) && (
                                   <div className="text-xs text-gray-400">

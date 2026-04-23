@@ -21,13 +21,13 @@ function todayStr() { return new Date().toISOString().split('T')[0]; }
 
 function fmtDateTime(iso?: string) {
   if (!iso) return '—';
-  const d = new Date(iso.includes('T') ? iso : iso + 'T00:00:00');
+  const d = new Date(iso.includes('T') ? iso : iso + 'T12:00:00');
   return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 function fmtDate(iso?: string) {
   if (!iso) return '—';
-  return new Date(iso.includes('T') ? iso : iso + 'T00:00:00').toLocaleDateString('en-GB', {
+  return new Date(iso.includes('T') ? iso : iso + 'T12:00:00').toLocaleDateString('en-GB', {
     day: 'numeric', month: 'short', year: '2-digit',
   });
 }
