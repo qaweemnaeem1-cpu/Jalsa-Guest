@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
+import { MulaqatChangeRequestDialog } from '@/components/MulaqatChangeRequestDialog';
+import { MulaqatRequestsTab } from '@/components/MulaqatRequestsTab';
 import { formatDate, formatDateWithWeekday } from '@/utils/dateHelpers';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -162,7 +164,23 @@ export default function DeskMulaqatPage() {
   const { enableMulaqat, disableMulaqat, setMulaqatType } = useDelegations();
 
   // ── Sub-tab ───────────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<'delegation' | 'daftari'>('delegation');
+  const [activeTab, setActiveTab] = useState<'delegation' | 'daftari' | 'requests'>('delegation');
+
+  // ── Change-request state ──────────────────────────────────────────────────────
+  const [changeRequestDialog, setChangeRequestDialog] = useState<{
+    delegationId: string;
+    delegationName: string;
+    country: string;
+    currentDayId: string;
+    currentDayDate: string;
+    currentDayName: string;
+    currentSlotId: string;
+    currentSlotName: string;
+  } | null>(null);
+  const [pendingRequestDelegationIds, setPendingRequestDelegationIds] = useState<Set<string>>(new Set());
+
+  // Track unseen completed-request count for the tab badge
+  const [unseenRequestCount, setUnseenRequestCount] = useState(0);
 
   // ── Delegation data ───────────────────────────────────────────────────────────
   const [delegationDetails, setDelegationDetails] = useState<DelegationDetail[]>([]);
@@ -258,6 +276,29 @@ export default function DeskMulaqatPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // ── Track this DI's mulaqat_requests so we can show "⏳ Change Requested" + Requests tab badge
+  useEffect(() => {
+    if (!user?.id) return;
+    const refresh = async () => {
+      const { data } = await supabase
+        .from('mulaqat_requests')
+        .select('delegation_id, status, seen_by_requester')
+        .eq('requested_by', user.id);
+      const rows = (data ?? []) as { delegation_id: string; status: string; seen_by_requester: boolean }[];
+      const pendingIds = new Set(rows.filter(r => r.status === 'pending').map(r => r.delegation_id));
+      setPendingRequestDelegationIds(pendingIds);
+      const unseenCount = rows.filter(r => r.status !== 'pending' && !r.seen_by_requester).length;
+      setUnseenRequestCount(unseenCount);
+    };
+    refresh();
+    const channel = supabase
+      .channel('di-mulaqat-requests-tracker')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'mulaqat_requests' }, refresh)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id]);
+
   // ── Sidebar badge counts ─────────────────────────────────────────────────────
 
   const reviewCount = useMemo(() =>
@@ -281,6 +322,23 @@ export default function DeskMulaqatPage() {
   const getEligibleGuests = (country: string): Guest[] =>
     guests.filter(g => g.country === country && !g.mulaqat &&
       (g.status === 'Approved' || g.status === 'Accommodated'));
+
+  // ── Earliest departure helpers ────────────────────────────────────────────
+  // Mulaqat day must be ON or BEFORE the earliest departure_date of all members,
+  // otherwise the earliest-departing guest would already be gone.
+  const earliestDepartureForCountries = (countries: string[]): string | null => {
+    const dates: string[] = [];
+    for (const c of countries) {
+      for (const g of getMulaqatGuests(c)) {
+        if (g.departure_date) dates.push(g.departure_date);
+      }
+    }
+    if (dates.length === 0) return null;
+    dates.sort();
+    return dates[0];
+  };
+  const filterDaysByEarliestDeparture = <T extends { date: string }>(allDays: T[], earliest: string | null): T[] =>
+    earliest ? allDays.filter(d => d.date <= earliest) : allDays;
 
   const getSlotsForDay = (dayId: string) =>
     slots.filter(s => s.day_id === dayId).sort((a, b) => a.name.localeCompare(b.name));
@@ -902,6 +960,17 @@ export default function DeskMulaqatPage() {
                   >
                     Daftari
                   </button>
+                  <button
+                    onClick={() => setActiveTab('requests')}
+                    className={`relative ${activeTab === 'requests'
+                      ? 'bg-[#2D5A45] text-white rounded-full px-4 py-1.5 text-sm font-medium transition-all'
+                      : 'bg-white text-gray-600 border border-gray-200 rounded-full px-4 py-1.5 text-sm font-medium hover:border-[#2D5A45] transition-all'}`}
+                  >
+                    Requests
+                    {unseenRequestCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{unseenRequestCount}</span>
+                    )}
+                  </button>
                 </div>
               </div>
               <div className="relative">
@@ -1083,13 +1152,34 @@ export default function DeskMulaqatPage() {
                                       </td>
                                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                                         <div className="flex items-center gap-1">
-                                          <button
-                                            onClick={() => handleOpenChangeSlot(country, del?.slot_id ?? null)}
-                                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-[#2D5A45] hover:bg-[#D6E4D9] transition-colors"
-                                          >
-                                            <CalendarDays className="w-3.5 h-3.5" />
-                                            {hasSlot ? 'Change' : 'Assign'}
-                                          </button>
+                                          {hasSlot && pendingRequestDelegationIds.has(del!.id) ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-amber-600 italic">
+                                              ⏳ Change Requested
+                                            </span>
+                                          ) : (
+                                            <button
+                                              onClick={() => {
+                                                if (hasSlot && del && assignedDay && assignedSlot) {
+                                                  setChangeRequestDialog({
+                                                    delegationId:    del.id,
+                                                    delegationName:  country,
+                                                    country,
+                                                    currentDayId:    assignedDay.id,
+                                                    currentDayDate:  assignedDay.date,
+                                                    currentDayName:  fmt(assignedDay.date),
+                                                    currentSlotId:   assignedSlot.id,
+                                                    currentSlotName: assignedSlot.name,
+                                                  });
+                                                } else {
+                                                  handleOpenChangeSlot(country, del?.slot_id ?? null);
+                                                }
+                                              }}
+                                              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-[#2D5A45] hover:bg-[#D6E4D9] transition-colors"
+                                            >
+                                              <CalendarDays className="w-3.5 h-3.5" />
+                                              {hasSlot ? 'Change' : 'Assign'}
+                                            </button>
+                                          )}
                                           {hasSlot && (
                                             <button
                                               onClick={() => setRemoveSlotDialog({ country, slotName: assignedSlot?.name ?? '' })}
@@ -1632,9 +1722,39 @@ export default function DeskMulaqatPage() {
                 </section>
               </>
             )}
+
+            {/* ── Requests tab ── */}
+            {activeTab === 'requests' && (
+              <MulaqatRequestsTab />
+            )}
           </div>
         </main>
       </div>
+
+      {/* ── Mulaqat Change Request dialog ── */}
+      {changeRequestDialog && (() => {
+        const earliestDep = earliestDepartureForCountries([changeRequestDialog.country]);
+        const dayOptions  = filterDaysByEarliestDeparture(days, earliestDep);
+        return (
+          <MulaqatChangeRequestDialog
+            open
+            onClose={() => setChangeRequestDialog(null)}
+            delegationId={changeRequestDialog.delegationId}
+            delegationName={changeRequestDialog.delegationName}
+            country={changeRequestDialog.country}
+            currentDayId={changeRequestDialog.currentDayId}
+            currentDayDate={changeRequestDialog.currentDayDate}
+            currentDayName={changeRequestDialog.currentDayName}
+            currentSlotId={changeRequestDialog.currentSlotId}
+            currentSlotName={changeRequestDialog.currentSlotName}
+            availableDays={dayOptions}
+            allSlots={slots}
+            onSubmitted={() => {
+              setPendingRequestDelegationIds(prev => new Set(prev).add(changeRequestDialog.delegationId));
+            }}
+          />
+        );
+      })()}
 
       {/* ── Remove Slot Confirm Dialog ── */}
       <Dialog open={!!removeSlotDialog} onOpenChange={open => { if (!open) setRemoveSlotDialog(null); }}>
@@ -1684,6 +1804,10 @@ export default function DeskMulaqatPage() {
                 </p>
               </DialogHeader>
               <div className="space-y-4 py-2">
+                {(() => {
+                  const earliestDep = earliestDepartureForCountries([changeSlotDialog.country]);
+                  const dayOptions  = filterDaysByEarliestDeparture(days, earliestDep);
+                  return (
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat Day</label>
                   <select
@@ -1692,11 +1816,18 @@ export default function DeskMulaqatPage() {
                     className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
                   >
                     <option value="">Select a day...</option>
-                    {[...days].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
+                    {[...dayOptions].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
                       <option key={d.id} value={d.id}>{fmt(d.date)}{d.label ? ` — ${d.label}` : ''}</option>
                     ))}
                   </select>
+                  {earliestDep && (
+                    <p className="text-xs text-gray-400 italic mt-1">
+                      ℹ️ Showing days up to {fmt(earliestDep)} (earliest departure in this delegation)
+                    </p>
+                  )}
                 </div>
+                  );
+                })()}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Slot</label>
                   <select
@@ -1774,20 +1905,31 @@ export default function DeskMulaqatPage() {
               </p>
             )}
 
-            {/* Day selector */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat Day</label>
-              <select
-                value={bulkDay}
-                onChange={e => { setBulkDay(e.target.value); setBulkSlot(''); }}
-                className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
-              >
-                <option value="">Select a day...</option>
-                {[...days].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
-                  <option key={d.id} value={d.id}>{fmt(d.date)}{d.label ? ` — ${d.label}` : ''}</option>
-                ))}
-              </select>
-            </div>
+            {/* Day selector — filtered by earliest departure across selected delegations */}
+            {(() => {
+              const earliestDep = earliestDepartureForCountries(selectedList);
+              const dayOptions  = filterDaysByEarliestDeparture(days, earliestDep);
+              return (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat Day</label>
+                  <select
+                    value={bulkDay}
+                    onChange={e => { setBulkDay(e.target.value); setBulkSlot(''); }}
+                    className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
+                  >
+                    <option value="">Select a day...</option>
+                    {[...dayOptions].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
+                      <option key={d.id} value={d.id}>{fmt(d.date)}{d.label ? ` — ${d.label}` : ''}</option>
+                    ))}
+                  </select>
+                  {earliestDep && (
+                    <p className="text-xs text-gray-400 italic mt-1">
+                      ℹ️ Showing days up to {fmt(earliestDep)} (earliest departure in selected delegations)
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Slot selector */}
             <div className="space-y-1.5">
@@ -1881,6 +2023,11 @@ export default function DeskMulaqatPage() {
                 <p className="text-sm text-[#4A4A4A]">{daftariChangeSlotDialog.guestName}</p>
               </DialogHeader>
               <div className="space-y-4 py-2">
+                {(() => {
+                  const dGuest = guests.find(g => g.id === daftariChangeSlotDialog.guestId);
+                  const earliestDep = dGuest?.departure_date ?? null;
+                  const dayOptions  = filterDaysByEarliestDeparture(daftariDays, earliestDep);
+                  return (
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Daftari Day</label>
                   <select
@@ -1889,11 +2036,18 @@ export default function DeskMulaqatPage() {
                     className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
                   >
                     <option value="">Select a day...</option>
-                    {[...daftariDays].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
+                    {[...dayOptions].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
                       <option key={d.id} value={d.id}>{fmt(d.date)}{d.label ? ` — ${d.label}` : ''}</option>
                     ))}
                   </select>
+                  {earliestDep && (
+                    <p className="text-xs text-gray-400 italic mt-1">
+                      ℹ️ Showing days up to {fmt(earliestDep)} (guest's departure)
+                    </p>
+                  )}
                 </div>
+                  );
+                })()}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Slot</label>
                   <select
@@ -1960,19 +2114,33 @@ export default function DeskMulaqatPage() {
                 </span>
               ))}
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Daftari Day</label>
-              <select
-                value={daftariBulkDay}
-                onChange={e => { setDaftariBulkDay(e.target.value); setDaftariBulkSlot(''); }}
-                className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
-              >
-                <option value="">Select a day...</option>
-                {[...daftariDays].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
-                  <option key={d.id} value={d.id}>{fmt(d.date)}{d.label ? ` — ${d.label}` : ''}</option>
-                ))}
-              </select>
-            </div>
+            {(() => {
+              const dates = daftariSelectedGuestList
+                .map(g => g.departure_date).filter(Boolean) as string[];
+              dates.sort();
+              const earliestDep = dates[0] ?? null;
+              const dayOptions  = filterDaysByEarliestDeparture(daftariDays, earliestDep);
+              return (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Daftari Day</label>
+                  <select
+                    value={daftariBulkDay}
+                    onChange={e => { setDaftariBulkDay(e.target.value); setDaftariBulkSlot(''); }}
+                    className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
+                  >
+                    <option value="">Select a day...</option>
+                    {[...dayOptions].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
+                      <option key={d.id} value={d.id}>{fmt(d.date)}{d.label ? ` — ${d.label}` : ''}</option>
+                    ))}
+                  </select>
+                  {earliestDep && (
+                    <p className="text-xs text-gray-400 italic mt-1">
+                      ℹ️ Showing days up to {fmt(earliestDep)} (earliest departure of selected guests)
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Slot</label>
               <select

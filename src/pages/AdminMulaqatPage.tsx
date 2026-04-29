@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, Fragment, createContext, useContext } from 'react';
+import { MulaqatRequestsTab } from '@/components/MulaqatRequestsTab';
 import { formatDate, formatDateWithWeekday } from '@/utils/dateHelpers';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -370,7 +371,8 @@ export default function AdminMulaqatPage() {
   const { guests } = useGuests();
 
   // Tab
-  const [activeTab, setActiveTab] = useState<'all' | 'delegation' | 'daftari' | 'archives'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'delegation' | 'daftari' | 'archives' | 'requests'>('all');
+  const [pendingRequestCount, setPendingRequestCount] = useState(0);
 
   // Delegation data
   const [days, setDays] = useState<MulaqatDay[]>([]);
@@ -654,6 +656,24 @@ export default function AdminMulaqatPage() {
     ]);
   }, []);
 
+  // Track pending mulaqat_requests count for the Requests tab badge
+  useEffect(() => {
+    const refresh = async () => {
+      const { count } = await supabase
+        .from('mulaqat_requests')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+      setPendingRequestCount(count ?? 0);
+    };
+    refresh();
+    const channel = supabase
+      .channel('admin-mulaqat-requests-counter')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'mulaqat_requests' }, refresh)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   useEffect(() => {
     archivePastDays().then(() => {
       fetchAll();
@@ -738,6 +758,23 @@ export default function AdminMulaqatPage() {
     if (allDelegationsSelected) setSelectedDelegationIds(new Set());
     else setSelectedDelegationIds(new Set(filteredDelegations.map(d => d.id)));
   };
+
+  // ── Earliest departure helpers ────────────────────────────────────────────────
+  // Mulaqat day must be ON or BEFORE the earliest departure_date of all delegation members,
+  // otherwise the earliest-departing guest would already be gone.
+  const earliestDepartureForCountries = (countries: string[]): string | null => {
+    const dates: string[] = [];
+    for (const c of countries) {
+      for (const g of guests) {
+        if (g.country === c && g.mulaqat === true && g.departure_date) dates.push(g.departure_date);
+      }
+    }
+    if (dates.length === 0) return null;
+    dates.sort();
+    return dates[0];
+  };
+  const filterDaysByEarliestDeparture = <T extends { date: string }>(allDays: T[], earliest: string | null): T[] =>
+    earliest ? allDays.filter(d => d.date <= earliest) : allDays;
 
   // ── Derived (daftari) ─────────────────────────────────────────────────────────
 
@@ -2243,6 +2280,17 @@ export default function AdminMulaqatPage() {
                       ? 'bg-[#2D5A45] text-white rounded-full px-4 py-1.5 text-sm font-medium flex items-center gap-1.5'
                       : 'bg-white text-gray-600 border border-gray-200 rounded-full px-4 py-1.5 text-sm font-medium hover:border-[#2D5A45] flex items-center gap-1.5'}
                   ><Archive className="w-3.5 h-3.5" />Archives</button>
+                  <button
+                    onClick={() => setActiveTab('requests')}
+                    className={`relative ${activeTab === 'requests'
+                      ? 'bg-[#2D5A45] text-white rounded-full px-4 py-1.5 text-sm font-medium'
+                      : 'bg-white text-gray-600 border border-gray-200 rounded-full px-4 py-1.5 text-sm font-medium hover:border-[#2D5A45]'}`}
+                  >
+                    Requests
+                    {pendingRequestCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{pendingRequestCount}</span>
+                    )}
+                  </button>
                 </div>
               </div>
               <div className="relative">
@@ -3749,6 +3797,13 @@ export default function AdminMulaqatPage() {
                 )}
               </section>
             )}
+
+            {/* ── Requests tab ── */}
+            {activeTab === 'requests' && (
+              <div className="p-6">
+                <MulaqatRequestsTab />
+              </div>
+            )}
           </div>
         </main>
       </div>
@@ -3899,6 +3954,10 @@ export default function AdminMulaqatPage() {
                 </div>
               </DialogHeader>
               <div className="space-y-4 py-2">
+                {(() => {
+                  const earliestDep = earliestDepartureForCountries([rowAssignDialog.country]);
+                  const dayOptions  = filterDaysByEarliestDeparture(days, earliestDep);
+                  return (
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat Day</label>
                   <select
@@ -3907,11 +3966,18 @@ export default function AdminMulaqatPage() {
                     className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
                   >
                     <option value="">Select a day…</option>
-                    {[...days].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
+                    {[...dayOptions].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
                       <option key={d.id} value={d.id}>{dayHeader(d)}</option>
                     ))}
                   </select>
+                  {earliestDep && (
+                    <p className="text-xs text-gray-400 italic mt-1">
+                      ℹ️ Showing days up to {fmt(earliestDep)} (earliest departure in this delegation)
+                    </p>
+                  )}
                 </div>
+                  );
+                })()}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Slot</label>
                   <select
@@ -4218,16 +4284,27 @@ export default function AdminMulaqatPage() {
                 <span className="font-medium text-[#1A1A1A]">{selectedGuestTotal}</span> guests total will share this slot
               </p>
             )}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat Day</label>
-              <select value={bulkDay} onChange={e => { setBulkDay(e.target.value); setBulkSlot(''); }}
-                className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none">
-                <option value="">Select a day...</option>
-                {[...days].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
-                  <option key={d.id} value={d.id}>{fmt(d.date)}{d.label ? ` — ${d.label}` : ''}</option>
-                ))}
-              </select>
-            </div>
+            {(() => {
+              const earliestDep = earliestDepartureForCountries(selectedDelegationList.map(d => d.country));
+              const dayOptions  = filterDaysByEarliestDeparture(days, earliestDep);
+              return (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat Day</label>
+                  <select value={bulkDay} onChange={e => { setBulkDay(e.target.value); setBulkSlot(''); }}
+                    className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none">
+                    <option value="">Select a day...</option>
+                    {[...dayOptions].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
+                      <option key={d.id} value={d.id}>{fmt(d.date)}{d.label ? ` — ${d.label}` : ''}</option>
+                    ))}
+                  </select>
+                  {earliestDep && (
+                    <p className="text-xs text-gray-400 italic mt-1">
+                      ℹ️ Showing days up to {fmt(earliestDep)} (earliest departure in selected delegations)
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Slot</label>
               <select value={bulkSlot} onChange={e => setBulkSlot(e.target.value)} disabled={!bulkDay}
@@ -4312,6 +4389,10 @@ export default function AdminMulaqatPage() {
                 )}
               </DialogHeader>
               <div className="space-y-4 py-2">
+                {(() => {
+                  const earliestDep = earliestDepartureForCountries([del.country]);
+                  const dayOptions  = filterDaysByEarliestDeparture(days, earliestDep);
+                  return (
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Mulaqat Day</label>
                   <select
@@ -4320,11 +4401,18 @@ export default function AdminMulaqatPage() {
                     className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
                   >
                     <option value="">Select a day...</option>
-                    {[...days].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
+                    {[...dayOptions].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
                       <option key={d.id} value={d.id}>{fmt(d.date)}{d.label ? ` — ${d.label}` : ''}</option>
                     ))}
                   </select>
+                  {earliestDep && (
+                    <p className="text-xs text-gray-400 italic mt-1">
+                      ℹ️ Showing days up to {fmt(earliestDep)} (earliest departure in this delegation)
+                    </p>
+                  )}
                 </div>
+                  );
+                })()}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Slot</label>
                   <select
@@ -4379,6 +4467,11 @@ export default function AdminMulaqatPage() {
                 </p>
               </DialogHeader>
               <div className="space-y-4 py-2">
+                {(() => {
+                  const dGuest = guests.find(g => g.id === guestId);
+                  const earliestDep = dGuest?.departure_date ?? null;
+                  const dayOptions  = filterDaysByEarliestDeparture(daftariDays, earliestDep);
+                  return (
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Daftari Day</label>
                   <select
@@ -4387,11 +4480,18 @@ export default function AdminMulaqatPage() {
                     className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
                   >
                     <option value="">Select a day...</option>
-                    {[...daftariDays].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
+                    {[...dayOptions].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
                       <option key={d.id} value={d.id}>{fmt(d.date)}{d.label ? ` — ${d.label}` : ''}</option>
                     ))}
                   </select>
+                  {earliestDep && (
+                    <p className="text-xs text-gray-400 italic mt-1">
+                      ℹ️ Showing days up to {fmt(earliestDep)} (guest's departure)
+                    </p>
+                  )}
                 </div>
+                  );
+                })()}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Slot</label>
                   <select
@@ -4452,19 +4552,33 @@ export default function AdminMulaqatPage() {
                 </span>
               ))}
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Daftari Day</label>
-              <select
-                value={daftariBulkDay}
-                onChange={e => { setDaftariBulkDay(e.target.value); setDaftariBulkSlot(''); }}
-                className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
-              >
-                <option value="">Select a day...</option>
-                {[...daftariDays].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
-                  <option key={d.id} value={d.id}>{fmt(d.date)}{d.label ? ` — ${d.label}` : ''}</option>
-                ))}
-              </select>
-            </div>
+            {(() => {
+              const dates = selectedDaftariGuestList
+                .map(g => g.departure_date).filter(Boolean) as string[];
+              dates.sort();
+              const earliestDep = dates[0] ?? null;
+              const dayOptions  = filterDaysByEarliestDeparture(daftariDays, earliestDep);
+              return (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Daftari Day</label>
+                  <select
+                    value={daftariBulkDay}
+                    onChange={e => { setDaftariBulkDay(e.target.value); setDaftariBulkSlot(''); }}
+                    className="w-full px-3 py-2 border border-[#D4CFC7] rounded-md text-sm bg-white focus:border-[#2D5A45] focus:outline-none"
+                  >
+                    <option value="">Select a day...</option>
+                    {[...dayOptions].sort((a, b) => a.date.localeCompare(b.date)).map(d => (
+                      <option key={d.id} value={d.id}>{fmt(d.date)}{d.label ? ` — ${d.label}` : ''}</option>
+                    ))}
+                  </select>
+                  {earliestDep && (
+                    <p className="text-xs text-gray-400 italic mt-1">
+                      ℹ️ Showing days up to {fmt(earliestDep)} (earliest departure of selected guests)
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-[#4A4A4A] uppercase tracking-wider">Slot</label>
               <select
