@@ -17,7 +17,7 @@ export const SUPER_ADMIN_NAV: NavItem[] = [
   { icon: List,            label: 'Designation List',   href: '/designations' },
   { icon: Globe,           label: 'Countries & Groups', href: '/countries-departments' },
   { icon: BedDouble,       label: 'Rooms & Capacity',   href: '/admin/rooms' },
-  { icon: Car,             label: 'Drivers',            href: '/admin/drivers' },
+  { icon: Car,             label: 'Transportation',     href: '/admin/drivers' },
   { icon: Calendar,        label: 'Mulaqat',            href: '/admin/mulaqat' },
   { icon: ScrollText,      label: 'Audit Trail',        href: '/admin/audit-trail' },
 ];

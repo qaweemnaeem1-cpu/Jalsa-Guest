@@ -338,6 +338,9 @@ export function GuestViewModal({
   const isSuperAdmin  = user?.role === 'super-admin';
   const isCoordinator = user?.role === 'coordinator';
   const canEditDept   = isEditMode && user ? ['super-admin', 'desk-in-charge'].includes(user.role) : false;
+  // Location assignment is the Department Head's job. Desk Incharge cannot assign locations
+  // — only super-admin (and DH on their own page) can change it.
+  const canEditLoc    = isEditMode && user ? user.role === 'super-admin' : false;
   const isCoordinatorNeedsCorrection =
     isCoordinator && guest?.status === 'Needs Correction' && guest?.submittedBy === user?.id;
 
@@ -594,23 +597,28 @@ export function GuestViewModal({
     if (!guest || !user) return;
     const oldDept = guest.assignedDepartment ?? '';
     const oldLoc  = guest.placedLocation ?? '';
-    if (deptEditValue === oldDept && locEditValue === oldLoc) {
+    // DI may not change location — preserve the existing value regardless of the form input.
+    const effectiveLoc = canEditLoc ? locEditValue : oldLoc;
+    if (deptEditValue === oldDept && effectiveLoc === oldLoc) {
       toast.info('No changes made');
       return;
     }
     const now = new Date().toISOString();
-    updateGuest(guest.id, {
+    const updates: Record<string, string | undefined> = {
       assignedDepartment:       deptEditValue || undefined,
       assignedDepartmentAt:     deptEditValue ? now : undefined,
       assignedDepartmentBy:     deptEditValue ? user.id : undefined,
       assignedDepartmentByName: deptEditValue ? user.name : undefined,
-      placedLocation:           locEditValue || undefined,
-      placedAt:                 locEditValue ? now : undefined,
-      placedByName:             locEditValue ? user.name : undefined,
-    });
+    };
+    if (canEditLoc) {
+      updates.placedLocation = effectiveLoc || undefined;
+      updates.placedAt       = effectiveLoc ? now : undefined;
+      updates.placedByName   = effectiveLoc ? user.name : undefined;
+    }
+    updateGuest(guest.id, updates);
     const details: string[] = [];
     if (deptEditValue !== oldDept) details.push(`Department: ${oldDept || 'None'} → ${deptEditValue || 'None'}`);
-    if (locEditValue  !== oldLoc)  details.push(`Location: ${oldLoc || 'None'} → ${locEditValue || 'None'}`);
+    if (canEditLoc && effectiveLoc !== oldLoc)  details.push(`Location: ${oldLoc || 'None'} → ${effectiveLoc || 'None'}`);
     addEntry({
       guestId:        guest.id,
       guestName:      guest.fullName,
@@ -1372,37 +1380,45 @@ export function GuestViewModal({
                 )}
               </div>
 
-              {/* Edit controls — super-admin + desk-in-charge in edit mode only */}
+              {/* Edit controls — super-admin + desk-in-charge in edit mode only.
+                   DI can change Department but NOT Location — that's the Department Head's job. */}
               {canEditDept && (
                 <div className="bg-white rounded-xl border border-[#E8E3DB] p-5 space-y-4">
                   <SectionHeading>Update Assignment</SectionHeading>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className={canEditLoc ? 'grid grid-cols-2 gap-4' : ''}>
                     <div>
                       <p className="text-xs font-medium text-[#4A4A4A] mb-1">Department</p>
                       <DepartmentSelect
                         value={deptEditValue}
                         onValueChange={v => {
                           setDeptEditValue(v === '__none__' ? '' : v);
-                          setLocEditValue('');
+                          if (canEditLoc) setLocEditValue('');
                         }}
                         includeNone
                         className="w-full"
                       />
                     </div>
-                    <div>
-                      <p className="text-xs font-medium text-[#4A4A4A] mb-1">Location</p>
-                      <select
-                        value={locEditValue}
-                        onChange={e => setLocEditValue(e.target.value)}
-                        disabled={!deptEditValue}
-                        className={`${selectCls} ${!deptEditValue ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        <option value="">None</option>
-                        {(departments[deptEditValue] ?? []).map(loc => (
-                          <option key={loc} value={loc}>{loc}</option>
-                        ))}
-                      </select>
-                    </div>
+                    {canEditLoc ? (
+                      <div>
+                        <p className="text-xs font-medium text-[#4A4A4A] mb-1">Location</p>
+                        <select
+                          value={locEditValue}
+                          onChange={e => setLocEditValue(e.target.value)}
+                          disabled={!deptEditValue}
+                          className={`${selectCls} ${!deptEditValue ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <option value="">None</option>
+                          {(departments[deptEditValue] ?? []).map(loc => (
+                            <option key={loc} value={loc}>{loc}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : guest.placedLocation ? (
+                      <p className="text-xs text-gray-400 italic mt-1">
+                        Location: <span className="text-gray-500 not-italic">{guest.placedLocation}</span>{' '}
+                        (assigned by Department Head — read-only)
+                      </p>
+                    ) : null}
                   </div>
                   <Button
                     onClick={handleSaveDept}

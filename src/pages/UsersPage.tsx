@@ -634,15 +634,15 @@ export default function UsersPage() {
           transport_department_id: dTransportDeptId || null,
           transport_department_name: selectedTd?.name ?? null,
         };
-        if (dPassword.trim()) updates.password = dPassword.trim();
+        if (dPassword.trim()) updates.password_hash = dPassword.trim();
         const { error } = await supabase.from('users').update(updates).eq('id', editingDriver.id);
-        if (error) throw error;
+        if (error) { console.error('[UsersPage] Update error:', error); throw error; }
         toast.success('Driver updated');
       } else {
         const selectedTd = transportDepts.find(td => td.id === dTransportDeptId);
-        const { error } = await supabase.from('users').insert({
+        const insertData = {
           name: dName.trim(), email: dEmail.trim(), phone: dPhone.trim() || null,
-          password: dPassword.trim(), role: 'driver',
+          password_hash: dPassword.trim(), role: 'driver',
           department: dDept || null, location: dLoc || null,
           vehicle_type: dVType || null, vehicle_model: dVModel.trim() || null,
           vehicle_registration: dVReg.trim() || null,
@@ -650,8 +650,10 @@ export default function UsersPage() {
           is_head_driver: driverFormIsHead, is_available: true, is_active: true,
           transport_department_id: dTransportDeptId || null,
           transport_department_name: selectedTd?.name ?? null,
-        });
-        if (error) throw error;
+        };
+        console.log('[UsersPage] Driver insert data:', insertData);
+        const { error } = await supabase.from('users').insert(insertData);
+        if (error) { console.error('[UsersPage] Insert error:', error.message, error.details, error.hint, error.code); throw error; }
         toast.success(driverFormIsHead ? 'Department head created' : 'Driver created');
       }
       setDriverFormOpen(false);

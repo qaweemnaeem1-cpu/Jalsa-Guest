@@ -56,12 +56,12 @@ import DriverAllTasksPage from '@/pages/DriverAllTasksPage';
 import DriverVehiclesPage from '@/pages/DriverVehiclesPage';
 import DriverSchedulePage from '@/pages/DriverSchedulePage';
 import AdminDriversPage from '@/pages/AdminDriversPage';
+import AdminTransportPage from '@/pages/AdminTransportPage';
 import TransportDashboardPage from '@/pages/TransportDashboardPage';
 import TransportGuestsPage from '@/pages/TransportGuestsPage';
 import TransportDriversPage from '@/pages/TransportDriversPage';
 import TransportMessagesPage from '@/pages/TransportMessagesPage';
 import TransportTasksPage from '@/pages/TransportTasksPage';
-import TransportSchedulePage from '@/pages/TransportSchedulePage';
 import TransportVehiclesPage from '@/pages/TransportVehiclesPage';
 import TransportCompletedPage from '@/pages/TransportCompletedPage';
 import DriverMessagesPage from '@/pages/DriverMessagesPage';
@@ -241,7 +241,7 @@ function AppRoutes() {
       <Route path="/location/rooms" element={<ProtectedRoute requiredRoles={['location-manager', 'super-admin']}><LocationRoomsPage /></ProtectedRoute>} />
       <Route path="/location/accommodated" element={<ProtectedRoute requiredRoles={['location-manager', 'super-admin']}><LocationAccommodatedPage /></ProtectedRoute>} />
       <Route path="/location/messages" element={<ProtectedRoute requiredRoles={['location-manager', 'super-admin']}><LocationMessagesPage /></ProtectedRoute>} />
-      <Route path="/admin/drivers"    element={<ProtectedRoute requiredRoles={['super-admin']}><AdminDriversPage /></ProtectedRoute>} />
+      <Route path="/admin/drivers"    element={<ProtectedRoute requiredRoles={['super-admin']}><AdminTransportPage /></ProtectedRoute>} />
       <Route path="/driver/dashboard"   element={<ProtectedRoute requiredRoles={['driver']}><DriverDashboardPage /></ProtectedRoute>} />
       <Route path="/driver/completed"   element={<ProtectedRoute requiredRoles={['driver']}><DriverCompletedPage /></ProtectedRoute>} />
       <Route path="/driver/all-drivers" element={<ProtectedRoute requiredRoles={['driver']}><DriverAllDriversPage /></ProtectedRoute>} />
@@ -258,10 +258,11 @@ function AppRoutes() {
       <Route path="/driver/task/:id" element={<ProtectedRoute requiredRoles={['driver']}><DarkModeProvider><MobileDriverTaskDetailPage /></DarkModeProvider></ProtectedRoute>} />
       {/* Transport Department Head portal */}
       <Route path="/transport/dashboard" element={<ProtectedRoute requiredRoles={['driver']}><TransportDashboardPage /></ProtectedRoute>} />
-      <Route path="/transport/guests"    element={<ProtectedRoute requiredRoles={['driver']}><TransportGuestsPage /></ProtectedRoute>} />
+      <Route path="/transport/pickup"    element={<ProtectedRoute requiredRoles={['driver']}><TransportGuestsPage mode="pickup" /></ProtectedRoute>} />
+      <Route path="/transport/dropoff"   element={<ProtectedRoute requiredRoles={['driver']}><TransportGuestsPage mode="dropoff" /></ProtectedRoute>} />
+      <Route path="/transport/guests"    element={<ProtectedRoute requiredRoles={['driver']}><TransportGuestsPage mode="pickup" /></ProtectedRoute>} />
       <Route path="/transport/drivers"   element={<ProtectedRoute requiredRoles={['driver']}><TransportDriversPage /></ProtectedRoute>} />
       <Route path="/transport/tasks"     element={<ProtectedRoute requiredRoles={['driver']}><TransportTasksPage /></ProtectedRoute>} />
-      <Route path="/transport/schedule"  element={<ProtectedRoute requiredRoles={['driver']}><TransportSchedulePage /></ProtectedRoute>} />
       <Route path="/transport/vehicles"  element={<ProtectedRoute requiredRoles={['driver']}><TransportVehiclesPage /></ProtectedRoute>} />
       <Route path="/transport/completed" element={<ProtectedRoute requiredRoles={['driver']}><TransportCompletedPage /></ProtectedRoute>} />
       <Route path="/transport/messages"  element={<ProtectedRoute requiredRoles={['driver']}><TransportMessagesPage /></ProtectedRoute>} />

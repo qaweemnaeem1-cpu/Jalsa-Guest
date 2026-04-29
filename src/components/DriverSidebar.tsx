@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ClipboardList, CheckCircle, Car, Users, CalendarDays, UserCheck, MessageCircle } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, CheckCircle, Car, Users, CalendarDays, ArrowDown, ArrowUp, MessageCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { useDriverUnreadCount } from '@/components/DriverMessagesDialog';
@@ -34,14 +34,12 @@ export function DriverSidebar() {
   ];
 
   const TRANSPORT_NAV = [
-    { icon: LayoutDashboard, label: 'Dashboard',        href: '/transport/dashboard' },
-    { icon: UserCheck,       label: 'Guest Assignments', href: '/transport/guests' },
-    { icon: Users,           label: 'My Drivers',        href: '/transport/drivers' },
-    { icon: ClipboardList,   label: 'Tasks',             href: '/transport/tasks' },
-    { icon: CalendarDays,    label: 'Schedule',          href: '/transport/schedule' },
-    { icon: Car,             label: 'Vehicles',          href: '/transport/vehicles' },
-    { icon: CheckCircle,     label: 'Completed Tasks',   href: '/transport/completed' },
-    { icon: MessageCircle,   label: 'Messages',          href: '/transport/messages' },
+    { icon: LayoutDashboard, label: 'Dashboard',       href: '/transport/dashboard' },
+    { icon: ArrowDown,       label: 'Pick Up',         href: '/transport/pickup' },
+    { icon: ArrowUp,         label: 'Drop Off',        href: '/transport/dropoff' },
+    { icon: Users,           label: 'My Drivers',      href: '/transport/drivers' },
+    { icon: CheckCircle,     label: 'Completed Tasks', href: '/transport/completed' },
+    { icon: MessageCircle,   label: 'Messages',        href: '/transport/messages' },
   ];
 
   const NAV = isTransportHead ? TRANSPORT_NAV : isHead ? HEAD_NAV : REGULAR_NAV;

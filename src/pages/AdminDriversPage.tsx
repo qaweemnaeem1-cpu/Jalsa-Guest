@@ -333,7 +333,12 @@ function SectionHeader({ label, count }: { label: string; count?: number }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function AdminDriversPage() {
+export interface AdminDriversPageProps {
+  /** When true, render only the main content (for embedding inside AdminTransportPage tabs). */
+  hideSidebar?: boolean;
+}
+
+export default function AdminDriversPage({ hideSidebar = false }: AdminDriversPageProps = {}) {
   const { user }           = useAuth();
   const { transportDepts } = useTransportDepts();
   const navigate           = useNavigate();
@@ -615,39 +620,41 @@ export default function AdminDriversPage() {
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex min-h-screen bg-[#F5F0E8]">
+    <div className={hideSidebar ? '' : 'flex min-h-screen bg-[#F5F0E8]'}>
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-[#E8E3DB] min-h-screen fixed left-0 top-0 flex flex-col">
-        <div className="p-4 border-b border-[#E8E3DB]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#2D5A45] rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">J</span>
-            </div>
-            <div>
-              <span className="font-semibold text-[#1A1A1A]">Jalsa Guest</span>
-              <p className="text-xs text-[#4A4A4A]">Admin View</p>
+      {!hideSidebar && (
+        <aside className="w-64 bg-white border-r border-[#E8E3DB] min-h-screen fixed left-0 top-0 flex flex-col">
+          <div className="p-4 border-b border-[#E8E3DB]">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-[#2D5A45] rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-lg">J</span>
+              </div>
+              <div>
+                <span className="font-semibold text-[#1A1A1A]">Jalsa Guest</span>
+                <p className="text-xs text-[#4A4A4A]">Admin View</p>
+              </div>
             </div>
           </div>
-        </div>
-        <nav className="p-4 space-y-1 flex-1">
-          <div className="text-xs font-medium text-[#4A4A4A] uppercase tracking-wider mb-2">Main</div>
-          {SUPER_ADMIN_NAV.map((item, i) => (
-            <button key={i} onClick={() => navigate(item.href)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                location.pathname === item.href
-                  ? 'bg-[#2D5A45] text-white'
-                  : 'text-[#4A4A4A] hover:bg-[#F5F0E8]'
-              }`}>
-              <item.icon className="w-5 h-5" />
-              {item.label}
-            </button>
-          ))}
-        </nav>
-        <SidebarUserFooter />
-      </aside>
-      <main className="ml-64 flex-1">
-        <TopBar />
-        <div className="p-8 max-w-5xl">
+          <nav className="p-4 space-y-1 flex-1">
+            <div className="text-xs font-medium text-[#4A4A4A] uppercase tracking-wider mb-2">Main</div>
+            {SUPER_ADMIN_NAV.map((item, i) => (
+              <button key={i} onClick={() => navigate(item.href)}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                  location.pathname === item.href
+                    ? 'bg-[#2D5A45] text-white'
+                    : 'text-[#4A4A4A] hover:bg-[#F5F0E8]'
+                }`}>
+                <item.icon className="w-5 h-5" />
+                {item.label}
+              </button>
+            ))}
+          </nav>
+          <SidebarUserFooter />
+        </aside>
+      )}
+      <main className={hideSidebar ? 'flex-1' : 'ml-64 flex-1'}>
+        {!hideSidebar && <TopBar />}
+        <div className={hideSidebar ? '' : 'p-8 max-w-5xl'}>
 
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-2xl font-bold text-[#1A1A1A] flex items-center gap-2">

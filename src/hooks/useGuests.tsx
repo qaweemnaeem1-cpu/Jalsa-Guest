@@ -95,7 +95,7 @@ function rowToFamilyMember(row: any): FamilyMember {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function rowToGuest(row: any): Guest {
+export function rowToGuest(row: any): Guest {
   return {
     id: String(row.id),
     referenceNumber: row.reference ?? row.reference_number ?? '',

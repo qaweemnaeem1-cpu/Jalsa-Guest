@@ -585,35 +585,38 @@ export default function DeptDashboardPage() {
               </div>
             )}
 
-            {/* ── 📅 Calendar widget (shared) ─────────────────────────────────── */}
-            <GuestCalendarWidget
-              guests={deptGuests}
-              title={`📅 ${dept || 'Department'} — Upcoming Schedule`}
-              onGuestClick={(id) => setViewGuestId(id)}
-              renderGuestLine={(g, type) => {
-                const time     = type === 'arrival' ? g.arrival_time     : g.departure_time;
-                const flight   = type === 'arrival' ? g.arrivalFlightNumber : g.departureFlightNumber;
-                const airport  = type === 'arrival' ? g.arrivalAirport   : g.departureAirport;
-                const terminal = type === 'arrival' ? g.arrivalTerminal  : g.departureTerminal;
-                const dotCls   = type === 'arrival' ? 'bg-green-500' : 'bg-yellow-500';
-                const meta = [flight, airport, terminal ? `T${terminal}` : ''].filter(Boolean).join(' · ');
-                return (
-                  <>
-                    <span className={`w-2 h-2 rounded-full ${dotCls} shrink-0`} />
-                    <span className="text-gray-500">{formatTime(time)}</span>
-                    <span className="font-medium text-gray-800">{g.fullName}</span>
-                    {meta && <span className="text-gray-400 text-xs">{meta}</span>}
-                    {g.transportDepartmentName ? (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-[#F0F7F4] text-[#2D5A45] border border-[#D4E9DC]">
-                        {g.transportDepartmentName}
-                      </span>
-                    ) : (
-                      <span className="text-red-600 text-[11px] font-medium">⚠️ No transport</span>
-                    )}
-                  </>
-                );
-              }}
-            />
+            {/* ── 📅 Calendar widget (shared) — same 2-col grid as Location Mgr ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <GuestCalendarWidget
+                guests={deptGuests}
+                title={`📅 ${dept || 'Department'} — Upcoming Schedule`}
+                onGuestClick={(id) => setViewGuestId(id)}
+                renderGuestLine={(g, type) => {
+                  const time     = type === 'arrival' ? g.arrival_time     : g.departure_time;
+                  const flight   = type === 'arrival' ? g.arrivalFlightNumber : g.departureFlightNumber;
+                  const airport  = type === 'arrival' ? g.arrivalAirport   : g.departureAirport;
+                  const terminal = type === 'arrival' ? g.arrivalTerminal  : g.departureTerminal;
+                  const dotCls   = type === 'arrival' ? 'bg-green-500' : 'bg-yellow-500';
+                  const meta = [flight, airport, terminal ? `T${terminal}` : ''].filter(Boolean).join(' · ');
+                  return (
+                    <>
+                      <span className={`w-2 h-2 rounded-full ${dotCls} shrink-0`} />
+                      <span className="text-gray-500">{formatTime(time)}</span>
+                      <span className="font-medium text-gray-800">{g.fullName}</span>
+                      {meta && <span className="text-gray-400 text-xs">{meta}</span>}
+                      {g.transportDepartmentName ? (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-[#F0F7F4] text-[#2D5A45] border border-[#D4E9DC]">
+                          {g.transportDepartmentName}
+                        </span>
+                      ) : (
+                        <span className="text-red-600 text-[11px] font-medium">⚠️ No transport</span>
+                      )}
+                    </>
+                  );
+                }}
+              />
+              <div />
+            </div>
 
             {/* ── 📅 Upcoming Arrivals & Departures ───────────────────────────────── */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">

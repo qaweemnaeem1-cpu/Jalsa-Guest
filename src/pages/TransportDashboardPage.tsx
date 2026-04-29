@@ -460,33 +460,36 @@ export default function TransportDashboardPage() {
             ))}
           </div>
 
-          {/* Calendar widget (shared) */}
-          <GuestCalendarWidget
-            guests={calendarGuests}
-            title={`📅 ${user?.transportDepartmentName ?? 'Transport'} — Upcoming Schedule`}
-            renderGuestLine={(g, type) => {
-              const time     = type === 'arrival' ? g.arrival_time     : g.departure_time;
-              const flight   = type === 'arrival' ? g.arrivalFlightNumber : g.departureFlightNumber;
-              const airport  = type === 'arrival' ? g.arrivalAirport   : g.departureAirport;
-              const terminal = type === 'arrival' ? g.arrivalTerminal  : g.departureTerminal;
-              const dotCls   = type === 'arrival' ? 'bg-green-500' : 'bg-yellow-500';
-              const meta = [flight, airport, terminal ? `T${terminal}` : ''].filter(Boolean).join(' · ');
-              const driverName = driverNameByGuestId[g.id];
-              return (
-                <>
-                  <span className={`w-2 h-2 rounded-full ${dotCls} shrink-0`} />
-                  <span className="text-gray-500">{formatTime(time)}</span>
-                  <span className="font-medium text-gray-800">{g.fullName}</span>
-                  {meta && <span className="text-gray-400 text-xs">{meta}</span>}
-                  {driverName ? (
-                    <span className="text-xs text-[#2D5A45]">🚐 {driverName}</span>
-                  ) : (
-                    <span className="text-red-600 text-[11px] font-medium">⚠️ No driver</span>
-                  )}
-                </>
-              );
-            }}
-          />
+          {/* Calendar widget (shared) — same 2-col grid as Location Manager */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <GuestCalendarWidget
+              guests={calendarGuests}
+              title={`📅 ${user?.transportDepartmentName ?? 'Transport'} — Upcoming Schedule`}
+              renderGuestLine={(g, type) => {
+                const time     = type === 'arrival' ? g.arrival_time     : g.departure_time;
+                const flight   = type === 'arrival' ? g.arrivalFlightNumber : g.departureFlightNumber;
+                const airport  = type === 'arrival' ? g.arrivalAirport   : g.departureAirport;
+                const terminal = type === 'arrival' ? g.arrivalTerminal  : g.departureTerminal;
+                const dotCls   = type === 'arrival' ? 'bg-green-500' : 'bg-yellow-500';
+                const meta = [flight, airport, terminal ? `T${terminal}` : ''].filter(Boolean).join(' · ');
+                const driverName = driverNameByGuestId[g.id];
+                return (
+                  <>
+                    <span className={`w-2 h-2 rounded-full ${dotCls} shrink-0`} />
+                    <span className="text-gray-500">{formatTime(time)}</span>
+                    <span className="font-medium text-gray-800">{g.fullName}</span>
+                    {meta && <span className="text-gray-400 text-xs">{meta}</span>}
+                    {driverName ? (
+                      <span className="text-xs text-[#2D5A45]">🚐 {driverName}</span>
+                    ) : (
+                      <span className="text-red-600 text-[11px] font-medium">⚠️ No driver</span>
+                    )}
+                  </>
+                );
+              }}
+            />
+            <div />
+          </div>
 
           {/* Arrivals & Departures */}
           <div className="grid grid-cols-2 gap-4">

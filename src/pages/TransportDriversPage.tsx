@@ -267,13 +267,14 @@ function AddDriverDialog({ open, onClose, transportDeptId, transportDeptName, on
     }
     setSaving(true);
     try {
-      const { error } = await supabase.from('users').insert({
+      const insertData = {
         name: name.trim(),
         email: email.trim().toLowerCase(),
         phone: phone.trim() || null,
-        password: pass || null,
+        password_hash: pass || null,
         role: 'driver',
         is_head_driver: false,
+        is_active: true,
         is_available: true,
         transport_department_id: transportDeptId,
         transport_department_name: transportDeptName ?? null,
@@ -281,14 +282,22 @@ function AddDriverDialog({ open, onClose, transportDeptId, transportDeptName, on
         vehicle_model: vModel || null,
         vehicle_registration: vReg || null,
         vehicle_capacity: vCap ? Number(vCap) : null,
-      });
-      if (error) throw error;
+      };
+      console.log('[AddDriver] Insert data:', insertData);
+      const { data, error } = await supabase.from('users').insert(insertData).select().single();
+      if (error) {
+        console.error('[AddDriver] Supabase error:', error.message, error.details, error.hint, error.code);
+        toast.error('Failed: ' + (error.message || 'Unknown error'));
+        return;
+      }
+      console.log('[AddDriver] Success:', data);
       toast.success(`Driver "${name.trim()}" added`);
       reset();
       onClose();
       onSaved();
-    } catch {
-      toast.error('Failed to add driver');
+    } catch (err) {
+      console.error('[AddDriver] Exception:', err);
+      toast.error('Failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setSaving(false);
     }

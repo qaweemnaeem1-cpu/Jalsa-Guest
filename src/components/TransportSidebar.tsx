@@ -1,21 +1,19 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Users, ClipboardList, CalendarDays,
-  Car, CheckCircle, MessageCircle, UserCheck,
+  LayoutDashboard, Users, ArrowDown, ArrowUp,
+  CheckCircle, MessageCircle,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { SidebarUserFooter } from '@/components/SidebarUserFooter';
 import { useDriverUnreadCount } from '@/components/DriverMessagesDialog';
 
 const NAV = [
-  { icon: LayoutDashboard, label: 'Dashboard',        href: '/transport/dashboard' },
-  { icon: UserCheck,       label: 'Guest Assignments', href: '/transport/guests' },
-  { icon: Users,           label: 'My Drivers',        href: '/transport/drivers' },
-  { icon: ClipboardList,   label: 'Tasks',             href: '/transport/tasks' },
-  { icon: CalendarDays,    label: 'Schedule',          href: '/transport/schedule' },
-  { icon: Car,             label: 'Vehicles',          href: '/transport/vehicles' },
-  { icon: CheckCircle,     label: 'Completed Tasks',   href: '/transport/completed' },
-  { icon: MessageCircle,   label: 'Messages',          href: '/transport/messages' },
+  { icon: LayoutDashboard, label: 'Dashboard',       href: '/transport/dashboard' },
+  { icon: ArrowDown,       label: 'Pick Up',         href: '/transport/pickup' },
+  { icon: ArrowUp,         label: 'Drop Off',        href: '/transport/dropoff' },
+  { icon: Users,           label: 'My Drivers',      href: '/transport/drivers' },
+  { icon: CheckCircle,     label: 'Completed Tasks', href: '/transport/completed' },
+  { icon: MessageCircle,   label: 'Messages',        href: '/transport/messages' },
 ];
 
 export function TransportSidebar() {
@@ -38,18 +36,6 @@ export function TransportSidebar() {
           </div>
         </div>
       </div>
-
-      {/* User + dept badge */}
-      {user && (
-        <div className="px-4 py-2 border-b border-[#E8E3DB] bg-[#F5F0E8]">
-          <p className="text-xs text-[#4A4A4A] truncate">
-            <span className="font-medium text-[#1A1A1A]">{user.name}</span>
-            {user.transportDepartmentName
-              ? <> · <span className="text-[#2D5A45] font-medium">{user.transportDepartmentName}</span></>
-              : ''}
-          </p>
-        </div>
-      )}
 
       {/* Nav */}
       <nav className="p-4 space-y-1 flex-1">

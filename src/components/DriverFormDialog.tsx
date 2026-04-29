@@ -97,7 +97,7 @@ export function DriverFormDialog({
           vehicle_capacity: vCap ? Number(vCap) : null,
           is_head_driver: isHead,
         };
-        if (password.trim()) updates.password = password.trim();
+        if (password.trim()) updates.password_hash = password.trim();
 
         const { data, error } = await supabase
           .from('users')
@@ -105,30 +105,33 @@ export function DriverFormDialog({
           .eq('id', driver.id)
           .select()
           .single();
-        if (error) throw error;
+        if (error) { console.error('[DriverFormDialog] Update error:', error); throw error; }
         toast.success('Driver updated');
         onSaved(data as DriverRecord);
       } else {
+        const insertData = {
+          name: name.trim(),
+          email: email.trim(),
+          phone: phone.trim() || null,
+          password_hash: password.trim(),
+          role: 'driver',
+          is_active: true,
+          location: location.trim() || defaultLocation,
+          department: defaultDepartment || null,
+          vehicle_type: vType || null,
+          vehicle_model: vModel.trim() || null,
+          vehicle_registration: vReg.trim() || null,
+          vehicle_capacity: vCap ? Number(vCap) : null,
+          is_head_driver: isHead,
+          is_available: true,
+        };
+        console.log('[DriverFormDialog] Insert data:', insertData);
         const { data, error } = await supabase
           .from('users')
-          .insert({
-            name: name.trim(),
-            email: email.trim(),
-            phone: phone.trim() || null,
-            password: password.trim(),
-            role: 'driver',
-            location: location.trim() || defaultLocation,
-            department: defaultDepartment || null,
-            vehicle_type: vType || null,
-            vehicle_model: vModel.trim() || null,
-            vehicle_registration: vReg.trim() || null,
-            vehicle_capacity: vCap ? Number(vCap) : null,
-            is_head_driver: isHead,
-            is_available: true,
-          })
+          .insert(insertData)
           .select()
           .single();
-        if (error) throw error;
+        if (error) { console.error('[DriverFormDialog] Insert error:', error.message, error.details, error.hint, error.code); throw error; }
         toast.success('Driver created');
         onSaved(data as DriverRecord);
       }
